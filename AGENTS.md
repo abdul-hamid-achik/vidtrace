@@ -1,0 +1,73 @@
+# AGENTS.md
+
+This file guides coding agents working on `vidtrace`.
+
+## Product Intent
+
+`vidtrace` turns bug screen recordings into structured evidence bundles for humans and agents. The output should make it easy to cite visual and spoken evidence by timestamp.
+
+## Language and Artifacts
+
+- Write code, comments, docs, schemas, task names, and examples in English.
+- Keep user-facing CLI text short, factual, and stable enough for tests.
+- Use ASCII unless an existing file clearly requires Unicode.
+
+## Tech Stack
+
+- Go `1.26.4`
+- Task `3.51.1`
+- golangci-lint `2.12.2`
+- GoReleaser `2.16.0`
+- glyphrun `v0.1.0-e224a88-dev` or newer for E2E specs
+- Charm v2 TUI libraries:
+  - `charm.land/bubbletea/v2`
+  - `charm.land/bubbles/v2`
+  - `charm.land/lipgloss/v2`
+- External runtime tools:
+  - `ffmpeg`
+  - `ffprobe`
+  - `tesseract`
+  - `whisper`
+
+## Architecture Direction
+
+- Keep Go as the orchestration layer.
+- Do not reimplement media codecs, OCR, or speech recognition in Go.
+- Put command parsing in `internal/cli`.
+- Put dependency checks in `internal/doctor`.
+- Put future media-tool wrappers in separate internal packages, for example `internal/ffmpeg`, `internal/tesseract`, and `internal/whisper`.
+- Keep artifact schemas explicit and versionable.
+
+## Iteration Strategy
+
+1. Preserve `scripts/extract.sh` as the working baseline until the Go pipeline reaches parity.
+2. Add small, testable Go commands.
+3. Add unit tests for command behavior and data shaping.
+4. Add or update glyphrun E2E specs for real CLI behavior.
+5. Remove the Bash extractor only after Go extraction is verified end-to-end and the decision is documented.
+
+## Development Commands
+
+```bash
+task check
+task all
+task run -- doctor
+task smoke
+task e2e
+```
+
+## Testing Expectations
+
+- Run `go test ./...` after Go changes.
+- Run `task check` before considering a change complete.
+- Run `task all` after CLI behavior changes when local media tools are available.
+- Run `task lint` when changing Go code, or rely on `task check`.
+- For extractor work, verify generated folders and files, not only stdout.
+- Prefer stable JSON output for tests over parsing human-readable text.
+- Use glyphrun specs in `specs/glyphrun/` for real terminal behavior.
+
+## Git Safety
+
+- This repo may contain user-created media files or generated artifacts.
+- Do not delete user videos or artifact folders unless explicitly asked.
+- Do not rewrite history or run destructive Git commands without explicit approval.

@@ -1,0 +1,80 @@
+version: 2
+
+project_name: vidtrace
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: vidtrace
+    main: ./cmd/vidtrace
+    binary: vidtrace
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X main.version={{ .Version }}
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+archives:
+  - id: vidtrace
+    ids:
+      - vidtrace
+    formats:
+      - tar.gz
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - README.md
+
+checksum:
+  name_template: "checksums.txt"
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^ci:"
+      - "^chore:"
+      - "Merge pull request"
+      - "Merge branch"
+
+release:
+  github:
+    owner: abdul-hamid-achik
+    name: vidtrace
+  draft: false
+  prerelease: auto
+  name_template: "v{{ .Version }}"
+
+homebrew_casks:
+  - name: vidtrace
+    ids:
+      - vidtrace
+    binaries:
+      - vidtrace
+    repository:
+      owner: abdul-hamid-achik
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    directory: Casks
+    homepage: "https://github.com/abdul-hamid-achik/vidtrace"
+    description: "Turn bug videos into timestamped evidence bundles for humans and coding agents"
+    license: "MIT"
+    skip_upload: "{{ if .Env.HOMEBREW_TAP_TOKEN }}false{{ else }}true{{ end }}"
+    caveats: |
+      The binary is not signed with an Apple Developer certificate.
+      macOS may show a security warning on first run.
+
+      Run `vidtrace doctor` after installation to check ffmpeg, ffprobe, tesseract, and whisper.

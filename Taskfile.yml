@@ -1,0 +1,89 @@
+version: '3'
+
+vars:
+  BIN: bin/vidtrace
+
+tasks:
+  default:
+    desc: Show available tasks.
+    cmds:
+      - task --list
+
+  build:
+    desc: Build the vidtrace CLI.
+    cmds:
+      - go build -o {{.BIN}} ./cmd/vidtrace
+
+  run:
+    desc: Run the CLI with ARGS, for example `task run -- doctor`.
+    cmds:
+      - go run ./cmd/vidtrace {{.CLI_ARGS}}
+
+  extract:
+    desc: Run the Go extractor. Use VIDEO=/path/to/video.mp4.
+    preconditions:
+      - sh: test -n "{{.VIDEO}}"
+        msg: Set VIDEO=/path/to/video.mp4.
+    cmds:
+      - go run ./cmd/vidtrace extract "{{.VIDEO}}" {{.CLI_ARGS}}
+
+  agent:
+    desc: Run the Go extractor with machine-readable output. Use VIDEO=/path/to/video.mp4.
+    preconditions:
+      - sh: test -n "{{.VIDEO}}"
+        msg: Set VIDEO=/path/to/video.mp4.
+    cmds:
+      - go run ./cmd/vidtrace extract "{{.VIDEO}}" -json {{.CLI_ARGS}}
+
+  smoke:
+    desc: Generate a tiny synthetic video and run an end-to-end extraction outside the repo.
+    cmds:
+      - rm -rf /tmp/vidtrace-smoke
+      - mkdir -p /tmp/vidtrace-smoke
+      - ffmpeg -hide_banner -loglevel error -y -f lavfi -i testsrc2=size=640x360:rate=1:duration=2 -f lavfi -i sine=frequency=1000:duration=2 -c:v libx264 -pix_fmt yuv420p -c:a aac /tmp/vidtrace_smoke.mp4
+      - go run ./cmd/vidtrace extract /tmp/vidtrace_smoke.mp4 --out /tmp/vidtrace-smoke --name smoke --json
+
+  e2e:
+    desc: Verify and run glyphrun end-to-end CLI specs.
+    cmds:
+      - glyph spec verify specs/glyphrun/cli_doctor.yml --format md
+      - glyph spec verify specs/glyphrun/extract_json.yml --format md
+      - glyph run specs/glyphrun/cli_doctor.yml --format md
+      - glyph run specs/glyphrun/extract_json.yml --format md
+
+  test:
+    desc: Run unit tests.
+    cmds:
+      - go test ./...
+
+  lint:
+    desc: Verify golangci-lint config and run Go linters.
+    cmds:
+      - golangci-lint config verify
+      - golangci-lint run ./...
+
+  fmt:
+    desc: Format Go source.
+    cmds:
+      - gofmt -w cmd internal
+
+  tidy:
+    desc: Sync Go module files.
+    cmds:
+      - go mod tidy
+
+  check:
+    desc: Run formatting, linting, tests, and build.
+    cmds:
+      - task: fmt
+      - task: tidy
+      - task: lint
+      - task: test
+      - task: build
+
+  all:
+    desc: Run full local verification, including glyphrun E2E.
+    cmds:
+      - task: check
+      - task: smoke
+      - task: e2e

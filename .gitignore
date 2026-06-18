@@ -1,0 +1,13 @@
+.DS_Store
+bin/
+dist/
+.glyphrun/
+coverage.out
+*.test
+
+# Local media and generated artifacts can be large.
+*.mp4
+*.mov
+*.m4v
+*.avi
+*_artifacts_*/

@@ -1,0 +1,77 @@
+version: 1
+name: extract_json
+
+metadata:
+  feature: extraction
+  owner: core
+  priority: high
+  tags:
+    - smoke
+    - agent
+    - artifacts
+
+intent: |
+  Verify that vidtrace can process a tiny synthetic video and emit a clean JSON
+  summary for agent consumption while creating the expected artifact bundle.
+
+target:
+  cmd:
+    - "/bin/sh"
+    - "-c"
+    - "./bin/vidtrace extract .glyphrun/tmp/input/bug.mp4 --out .glyphrun/tmp/extract --name glyph --json"
+  cwd: "."
+  timeoutMs: 60000
+
+terminal:
+  cols: 120
+  rows: 40
+  profile: xterm-256color
+  alternateScreen: forbid
+
+preconditions:
+  commands:
+    - run: "go build -o ./bin/vidtrace ./cmd/vidtrace"
+      timeoutMs: 120000
+    - run: "rm -rf .glyphrun/tmp/input .glyphrun/tmp/extract && mkdir -p .glyphrun/tmp/input .glyphrun/tmp/extract"
+      timeoutMs: 5000
+    - run: "ffmpeg -hide_banner -loglevel error -y -f lavfi -i testsrc2=size=640x360:rate=1:duration=2 -f lavfi -i sine=frequency=1000:duration=2 -c:v libx264 -pix_fmt yuv420p -c:a aac .glyphrun/tmp/input/bug.mp4"
+      timeoutMs: 30000
+
+steps:
+  - wait:
+      process:
+        exitCode: 0
+      timeoutMs: 60000
+  - snapshot: result
+
+outcomes:
+  - id: clean_exit
+    description: extraction exits successfully
+    verify:
+      process:
+        exitCode: 0
+  - id: json_ok
+    description: stdout includes a successful JSON summary
+    verify:
+      screen:
+        contains: '"ok": true'
+  - id: frame_count
+    description: the summary reports the expected number of frames
+    verify:
+      screen:
+        contains: '"frames": 2'
+  - id: timeline_path
+    description: the summary points agents to timeline.json
+    verify:
+      screen:
+        contains: '"timeline_path": "timeline.json"'
+  - id: metadata_written
+    description: metadata.json is created in the artifact bundle
+    verify:
+      command:
+        run: "test -f .glyphrun/tmp/extract/glyph_artifacts_*/metadata.json && grep -q '\"schema_version\": \"1\"' .glyphrun/tmp/extract/glyph_artifacts_*/metadata.json"
+  - id: timeline_written
+    description: timeline.json is created in the artifact bundle
+    verify:
+      command:
+        run: "test -f .glyphrun/tmp/extract/glyph_artifacts_*/timeline.json && grep -q '\"entries\"' .glyphrun/tmp/extract/glyph_artifacts_*/timeline.json"

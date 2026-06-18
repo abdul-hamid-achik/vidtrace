@@ -1,0 +1,177 @@
+# vidtrace
+
+Turn bug videos into timestamped evidence bundles that humans and coding agents can inspect.
+
+`vidtrace` is a local-first Go CLI. It takes a screen recording of a bug and produces frames, OCR text, transcripts, metadata, and a timeline that connects what was visible with what was said.
+
+## Status
+
+This is an early Go migration from a Bash prototype. The core extraction path works, JSON output is available for automation, and CI/release wiring is in place for the first tagged release.
+
+## Who It Is For
+
+- QA and support engineers who receive bug videos.
+- Developers who need timestamped evidence instead of vague reproduction notes.
+- Coding agents that cannot "watch" a video directly but can inspect files and JSON.
+
+## What It Produces
+
+```text
+bug_artifacts_YYYYMMDD_HHMMSS/
+├── frames/
+│   └── frame_0001.png
+├── ocr/
+│   ├── frame_0001.txt
+│   └── ocr_all_frames.txt
+├── transcript/
+│   ├── bug.txt
+│   ├── bug.srt
+│   ├── bug.vtt
+│   ├── bug.json
+│   └── bug.tsv
+├── metadata.json
+├── timeline.json
+└── README.txt
+```
+
+`timeline.json` is the main agent-facing artifact. It maps extracted frames to OCR text and overlapping transcript segments.
+
+## Install
+
+### From Source
+
+```bash
+git clone <repo-url>
+cd vidtrace
+task build
+bin/vidtrace doctor
+```
+
+### With Homebrew
+
+After the first tagged release publishes:
+
+```bash
+brew tap abdul-hamid-achik/tap
+brew install --cask abdul-hamid-achik/tap/vidtrace
+vidtrace doctor
+```
+
+See `docs/INSTALL.md` for runtime dependencies and install details.
+
+## Use
+
+Check local dependencies:
+
+```bash
+vidtrace doctor
+vidtrace doctor -json
+```
+
+Run a human-readable extraction:
+
+```bash
+vidtrace extract /path/to/bug.mp4
+```
+
+Run an agent-readable extraction:
+
+```bash
+vidtrace extract /path/to/bug.mp4 --json
+```
+
+With `--json`, stdout is parseable JSON only. An agent should read `output_dir` from the summary and inspect:
+
+- `metadata.json`
+- `timeline.json`
+- `ocr/ocr_all_frames.txt`
+- `transcript/*.json`
+- selected `frames/frame_*.png`
+
+```bash
+vidtrace extract /path/to/bug.mp4 \
+  --fps 1 \
+  --ocr-lang eng \
+  --whisper-lang en \
+  --model small \
+  --out ~/Downloads \
+  --name bug
+```
+
+See `docs/USAGE.md` and `docs/CLI_CONTRACT.md` for the full command contract.
+
+## Develop
+
+Tool versions are pinned in `.tool-versions`.
+
+```bash
+task build
+task test
+task lint
+task check
+task agent VIDEO=/path/to/bug.mp4
+```
+
+Useful local tasks:
+
+| Task | Purpose |
+|---|---|
+| `task run -- doctor` | Run any CLI command |
+| `task extract VIDEO=/path/to/bug.mp4` | Human extraction wrapper |
+| `task agent VIDEO=/path/to/bug.mp4` | JSON extraction wrapper |
+| `task smoke` | Synthetic end-to-end extraction outside the repo |
+| `task e2e` | Verify and run glyphrun CLI specs |
+| `task all` | Full local verification |
+
+Run the synthetic smoke extraction outside the repo:
+
+```bash
+task smoke
+```
+
+## Real Video Fixture
+
+A local sample video may exist at:
+
+```bash
+~/Downloads/bug.mp4
+```
+
+Do not commit that video. Use `/tmp` for generated artifacts:
+
+```bash
+bin/vidtrace extract ~/Downloads/bug.mp4 --out /tmp/vidtrace-bug-smoke --name bug --json
+```
+
+## Release
+
+GitHub Actions runs CI on pushes and pull requests. A tag like `v0.1.0` runs GoReleaser, creates release archives and checksums, and updates `abdul-hamid-achik/homebrew-tap` when `HOMEBREW_TAP_TOKEN` is configured.
+
+See `docs/RELEASE.md` for the full release process.
+
+## Improve
+
+Start with:
+
+- `BACKLOG.md` for prioritized product and engineering work.
+- `docs/index.md` for site-ready documentation navigation.
+- `docs/ARCHITECTURE.md` for component boundaries.
+- `docs/CLI_CONTRACT.md` for command behavior.
+- `docs/ARTIFACT_SCHEMA.md` for bundle schemas.
+- `docs/TESTING.md` for verification strategy.
+
+Current high-value improvements:
+
+- Add `prompts/analyze-bundle.md` for agent analysis.
+- Improve `timeline.json` matching.
+- Add optional VecLite indexing as a separate command, not as part of extraction.
+- Build the TUI artifact browser once bundle contracts stabilize.
+
+## Project Conventions
+
+- Persistent repo content is written in English.
+- Generated media and artifact bundles are not committed.
+- `--json` output is an automation contract; keep it stable.
+- External tools remain external. Go orchestrates them.
+
+See `AGENTS.md` and `CLAUDE.md` for agent-specific guidance.

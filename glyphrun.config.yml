@@ -1,0 +1,28 @@
+version: 1
+
+defaultEnvironment: local
+
+artifactRoot: .glyphrun/runs
+snapshotRoot: .glyphrun/snapshots
+
+environments:
+  local:
+    env:
+      TERM: xterm-256color
+      COLORTERM: truecolor
+      LANG: en_US.UTF-8
+
+terminal:
+  profile: xterm-256color
+  cols: 120
+  rows: 40
+  normalize:
+    trimRight: true
+    normalizeLineEndings: true
+
+artifacts:
+  rawLog: true
+  frames: true
+  finalScreen: true
+  snapshots: true
+

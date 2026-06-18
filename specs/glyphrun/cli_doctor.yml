@@ -1,0 +1,63 @@
+version: 1
+name: cli_doctor
+
+metadata:
+  feature: cli
+  owner: core
+  priority: high
+  tags:
+    - smoke
+    - agent
+
+intent: |
+  Verify that the built vidtrace CLI can report local runtime readiness and
+  print its version in a real PTY.
+
+target:
+  cmd:
+    - "/bin/sh"
+    - "-c"
+    - "./bin/vidtrace doctor && ./bin/vidtrace version"
+  cwd: "."
+  timeoutMs: 20000
+
+terminal:
+  cols: 120
+  rows: 40
+  profile: xterm-256color
+  alternateScreen: forbid
+
+preconditions:
+  commands:
+    - run: "go build -o ./bin/vidtrace ./cmd/vidtrace"
+      timeoutMs: 120000
+
+steps:
+  - wait:
+      process:
+        exitCode: 0
+      timeoutMs: 20000
+  - snapshot: result
+
+outcomes:
+  - id: clean_exit
+    description: doctor and version exit successfully
+    verify:
+      process:
+        exitCode: 0
+  - id: doctor_ok
+    description: doctor reports the local dependency set is usable
+    verify:
+      screen:
+        contains: "vidtrace doctor: ok"
+  - id: ffmpeg_found
+    description: doctor reports ffmpeg is available
+    verify:
+      screen:
+        contains: "ffmpeg: found"
+  - id: version_printed
+    description: version output is printed
+    verify:
+      screen:
+        contains: "vidtrace dev"
+
