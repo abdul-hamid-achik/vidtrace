@@ -57,6 +57,12 @@ brew install --cask abdul-hamid-achik/tap/vidtrace
 vidtrace doctor
 ```
 
+If macOS blocks the unsigned binary on first run:
+
+```bash
+brew reinstall --no-quarantine --cask abdul-hamid-achik/tap/vidtrace
+```
+
 See `docs/INSTALL.md` for runtime dependencies and install details.
 
 ## Use

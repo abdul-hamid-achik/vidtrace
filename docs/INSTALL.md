@@ -21,6 +21,18 @@ brew install --cask abdul-hamid-achik/tap/vidtrace
 vidtrace doctor
 ```
 
+`vidtrace` is not signed with an Apple Developer certificate yet. If macOS blocks the first run, reinstall without Homebrew quarantine:
+
+```bash
+brew reinstall --no-quarantine --cask abdul-hamid-achik/tap/vidtrace
+```
+
+If it is already installed and you only want to clear the current binary:
+
+```bash
+xattr -dr com.apple.quarantine "$(brew --prefix)/Caskroom/vidtrace/$(brew list --cask --versions vidtrace | awk '{print $2}')/vidtrace"
+```
+
 Install common runtime dependencies on macOS:
 
 ```bash

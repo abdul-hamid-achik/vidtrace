@@ -73,8 +73,17 @@ homebrew_casks:
     description: "Turn bug videos into timestamped evidence bundles for humans and coding agents"
     license: "MIT"
     skip_upload: "{{ if .Env.HOMEBREW_TAP_TOKEN }}false{{ else }}true{{ end }}"
+    hooks:
+      post:
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/vidtrace"]
+          end
     caveats: |
       The binary is not signed with an Apple Developer certificate.
       macOS may show a security warning on first run.
+
+      If macOS blocks the first run, reinstall with:
+        brew reinstall --no-quarantine --cask abdul-hamid-achik/tap/vidtrace
 
       Run `vidtrace doctor` after installation to check ffmpeg, ffprobe, tesseract, and whisper.
