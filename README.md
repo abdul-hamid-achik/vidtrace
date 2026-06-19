@@ -74,6 +74,14 @@ vidtrace doctor
 vidtrace doctor -json
 ```
 
+Print built-in product and agent docs:
+
+```bash
+vidtrace docs
+vidtrace docs agent
+vidtrace docs artifacts
+```
+
 Run a human-readable extraction:
 
 ```bash
@@ -160,6 +168,7 @@ See `docs/RELEASE.md` for the full release process.
 Start with:
 
 - `BACKLOG.md` for prioritized product and engineering work.
+- `prompts/analyze-bundle.md` for reusable agent analysis instructions.
 - `docs/index.md` for site-ready documentation navigation.
 - `docs/ARCHITECTURE.md` for component boundaries.
 - `docs/CLI_CONTRACT.md` for command behavior.
@@ -171,13 +180,14 @@ Current high-value improvements:
 - Add `prompts/analyze-bundle.md` for agent analysis.
 - Improve `timeline.json` matching.
 - Add optional VecLite indexing as a separate command, not as part of extraction.
-- Build the TUI artifact browser once bundle contracts stabilize.
+- Build the studio artifact browser once bundle contracts stabilize.
 
 ## Project Conventions
 
 - Persistent repo content is written in English.
 - Generated media and artifact bundles are not committed.
 - `--json` output is an automation contract; keep it stable.
+- `vidtrace docs agent` is the fastest way for an agent to learn the expected workflow.
 - External tools remain external. Go orchestrates them.
 
 See `AGENTS.md` and `CLAUDE.md` for agent-specific guidance.

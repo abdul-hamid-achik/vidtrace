@@ -1,0 +1,67 @@
+version: 1
+name: cli_docs
+
+metadata:
+  feature: cli
+  owner: core
+  priority: high
+  tags:
+    - docs
+    - agent
+
+intent: |
+  Verify that the built vidtrace CLI exposes built-in agent documentation that
+  explains the automation workflow and artifact contract.
+
+target:
+  cmd:
+    - "/bin/sh"
+    - "-c"
+    - "./bin/vidtrace docs agent"
+  cwd: "."
+  timeoutMs: 20000
+
+terminal:
+  cols: 120
+  rows: 40
+  profile: xterm-256color
+  alternateScreen: forbid
+
+preconditions:
+  commands:
+    - run: "go build -o ./bin/vidtrace ./cmd/vidtrace"
+      timeoutMs: 120000
+
+steps:
+  - wait:
+      process:
+        exitCode: 0
+      timeoutMs: 20000
+  - snapshot: result
+
+outcomes:
+  - id: clean_exit
+    description: docs commands exit successfully
+    verify:
+      process:
+        exitCode: 0
+  - id: agent_guide
+    description: agent guide is printed
+    verify:
+      screen:
+        contains: "vidtrace agent guide"
+  - id: extraction_contract
+    description: agent docs describe JSON extraction
+    verify:
+      screen:
+        contains: "vidtrace extract VIDEO --json"
+  - id: artifact_priority
+    description: artifact docs describe agent priority files
+    verify:
+      command:
+        run: "./bin/vidtrace docs artifacts | grep -q 'Agent priority:'"
+  - id: timeline_contract
+    description: artifact docs mention timeline evidence
+    verify:
+      command:
+        run: "./bin/vidtrace docs artifacts | grep -q 'timeline entries connect time_seconds'"

@@ -7,7 +7,7 @@
 - Add Taskfile.
 - Add `AGENTS.md`.
 - Add `vidtrace doctor`.
-- Add Charm v2 TUI shell.
+- Add Charm v2 studio shell.
 
 ## Iteration 2: Go Extract Parity
 
@@ -31,7 +31,7 @@
 
 See `BACKLOG.md` for prioritized work beyond the roadmap.
 
-## Iteration 5: Inspection TUI
+## Iteration 5: Inspection Studio
 
 - Browse artifact bundles.
 - View transcript and OCR side by side.

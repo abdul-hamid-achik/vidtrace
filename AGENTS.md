@@ -52,6 +52,7 @@ This file guides coding agents working on `vidtrace`.
 task check
 task all
 task run -- doctor
+task run -- docs agent
 task smoke
 task e2e
 ```

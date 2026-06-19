@@ -54,9 +54,9 @@ As a coding agent, I want a prompt template that explains how to inspect a vidtr
 
 Acceptance criteria:
 
-- [ ] Add `prompts/analyze-bundle.md`.
-- [ ] The prompt references `metadata.json`, `timeline.json`, OCR, transcript files, and frames.
-- [ ] The prompt asks the agent to call out ticket/video mismatches explicitly.
+- [x] Add `prompts/analyze-bundle.md`.
+- [x] The prompt references `metadata.json`, `timeline.json`, OCR, transcript files, and frames.
+- [x] The prompt asks the agent to call out ticket/video mismatches explicitly.
 
 ### Ticket vs Video Comparison
 
@@ -81,13 +81,13 @@ Acceptance criteria:
 
 ## Later
 
-### TUI Artifact Browser
+### Studio Artifact Browser
 
-As a human reviewer, I want a TUI that opens an artifact bundle and lets me browse timeline, transcript, OCR, and frames, so that I can inspect evidence without remembering file paths.
+As a human reviewer, I want a studio view that opens an artifact bundle and lets me browse timeline, transcript, OCR, and frames, so that I can inspect evidence without remembering file paths.
 
 Acceptance criteria:
 
-- `vidtrace tui <bundle>` opens an existing bundle.
+- `vidtrace studio <bundle>` opens an existing bundle.
 - Timeline entries are keyboard navigable.
 - Selected entries show transcript text, OCR text, and frame path.
 

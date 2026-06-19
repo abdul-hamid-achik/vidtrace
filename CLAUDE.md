@@ -20,6 +20,7 @@ Read `AGENTS.md` first. It contains the canonical coding-agent instructions for 
 ```bash
 task check
 task smoke
+task run -- docs agent
 task e2e
 ```
 

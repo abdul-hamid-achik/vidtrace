@@ -14,6 +14,12 @@ Human mode prints progress and a concise final summary.
 vidtrace extract /path/to/bug.mp4 --json
 ```
 
+Agents can print the built-in operating guide before extraction:
+
+```bash
+vidtrace docs agent
+```
+
 With `--json`, stdout contains JSON only. Agents should read `output_dir` from the summary and inspect:
 
 - `metadata.json`

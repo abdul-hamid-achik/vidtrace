@@ -12,7 +12,7 @@ import (
 
 	"github.com/abdul-hamid-achik/vidtrace/internal/doctor"
 	"github.com/abdul-hamid-achik/vidtrace/internal/pipeline"
-	"github.com/abdul-hamid-achik/vidtrace/internal/tui"
+	"github.com/abdul-hamid-achik/vidtrace/internal/studio"
 )
 
 func Run(args []string, stdout, stderr io.Writer, version string) int {
@@ -32,9 +32,11 @@ func Run(args []string, stdout, stderr io.Writer, version string) int {
 		return runDoctor(args[1:], stdout, stderr)
 	case "extract":
 		return runExtract(args[1:], stdout, stderr)
-	case "tui":
-		if err := tui.Run(); err != nil {
-			_, _ = fmt.Fprintf(stderr, "tui failed: %v\n", err)
+	case "docs":
+		return runDocs(args[1:], stdout, stderr)
+	case "studio":
+		if err := studio.Run(); err != nil {
+			_, _ = fmt.Fprintf(stderr, "studio failed: %v\n", err)
 			return 1
 		}
 		return 0
@@ -234,15 +236,18 @@ Usage:
 
 Commands:
   doctor       Check required local tools: ffmpeg, ffprobe, tesseract, whisper
+  docs         Print built-in product and agent usage docs
   extract      Extract frames, OCR, transcript, metadata, and timeline artifacts
-  tui          Open the terminal UI placeholder
+  studio       Open the artifact inspection studio placeholder
   version      Print the CLI version
   help         Show this help
 
 Examples:
   vidtrace doctor
   vidtrace doctor -json
+  vidtrace docs agent
   vidtrace extract /path/to/bug.mp4
   vidtrace extract /path/to/bug.mp4 -json
+  vidtrace studio
 `)
 }

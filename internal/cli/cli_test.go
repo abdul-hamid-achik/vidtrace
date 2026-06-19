@@ -17,6 +17,15 @@ func TestRunHelp(t *testing.T) {
 	if !strings.Contains(stdout.String(), "vidtrace turns bug videos") {
 		t.Fatalf("expected help text, got %q", stdout.String())
 	}
+	if !strings.Contains(stdout.String(), "docs") {
+		t.Fatalf("expected docs command in help, got %q", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "studio") {
+		t.Fatalf("expected studio command in help, got %q", stdout.String())
+	}
+	if strings.Contains(stdout.String(), "tui") {
+		t.Fatalf("did not expect tui command in help, got %q", stdout.String())
+	}
 	if stderr.Len() != 0 {
 		t.Fatalf("expected empty stderr, got %q", stderr.String())
 	}
@@ -45,6 +54,82 @@ func TestUnknownCommand(t *testing.T) {
 	}
 	if !strings.Contains(stderr.String(), "unknown command: nope") {
 		t.Fatalf("expected unknown command error, got %q", stderr.String())
+	}
+}
+
+func TestTUICommandIsRenamedToStudio(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+
+	code := Run([]string{"tui"}, &stdout, &stderr, "test")
+
+	if code != 2 {
+		t.Fatalf("expected exit code 2, got %d", code)
+	}
+	if !strings.Contains(stderr.String(), "unknown command: tui") {
+		t.Fatalf("expected unknown tui command, got %q", stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "studio") {
+		t.Fatalf("expected help to point to studio, got %q", stderr.String())
+	}
+}
+
+func TestRunDocsOverview(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+
+	code := Run([]string{"docs"}, &stdout, &stderr, "test")
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d", code)
+	}
+	if !strings.Contains(stdout.String(), "vidtrace product docs") {
+		t.Fatalf("expected product docs title, got %q", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "vidtrace docs agent") {
+		t.Fatalf("expected topic list, got %q", stdout.String())
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("expected empty stderr, got %q", stderr.String())
+	}
+}
+
+func TestRunDocsAgent(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+
+	code := Run([]string{"docs", "agent"}, &stdout, &stderr, "test")
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d", code)
+	}
+	output := stdout.String()
+	for _, want := range []string{
+		"vidtrace agent guide",
+		"vidtrace extract VIDEO --json",
+		"metadata.json",
+		"timeline.json",
+		"match, mismatch, or are inconclusive",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("expected docs output to contain %q, got %q", want, output)
+		}
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("expected empty stderr, got %q", stderr.String())
+	}
+}
+
+func TestRunDocsUnknownTopic(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+
+	code := Run([]string{"docs", "nope"}, &stdout, &stderr, "test")
+
+	if code != 2 {
+		t.Fatalf("expected exit code 2, got %d", code)
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("expected empty stdout, got %q", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "unknown docs topic: nope") {
+		t.Fatalf("expected unknown topic error, got %q", stderr.String())
 	}
 }
 

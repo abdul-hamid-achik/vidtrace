@@ -12,7 +12,8 @@ This document summarizes the current state for the next agent or development ses
 - The Go module is initialized as `github.com/abdul-hamid-achik/vidtrace`.
 - `scripts/extract.sh` remains the working legacy extractor.
 - `vidtrace doctor` is implemented in Go.
-- `vidtrace tui` is a Bubble Tea v2 shell.
+- `vidtrace docs` prints built-in product and agent usage documentation.
+- `vidtrace studio` is a Bubble Tea v2 shell.
 - `vidtrace extract` is implemented in Go.
 - `vidtrace extract -json` emits machine-readable run summaries for agents.
 

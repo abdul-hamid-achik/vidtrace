@@ -1,4 +1,4 @@
-package tui
+package studio
 
 import (
 	"fmt"
@@ -52,14 +52,14 @@ func (m model) View() tea.View {
 	title := lipgloss.NewStyle().
 		Bold(true).
 		Foreground(lipgloss.Color("39")).
-		Render("vidtrace")
+		Render("vidtrace studio")
 
 	subtitle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("245")).
 		Render("Bug video evidence extraction for agents")
 
 	body := strings.Join([]string{
-		fmt.Sprintf("Status: %s TUI shell ready", m.spinner.View()),
+		fmt.Sprintf("Status: %s studio shell ready", m.spinner.View()),
 		"",
 		"Planned panels:",
 		"  - Artifact browser",

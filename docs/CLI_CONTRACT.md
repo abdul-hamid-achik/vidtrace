@@ -31,12 +31,32 @@ Prints the CLI version.
 vidtrace version
 ```
 
-### `vidtrace tui`
+### `vidtrace docs`
 
-Opens the terminal UI shell.
+Prints built-in product documentation.
 
 ```bash
-vidtrace tui
+vidtrace docs
+vidtrace docs agent
+vidtrace docs commands
+vidtrace docs artifacts
+```
+
+Topics:
+
+| Topic | Purpose |
+|---|---|
+| `overview` | Product summary and common workflows |
+| `agent` | Agent operating contract for ticket/video analysis |
+| `commands` | Command reference |
+| `artifacts` | Artifact bundle reading order and schema notes |
+
+### `vidtrace studio`
+
+Opens the artifact inspection studio placeholder.
+
+```bash
+vidtrace studio
 ```
 
 ### `vidtrace extract`

@@ -13,6 +13,7 @@ The current docs are plain Markdown so they can move into a static documentation
 7. Release: `docs/RELEASE.md`
 8. Architecture: `docs/ARCHITECTURE.md`
 9. Roadmap: `docs/ROADMAP.md`
+10. Agent Prompt: `prompts/analyze-bundle.md`
 
 ## Site Requirements
 

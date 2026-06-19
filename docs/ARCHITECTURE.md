@@ -27,7 +27,7 @@ External tools own:
 cmd/vidtrace
 └── internal/cli
     ├── internal/doctor
-    ├── internal/tui
+    ├── internal/studio
     ├── internal/pipeline
     ├── internal/artifacts
     ├── internal/ffmpeg
@@ -57,9 +57,9 @@ The same CLI command supports both users:
 
 Human-readable logs should not be required for automation. Prefer JSON fields and generated artifact files as automation contracts.
 
-## TUI Direction
+## Studio Direction
 
-The TUI is not the primary execution path. It should help users inspect existing artifacts and monitor future pipeline runs.
+The studio is not the primary execution path. It should help users inspect existing artifacts and monitor future pipeline runs.
 
 Planned panels:
 

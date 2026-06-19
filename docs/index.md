@@ -20,4 +20,5 @@
 ## Product Planning
 
 - `../BACKLOG.md`: prioritized product and engineering work.
+- `../prompts/analyze-bundle.md`: reusable agent prompt for ticket/video analysis.
 - `SITE.md`: how to turn these Markdown files into a documentation site.
