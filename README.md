@@ -6,7 +6,9 @@ Turn bug videos into timestamped evidence bundles that humans and coding agents 
 
 ## Status
 
-This is an early Go migration from a Bash prototype. The core extraction path works, JSON output is available for automation, and CI/release wiring is in place for the first tagged release.
+`v0.3.0` is published. The Go CLI can extract evidence bundles, emit stable JSON for automation, compare a ticket against video evidence, open a terminal Studio for human review, and ship through GitHub Releases plus the Homebrew tap.
+
+The project is still early. Treat `--json`, `metadata.json`, and `timeline.json` as the main contracts and change them deliberately.
 
 ## Who It Is For
 
@@ -41,7 +43,7 @@ bug_artifacts_YYYYMMDD_HHMMSS/
 ### From Source
 
 ```bash
-git clone <repo-url>
+git clone https://github.com/abdul-hamid-achik/vidtrace.git
 cd vidtrace
 task build
 bin/vidtrace doctor
@@ -49,11 +51,12 @@ bin/vidtrace doctor
 
 ### With Homebrew
 
-After the first tagged release publishes:
+The cask is published from tagged releases:
 
 ```bash
 brew tap abdul-hamid-achik/tap
 brew install --cask abdul-hamid-achik/tap/vidtrace
+vidtrace version
 vidtrace doctor
 ```
 
@@ -80,6 +83,7 @@ Print built-in product and agent docs:
 vidtrace docs
 vidtrace docs agent
 vidtrace docs artifacts
+vidtrace docs studio
 ```
 
 Run a human-readable extraction:
@@ -137,6 +141,8 @@ task test
 task lint
 task check
 task agent VIDEO=/path/to/bug.mp4
+task run -- compare /path/to/bundle --ticket ticket.md --json
+task run -- studio /path/to/bundle
 ```
 
 Useful local tasks:
@@ -172,7 +178,7 @@ bin/vidtrace extract ~/Downloads/bug.mp4 --out /tmp/vidtrace-bug-smoke --name bu
 
 ## Release
 
-GitHub Actions runs CI on pushes and pull requests. A tag like `v0.1.0` runs GoReleaser, creates release archives and checksums, and updates `abdul-hamid-achik/homebrew-tap` when `HOMEBREW_TAP_TOKEN` is configured.
+GitHub Actions runs CI on pushes and pull requests. A tag like `vX.Y.Z` runs GoReleaser, creates release archives and checksums, and updates `abdul-hamid-achik/homebrew-tap` when `HOMEBREW_TAP_TOKEN` is configured.
 
 See `docs/RELEASE.md` for the full release process.
 
@@ -184,6 +190,7 @@ Start with:
 - `CHANGELOG.md` for release history.
 - `prompts/analyze-bundle.md` for reusable agent analysis instructions.
 - `docs/ANALYSIS.md` for ticket-vs-video comparison.
+- `docs/STUDIO.md` for the terminal Studio workflow.
 - `docs/index.md` for site-ready documentation navigation.
 - `docs/ARCHITECTURE.md` for component boundaries.
 - `docs/CLI_CONTRACT.md` for command behavior.
@@ -192,7 +199,9 @@ Start with:
 
 Current high-value improvements:
 
-- Improve `timeline.json` matching.
+- Improve `timeline.json` matching and document frame time calculations.
+- Add golden or structural JSON contract tests.
+- Improve `vidtrace compare` confidence scoring and mismatch explanations.
 - Add optional VecLite indexing as a separate command, not as part of extraction.
 - Add richer studio panes and frame preview/opening actions.
 

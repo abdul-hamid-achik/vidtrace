@@ -2,29 +2,22 @@
 
 This backlog keeps product ideas, engineering work, and integration bets visible without forcing them into the current iteration.
 
+## Recently Completed
+
+### v0.3.0 Agent and Human Review Loop
+
+As a reviewer, I can extract a video, compare it with a ticket, and inspect the resulting evidence bundle from the CLI or Studio.
+
+Acceptance criteria:
+
+- [x] `vidtrace analyze <bundle> --ticket <path>` emits a Markdown evidence report.
+- [x] `vidtrace compare <bundle> --ticket <path> --json` emits a machine-readable match assessment.
+- [x] `vidtrace studio <bundle>` opens an existing bundle and shows timeline, OCR, transcript, and frame paths.
+- [x] `task e2e` validates and runs `doctor/version`, docs, studio, and `extract --json` specs.
+- [x] GitHub Releases and the Homebrew cask publish from tagged releases.
+- [x] Install, usage, release, site-planning, analysis, and agent docs exist as Markdown.
+
 ## Now
-
-### Release and Docs Polish
-
-As a maintainer, I want CI, release automation, and site-ready docs, so that the project can ship repeatable binaries without tribal knowledge.
-
-Acceptance criteria:
-
-- [x] CI runs formatting, module drift, unit tests, build, lint, and GoReleaser config checks.
-- [x] Tagged releases use GoReleaser.
-- [x] Homebrew tap publishing targets `abdul-hamid-achik/homebrew-tap`.
-- [x] Install, usage, release, and site-planning docs exist as Markdown.
-- [x] First `v*` tag is published after `HOMEBREW_TAP_TOKEN` is configured in GitHub.
-
-### Improve E2E Confidence
-
-As a maintainer, I want `glyphrun` specs for the core CLI flows, so that CLI regressions are caught in a real PTY before release.
-
-Acceptance criteria:
-
-- [x] `task e2e` validates every spec before running it.
-- [x] `task e2e` runs `doctor/version`, docs, studio, and `extract -json` specs.
-- [x] E2E artifacts stay under `.glyphrun/` and are not committed.
 
 ### Tighten Timeline Quality
 
@@ -38,35 +31,27 @@ Acceptance criteria:
 
 ### Add Focused Unit Tests
 
-As a maintainer, I want unit tests around artifact naming, metadata shape, and timeline generation, so that refactors do not break agent contracts.
+As a maintainer, I want unit tests around artifact naming, metadata shape, timeline generation, and JSON contracts, so that refactors do not break agent workflows.
 
 Acceptance criteria:
 
 - [x] `internal/artifacts` has tests for safe bundle names.
 - [x] `internal/timeline` has tests for segment overlap.
-- [ ] JSON contracts are covered with golden or structural tests.
+- [x] `internal/analysis` has tests for ticket/video comparison decisions.
+- [ ] CLI JSON output is covered with golden or structural tests.
+
+### Improve Comparison Scoring
+
+As an agent, I want `vidtrace compare` to explain confidence clearly, so that I know when to trust the match assessment and when to inspect the bundle manually.
+
+Acceptance criteria:
+
+- [ ] Normalize terms before scoring.
+- [ ] Include strongest matched and missing terms in JSON output.
+- [ ] Document known limitations in `docs/ANALYSIS.md`.
+- [ ] Keep the command deterministic and offline.
 
 ## Next
-
-### Agent Analysis Prompt
-
-As a coding agent, I want a prompt template that explains how to inspect a vidtrace bundle, so that I produce consistent bug reports.
-
-Acceptance criteria:
-
-- [x] Add `prompts/analyze-bundle.md`.
-- [x] The prompt references `metadata.json`, `timeline.json`, OCR, transcript files, and frames.
-- [x] The prompt asks the agent to call out ticket/video mismatches explicitly.
-
-### Ticket vs Video Comparison
-
-As a support engineer, I want vidtrace to compare a ticket description against video evidence, so that I can detect mismatched attachments quickly.
-
-Acceptance criteria:
-
-- [x] Add usage docs for `vidtrace compare`.
-- [x] Input accepts ticket text and artifact bundle path.
-- [x] Output includes `match`, `mismatch`, or `inconclusive` with evidence references.
 
 ### Optional VecLite Index
 
@@ -77,19 +62,30 @@ Acceptance criteria:
 - [ ] Keep extraction independent from VecLite.
 - [ ] Add `vidtrace index <bundle> --db <path>` as an optional command.
 - [ ] Index records include `bundle`, `timestamp`, `source`, `frame`, and `text`.
-- [ ] Support BM25/text search first; add embeddings behind explicit config.
+- [ ] Support plain text search first; add embeddings behind explicit config.
 
-## Later
+### Studio Review Workflow
 
-### Studio Artifact Browser
-
-As a human reviewer, I want a studio view that opens an artifact bundle and lets me browse timeline, transcript, OCR, and frames, so that I can inspect evidence without remembering file paths.
+As a human reviewer, I want Studio actions for common review tasks, so that I can move from evidence to a useful bug report faster.
 
 Acceptance criteria:
 
-- [x] `vidtrace studio <bundle>` opens an existing bundle.
-- [x] Timeline entries are keyboard navigable.
-- [x] Selected entries show transcript text, OCR text, and frame path.
+- [ ] Add a details pane for bundle metadata.
+- [ ] Add an action to open or reveal the selected frame path.
+- [ ] Add a copyable evidence summary for the selected timeline entry.
+- [ ] Keep keyboard navigation covered by glyphrun.
+
+### Documentation Site
+
+As a user, I want a small documentation site generated from the Markdown docs, so that install and workflow guidance is easy to browse outside GitHub.
+
+Acceptance criteria:
+
+- [ ] Reuse Markdown files instead of duplicating content.
+- [ ] Include install, usage, analysis, Studio, CLI contract, artifact schema, and release pages.
+- [ ] Exclude local videos, generated bundles, `.glyphrun/`, and `dist/`.
+
+## Later
 
 ### Multi-Language OCR
 
@@ -97,16 +93,18 @@ As a QA engineer testing localized apps, I want Spanish OCR support, so that UI 
 
 Acceptance criteria:
 
-- `vidtrace doctor` reports missing requested OCR languages.
-- `--ocr-lang eng+spa` fails early when `spa` data is not installed.
-- Docs explain how to install Tesseract language data.
+- [ ] `vidtrace doctor` reports missing requested OCR languages.
+- [ ] `--ocr-lang eng+spa` fails early when `spa` data is not installed.
+- [ ] Docs explain how to install Tesseract language data.
 
-### Distribution
+### Distribution Hardening
 
-As a user, I want a simple installation path, so that I can run vidtrace without cloning the repo.
+As a user, I want a low-friction install path on macOS and Linux, so that I can run vidtrace without clone/build steps.
 
 Acceptance criteria:
 
-- Release builds produce checksums.
-- Installation docs cover source builds and binary installs.
-- Homebrew formula is considered after the first tagged release.
+- [x] Release builds produce checksums.
+- [x] Installation docs cover source builds and Homebrew cask installs.
+- [ ] Decide whether a Homebrew formula is useful in addition to the cask.
+- [ ] Evaluate Apple Developer signing and notarization.
+- [ ] Add Linux package guidance after there is user demand.

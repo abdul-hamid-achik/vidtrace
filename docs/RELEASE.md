@@ -25,24 +25,20 @@ Required repository secret:
 
 The normal `GITHUB_TOKEN` publishes the GitHub release in this repository. The Homebrew tap token updates the separate tap repository.
 
-## First Release
+## Routine Release
 
-One-time setup before the first tag:
+Before tagging, update `CHANGELOG.md` and run the local checks:
 
 ```bash
-git add .
-git commit -m "Initial vidtrace CLI"
-git remote add origin git@github.com:abdul-hamid-achik/vidtrace.git
-git push -u origin main
+task all
+goreleaser check
 ```
 
-Configure the `HOMEBREW_TAP_TOKEN` repository secret before pushing the release tag.
+Tag the release from `main`:
 
 ```bash
-task check
-goreleaser check
-git tag v0.1.0
-git push origin v0.1.0
+git tag vX.Y.Z
+git push origin vX.Y.Z
 ```
 
 GoReleaser creates:
@@ -51,6 +47,12 @@ GoReleaser creates:
 - `checksums.txt`
 - GitHub release notes
 - `Casks/vidtrace.rb` in the tap
+
+## One-Time Setup
+
+The public repository is `https://github.com/abdul-hamid-achik/vidtrace`. The release workflow needs this repository secret before publishing tags:
+
+- `HOMEBREW_TAP_TOKEN`: a token with write access to `abdul-hamid-achik/homebrew-tap`
 
 ## Homebrew Install
 

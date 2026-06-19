@@ -60,6 +60,11 @@ outcomes:
     verify:
       command:
         run: "./bin/vidtrace docs artifacts | grep -q 'Agent priority:'"
+  - id: studio_docs
+    description: studio docs describe terminal navigation
+    verify:
+      command:
+        run: "./bin/vidtrace docs studio | grep -q 'up/down or k/j'"
   - id: timeline_contract
     description: artifact docs mention timeline evidence
     verify:

@@ -12,7 +12,8 @@ The Go application owns:
 - artifact layout
 - metadata and timeline JSON
 - human-readable status output
-- optional terminal UI
+- terminal Studio for bundle review
+- ticket-vs-video analysis
 
 External tools own:
 
@@ -26,6 +27,8 @@ External tools own:
 ```text
 cmd/vidtrace
 └── internal/cli
+    ├── internal/analysis
+    ├── internal/bundle
     ├── internal/doctor
     ├── internal/studio
     ├── internal/pipeline
@@ -61,13 +64,14 @@ Human-readable logs should not be required for automation. Prefer JSON fields an
 
 The studio is not the primary execution path. It should help users inspect existing artifacts and monitor future pipeline runs.
 
-Planned panels:
+Current and planned panels:
 
-- artifact browser
 - timeline viewer
-- transcript viewer
-- OCR/frame inspector
-- pipeline run monitor
+- selected transcript text
+- selected OCR text
+- selected frame path
+- artifact metadata details
+- future pipeline run monitor
 
 Use Bubble Tea commands for async work. Do not block `Update`.
 

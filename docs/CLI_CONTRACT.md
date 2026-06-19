@@ -40,6 +40,7 @@ vidtrace docs
 vidtrace docs agent
 vidtrace docs commands
 vidtrace docs artifacts
+vidtrace docs studio
 ```
 
 Topics:
@@ -50,6 +51,7 @@ Topics:
 | `agent` | Agent operating contract for ticket/video analysis |
 | `commands` | Command reference |
 | `artifacts` | Artifact bundle reading order and schema notes |
+| `studio` | Terminal Studio review workflow and keys |
 
 ### `vidtrace studio`
 

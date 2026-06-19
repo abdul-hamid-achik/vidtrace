@@ -43,7 +43,7 @@ See `BACKLOG.md` for prioritized work beyond the roadmap.
 - Add release builds. Done with GoReleaser config.
 - Add checksums. Done with GoReleaser config.
 - Document install paths. Done.
-- Publish a Homebrew cask through `abdul-hamid-achik/homebrew-tap` after the first `v*` tag. Done.
+- Publish a Homebrew cask through `abdul-hamid-achik/homebrew-tap`. Done.
 
 ## Iteration 7: Ticket Analysis
 
@@ -52,3 +52,9 @@ See `BACKLOG.md` for prioritized work beyond the roadmap.
 - Add `vidtrace compare` JSON output. Done.
 - Add `vidtrace analyze` Markdown output. Done.
 - Improve matching with richer scoring or optional VecLite indexing.
+
+## Iteration 8: Documentation Site Readiness
+
+- Keep README, install, usage, analysis, Studio, release, testing, and artifact docs aligned. In progress.
+- Keep `AGENTS.md` and `CLAUDE.md` focused on current agent workflows. In progress.
+- Add a generated docs site after Markdown navigation stabilizes.

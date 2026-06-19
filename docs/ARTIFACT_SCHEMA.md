@@ -70,3 +70,8 @@ Target shape:
 - Prefer relative paths inside the bundle.
 - Avoid embedding large binary data in JSON.
 
+## Consumers
+
+- `vidtrace studio` reads `metadata.json`, `timeline.json`, OCR text, transcript text, and frame paths.
+- `vidtrace analyze` and `vidtrace compare` read bundle text evidence and a ticket file.
+- Agents should treat `timeline.json` as the primary map from timestamp to visual and spoken evidence.

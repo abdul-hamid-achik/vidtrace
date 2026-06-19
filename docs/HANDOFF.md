@@ -35,6 +35,7 @@ This document summarizes the current state for the next agent or development ses
 - `docs/USAGE.md`: human and agent workflows.
 - `docs/RELEASE.md`: CI, GoReleaser, and Homebrew tap release process.
 - `docs/ANALYSIS.md`: ticket-vs-video comparison workflow.
+- `docs/STUDIO.md`: terminal Studio review workflow.
 - `.goreleaser.yaml`: release build and Homebrew tap configuration.
 - `.github/workflows/`: CI and release workflows.
 - `CLAUDE.md`: Claude-specific guidance.
@@ -42,10 +43,8 @@ This document summarizes the current state for the next agent or development ses
 
 ## Known Environment Notes
 
-- Go `1.26.4` is installed locally.
-- Task `3.50.0` is installed locally, while `.tool-versions` now pins Task `3.51.1`.
+- Development tool versions are pinned in `.tool-versions`.
 - `ffmpeg`, `ffprobe`, `tesseract`, and `whisper` are on PATH locally.
-- GoReleaser `v2.13.3` is installed locally, while `.tool-versions` pins GoReleaser `2.16.0` for CI.
 - Local Tesseract languages currently include `eng`, `osd`, and `snum`; `spa` is not installed yet.
 - Whisper `small.pt` is cached locally.
 - `task smoke` creates a synthetic video and writes artifacts under `/tmp/vidtrace-smoke`.

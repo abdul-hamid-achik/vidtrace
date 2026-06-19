@@ -41,6 +41,8 @@ Open a bundle in the studio:
 vidtrace studio "$output_dir"
 ```
 
+Use `up`/`down` or `k`/`j` to move through timeline entries. Press `q` to exit. See `docs/STUDIO.md` for the review workflow.
+
 ## Common Options
 
 ```bash

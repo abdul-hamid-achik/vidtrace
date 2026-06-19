@@ -34,6 +34,13 @@ Glyphrun specs live in `specs/glyphrun/`.
 task e2e
 ```
 
+Current specs cover:
+
+- `cli_doctor.yml`: version and doctor output.
+- `cli_docs.yml`: built-in docs for humans and agents.
+- `cli_studio.yml`: interactive Studio navigation in a real PTY.
+- `extract_json.yml`: JSON extraction output and generated artifacts.
+
 Artifacts are written to `.glyphrun/`, which is ignored by Git.
 
 ## CI
@@ -69,5 +76,6 @@ For agent-facing behavior, prefer JSON and generated files over human text:
 - artifact bundle exists
 - `metadata.json` exists and has `schema_version`
 - `timeline.json` exists and has entries
+- `compare --json` emits a stable result shape
 - transcript files exist
 - OCR files match the frame count

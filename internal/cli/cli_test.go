@@ -90,6 +90,9 @@ func TestRunDocsOverview(t *testing.T) {
 	if !strings.Contains(stdout.String(), "vidtrace docs agent") {
 		t.Fatalf("expected topic list, got %q", stdout.String())
 	}
+	if !strings.Contains(stdout.String(), "vidtrace docs studio") {
+		t.Fatalf("expected studio docs topic, got %q", stdout.String())
+	}
 	if stderr.Len() != 0 {
 		t.Fatalf("expected empty stderr, got %q", stderr.String())
 	}
@@ -110,6 +113,29 @@ func TestRunDocsAgent(t *testing.T) {
 		"metadata.json",
 		"timeline.json",
 		"match, mismatch, or are inconclusive",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("expected docs output to contain %q, got %q", want, output)
+		}
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("expected empty stderr, got %q", stderr.String())
+	}
+}
+
+func TestRunDocsStudio(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+
+	code := Run([]string{"docs", "studio"}, &stdout, &stderr, "test")
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d", code)
+	}
+	output := stdout.String()
+	for _, want := range []string{
+		"vidtrace studio docs",
+		"up/down or k/j",
+		"selected frame path",
 	} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("expected docs output to contain %q, got %q", want, output)

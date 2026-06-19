@@ -19,7 +19,7 @@ This file guides coding agents working on `vidtrace`.
 - golangci-lint `2.12.2`
 - GoReleaser `2.16.0`
 - glyphrun `v0.1.0-e224a88-dev` or newer for E2E specs
-- Charm v2 TUI libraries:
+- Charm v2 Studio/TUI libraries:
   - `charm.land/bubbletea/v2`
   - `charm.land/bubbles/v2`
   - `charm.land/lipgloss/v2`
@@ -35,8 +35,29 @@ This file guides coding agents working on `vidtrace`.
 - Do not reimplement media codecs, OCR, or speech recognition in Go.
 - Put command parsing in `internal/cli`.
 - Put dependency checks in `internal/doctor`.
+- Put bundle loading in `internal/bundle`.
+- Put ticket-vs-video comparison in `internal/analysis`.
+- Put terminal review UI in `internal/studio`.
 - Put future media-tool wrappers in separate internal packages, for example `internal/ffmpeg`, `internal/tesseract`, and `internal/whisper`.
 - Keep artifact schemas explicit and versionable.
+
+## Agent Workflow
+
+Use the built-in docs when you need to learn the product from the CLI:
+
+```bash
+task run -- docs agent
+```
+
+For a ticket and video, prefer this loop:
+
+```bash
+task run -- extract /path/to/bug.mp4 --json
+task run -- compare /path/to/bundle --ticket ticket.md --json
+task run -- analyze /path/to/bundle --ticket ticket.md
+```
+
+Use `vidtrace studio <bundle>` for human inspection. Agents should rely on `--json`, `metadata.json`, `timeline.json`, OCR text, transcripts, and selected frame files.
 
 ## Iteration Strategy
 
@@ -53,6 +74,8 @@ task check
 task all
 task run -- doctor
 task run -- docs agent
+task run -- compare /path/to/bundle --ticket ticket.md --json
+task run -- studio /path/to/bundle
 task smoke
 task e2e
 ```
@@ -63,6 +86,7 @@ task e2e
 - Run `task check` before considering a change complete.
 - Run `task all` after CLI behavior changes when local media tools are available.
 - Run `task lint` when changing Go code, or rely on `task check`.
+- Run `task e2e` after command surface or Studio behavior changes.
 - For extractor work, verify generated folders and files, not only stdout.
 - Prefer stable JSON output for tests over parsing human-readable text.
 - Use glyphrun specs in `specs/glyphrun/` for real terminal behavior.
@@ -70,5 +94,6 @@ task e2e
 ## Git Safety
 
 - This repo may contain user-created media files or generated artifacts.
+- Never commit `~/Downloads/bug.mp4` or any copied video fixture.
 - Do not delete user videos or artifact folders unless explicitly asked.
 - Do not rewrite history or run destructive Git commands without explicit approval.

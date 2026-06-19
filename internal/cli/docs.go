@@ -9,7 +9,7 @@ import (
 func runDocs(args []string, stdout, stderr io.Writer) int {
 	topic := "overview"
 	if len(args) > 1 {
-		_, _ = fmt.Fprintln(stderr, "usage: vidtrace docs [overview|agent|commands|artifacts]")
+		_, _ = fmt.Fprintln(stderr, "usage: vidtrace docs [overview|agent|commands|artifacts|studio]")
 		return 2
 	}
 	if len(args) == 1 {
@@ -25,9 +25,11 @@ func runDocs(args []string, stdout, stderr io.Writer) int {
 		printCommandDocs(stdout)
 	case "artifacts":
 		printArtifactDocs(stdout)
+	case "studio":
+		printStudioDocs(stdout)
 	default:
 		_, _ = fmt.Fprintf(stderr, "unknown docs topic: %s\n", topic)
-		_, _ = fmt.Fprintln(stderr, "usage: vidtrace docs [overview|agent|commands|artifacts]")
+		_, _ = fmt.Fprintln(stderr, "usage: vidtrace docs [overview|agent|commands|artifacts|studio]")
 		return 2
 	}
 	return 0
@@ -57,6 +59,7 @@ More topics:
   vidtrace docs agent
   vidtrace docs commands
   vidtrace docs artifacts
+  vidtrace docs studio
 `)
 }
 
@@ -105,7 +108,7 @@ Commands:
   vidtrace extract VIDEO [flags]
       Generate frames, OCR, transcript, metadata, and timeline artifacts.
 
-  vidtrace docs [overview|agent|commands|artifacts]
+  vidtrace docs [overview|agent|commands|artifacts|studio]
       Print built-in usage docs for humans and agents.
 
   vidtrace studio [BUNDLE]
@@ -153,5 +156,32 @@ Contracts:
   - JSON paths are relative to the bundle when possible.
   - timeline entries connect time_seconds, frame, OCR text, and transcript segments.
   - Empty OCR is valid evidence that no text was detected for that frame.
+`)
+}
+
+func printStudioDocs(w io.Writer) {
+	_, _ = fmt.Fprint(w, `vidtrace studio docs
+
+Purpose:
+  Studio opens an artifact bundle in a terminal review interface for humans.
+
+Open a bundle:
+  vidtrace studio /path/to/bug_artifacts_YYYYMMDD_HHMMSS
+
+Keys:
+  up/down or k/j      move through timeline entries
+  q, esc, or ctrl+c   exit
+
+Shows:
+  - bundle source video and duration
+  - timeline entry count
+  - selected timestamp
+  - selected frame path
+  - OCR text for the selected frame
+  - transcript segments that overlap the selected frame time
+
+Limits:
+  - Studio displays frame paths but does not open images yet.
+  - Extraction still runs through "vidtrace extract".
 `)
 }

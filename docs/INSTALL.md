@@ -13,12 +13,20 @@ Run `vidtrace doctor` after installation. It checks binaries, Tesseract language
 
 ## Homebrew
 
-After the first release is published:
+The Homebrew cask is published from tagged releases:
 
 ```bash
 brew tap abdul-hamid-achik/tap
 brew install --cask abdul-hamid-achik/tap/vidtrace
+vidtrace version
 vidtrace doctor
+```
+
+Upgrade to the latest published cask with:
+
+```bash
+brew update
+brew upgrade --cask abdul-hamid-achik/tap/vidtrace
 ```
 
 `vidtrace` is not signed with an Apple Developer certificate yet. If macOS blocks the first run, clear quarantine on the installed binary:
@@ -41,7 +49,7 @@ Whisper downloads its model on first use. `vidtrace` defaults to the `small` mod
 Development tool versions are pinned in `.tool-versions`.
 
 ```bash
-git clone <repo-url>
+git clone https://github.com/abdul-hamid-achik/vidtrace.git
 cd vidtrace
 task build
 bin/vidtrace doctor
@@ -60,6 +68,7 @@ Required development tools:
 ```bash
 vidtrace version
 vidtrace doctor
+vidtrace docs agent
 ```
 
 If `doctor` reports missing OCR language data, install the requested Tesseract language package before extraction.

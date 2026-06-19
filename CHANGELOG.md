@@ -4,7 +4,10 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
-No unreleased changes yet.
+### Changed
+
+- Refreshed README, agent docs, backlog, install, release, testing, and site docs for the published `v0.3.0` workflow.
+- Added a built-in `vidtrace docs studio` topic for terminal Studio review guidance.
 
 ## [0.3.0] - 2026-06-19
 
