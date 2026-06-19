@@ -53,11 +53,33 @@ Topics:
 
 ### `vidtrace studio`
 
-Opens the artifact inspection studio placeholder.
+Opens the artifact inspection studio.
 
 ```bash
 vidtrace studio
+vidtrace studio /path/to/bug_artifacts_YYYYMMDD_HHMMSS
 ```
+
+With a bundle path, studio shows timeline entries, OCR text, transcript text, and frame paths.
+
+### `vidtrace analyze`
+
+Writes a Markdown evidence report for a bundle and ticket.
+
+```bash
+vidtrace analyze /path/to/bug_artifacts_YYYYMMDD_HHMMSS --ticket ticket.md
+```
+
+### `vidtrace compare`
+
+Compares a ticket with OCR/transcript evidence from a bundle.
+
+```bash
+vidtrace compare /path/to/bug_artifacts_YYYYMMDD_HHMMSS --ticket ticket.md
+vidtrace compare /path/to/bug_artifacts_YYYYMMDD_HHMMSS --ticket ticket.md --json
+```
+
+`status` is `match`, `mismatch`, or `inconclusive`.
 
 ### `vidtrace extract`
 

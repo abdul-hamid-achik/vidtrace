@@ -14,7 +14,7 @@ Acceptance criteria:
 - [x] Tagged releases use GoReleaser.
 - [x] Homebrew tap publishing targets `abdul-hamid-achik/homebrew-tap`.
 - [x] Install, usage, release, and site-planning docs exist as Markdown.
-- [ ] First `v*` tag is published after `HOMEBREW_TAP_TOKEN` is configured in GitHub.
+- [x] First `v*` tag is published after `HOMEBREW_TAP_TOKEN` is configured in GitHub.
 
 ### Improve E2E Confidence
 
@@ -23,7 +23,7 @@ As a maintainer, I want `glyphrun` specs for the core CLI flows, so that CLI reg
 Acceptance criteria:
 
 - [x] `task e2e` validates every spec before running it.
-- [x] `task e2e` runs `doctor/version` and `extract -json` specs.
+- [x] `task e2e` runs `doctor/version`, docs, studio, and `extract -json` specs.
 - [x] E2E artifacts stay under `.glyphrun/` and are not committed.
 
 ### Tighten Timeline Quality
@@ -64,9 +64,9 @@ As a support engineer, I want vidtrace to compare a ticket description against v
 
 Acceptance criteria:
 
-- [ ] Add a design doc for `vidtrace compare`.
-- [ ] Input accepts ticket text and artifact bundle path.
-- [ ] Output includes `match`, `mismatch`, or `inconclusive` with evidence references.
+- [x] Add usage docs for `vidtrace compare`.
+- [x] Input accepts ticket text and artifact bundle path.
+- [x] Output includes `match`, `mismatch`, or `inconclusive` with evidence references.
 
 ### Optional VecLite Index
 
@@ -87,9 +87,9 @@ As a human reviewer, I want a studio view that opens an artifact bundle and lets
 
 Acceptance criteria:
 
-- `vidtrace studio <bundle>` opens an existing bundle.
-- Timeline entries are keyboard navigable.
-- Selected entries show transcript text, OCR text, and frame path.
+- [x] `vidtrace studio <bundle>` opens an existing bundle.
+- [x] Timeline entries are keyboard navigable.
+- [x] Selected entries show transcript text, OCR text, and frame path.
 
 ### Multi-Language OCR
 

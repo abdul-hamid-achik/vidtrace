@@ -102,6 +102,19 @@ With `--json`, stdout is parseable JSON only. An agent should read `output_dir` 
 - `transcript/*.json`
 - selected `frames/frame_*.png`
 
+Compare a ticket with an artifact bundle:
+
+```bash
+vidtrace analyze /path/to/bug_artifacts_YYYYMMDD_HHMMSS --ticket ticket.md
+vidtrace compare /path/to/bug_artifacts_YYYYMMDD_HHMMSS --ticket ticket.md --json
+```
+
+Open the studio browser:
+
+```bash
+vidtrace studio /path/to/bug_artifacts_YYYYMMDD_HHMMSS
+```
+
 ```bash
 vidtrace extract /path/to/bug.mp4 \
   --fps 1 \
@@ -168,7 +181,9 @@ See `docs/RELEASE.md` for the full release process.
 Start with:
 
 - `BACKLOG.md` for prioritized product and engineering work.
+- `CHANGELOG.md` for release history.
 - `prompts/analyze-bundle.md` for reusable agent analysis instructions.
+- `docs/ANALYSIS.md` for ticket-vs-video comparison.
 - `docs/index.md` for site-ready documentation navigation.
 - `docs/ARCHITECTURE.md` for component boundaries.
 - `docs/CLI_CONTRACT.md` for command behavior.
@@ -177,10 +192,9 @@ Start with:
 
 Current high-value improvements:
 
-- Add `prompts/analyze-bundle.md` for agent analysis.
 - Improve `timeline.json` matching.
 - Add optional VecLite indexing as a separate command, not as part of extraction.
-- Build the studio artifact browser once bundle contracts stabilize.
+- Add richer studio panes and frame preview/opening actions.
 
 ## Project Conventions
 

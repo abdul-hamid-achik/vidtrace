@@ -49,8 +49,9 @@ Primary output:
 Common workflows:
   - Run "vidtrace doctor" before extraction.
   - Run "vidtrace extract VIDEO --json" for automation.
+  - Run "vidtrace compare BUNDLE --ticket TICKET --json" to compare a ticket with evidence.
   - Run "vidtrace docs agent" when an agent needs the operating contract.
-  - Run "vidtrace studio" to open the future artifact browser.
+  - Run "vidtrace studio BUNDLE" to inspect timeline, OCR, transcript, and frame paths.
 
 More topics:
   vidtrace docs agent
@@ -73,6 +74,7 @@ Recommended flow:
   5. Use ocr/ocr_all_frames.txt for broad UI text search.
   6. Use transcript/*.json for spoken context.
   7. Open selected frames/frame_*.png only when text evidence is ambiguous.
+  8. Run "vidtrace compare output_dir --ticket ticket.md --json" for a first-pass mismatch check.
 
 Ticket comparison:
   - State whether the ticket and video appear to match, mismatch, or are inconclusive.
@@ -91,6 +93,12 @@ func printCommandDocs(w io.Writer) {
 	_, _ = fmt.Fprint(w, `vidtrace command docs
 
 Commands:
+  vidtrace analyze BUNDLE --ticket TICKET
+      Write a Markdown report that compares ticket text with extracted evidence.
+
+  vidtrace compare BUNDLE --ticket TICKET [--json]
+      Print match, mismatch, or inconclusive based on OCR/transcript evidence.
+
   vidtrace doctor [-json]
       Check ffmpeg, ffprobe, tesseract, whisper, OCR languages, and cached Whisper models.
 
@@ -100,8 +108,8 @@ Commands:
   vidtrace docs [overview|agent|commands|artifacts]
       Print built-in usage docs for humans and agents.
 
-  vidtrace studio
-      Open the artifact inspection studio. The current implementation is a placeholder shell.
+  vidtrace studio [BUNDLE]
+      Open the artifact inspection studio. With a bundle path, browse timeline, OCR, transcript, and frame paths.
 
   vidtrace version
       Print the CLI version.
@@ -114,6 +122,10 @@ Important extract flags:
   --ocr-lang LANG     Tesseract language list, for example eng or eng+spa
   --whisper-lang LANG Whisper language
   --model NAME        Whisper model
+
+Analyze and compare flags:
+  --ticket PATH       ticket markdown or text file
+  --json              emit machine-readable compare result
 `)
 }
 

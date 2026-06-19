@@ -48,9 +48,11 @@ tasks:
     cmds:
       - glyph spec verify specs/glyphrun/cli_doctor.yml --format md
       - glyph spec verify specs/glyphrun/cli_docs.yml --format md
+      - glyph spec verify specs/glyphrun/cli_studio.yml --format md
       - glyph spec verify specs/glyphrun/extract_json.yml --format md
       - glyph run specs/glyphrun/cli_doctor.yml --format md
       - glyph run specs/glyphrun/cli_docs.yml --format md
+      - glyph run specs/glyphrun/cli_studio.yml --format md
       - glyph run specs/glyphrun/extract_json.yml --format md
 
   test:

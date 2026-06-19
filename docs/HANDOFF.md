@@ -13,7 +13,9 @@ This document summarizes the current state for the next agent or development ses
 - `scripts/extract.sh` remains the working legacy extractor.
 - `vidtrace doctor` is implemented in Go.
 - `vidtrace docs` prints built-in product and agent usage documentation.
-- `vidtrace studio` is a Bubble Tea v2 shell.
+- `vidtrace studio <bundle>` opens a Bubble Tea v2 bundle browser.
+- `vidtrace compare <bundle> --ticket <path> --json` emits heuristic ticket/video comparison.
+- `vidtrace analyze <bundle> --ticket <path>` emits a Markdown evidence report.
 - `vidtrace extract` is implemented in Go.
 - `vidtrace extract -json` emits machine-readable run summaries for agents.
 
@@ -32,6 +34,7 @@ This document summarizes the current state for the next agent or development ses
 - `docs/INSTALL.md`: install paths and runtime dependencies.
 - `docs/USAGE.md`: human and agent workflows.
 - `docs/RELEASE.md`: CI, GoReleaser, and Homebrew tap release process.
+- `docs/ANALYSIS.md`: ticket-vs-video comparison workflow.
 - `.goreleaser.yaml`: release build and Homebrew tap configuration.
 - `.github/workflows/`: CI and release workflows.
 - `CLAUDE.md`: Claude-specific guidance.
@@ -55,10 +58,10 @@ Polish artifact and timeline quality.
 
 Suggested checks:
 
-1. Add `prompts/analyze-bundle.md`.
-2. Improve `timeline.json` matching rules.
-3. Add golden or structural JSON contract tests.
-4. Design `vidtrace compare` for ticket-vs-video mismatch detection.
+1. Improve `timeline.json` matching rules.
+2. Add golden or structural JSON contract tests.
+3. Improve `vidtrace compare` scoring with better tokenization or VecLite.
+4. Add richer studio panes and frame opening actions.
 5. Decide whether `scripts/extract.sh` should remain as legacy fallback.
 
 ## Legacy Gotchas

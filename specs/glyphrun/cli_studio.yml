@@ -1,0 +1,111 @@
+version: 1
+name: cli_studio
+
+metadata:
+  feature: studio
+  owner: core
+  priority: high
+  tags:
+    - tui
+    - agent
+    - artifacts
+
+intent: |
+  Verify that vidtrace studio opens an artifact bundle in a real PTY, displays
+  timeline evidence, supports keyboard navigation, and exits cleanly with q.
+
+target:
+  cmd:
+    - "/bin/sh"
+    - "-c"
+    - "./bin/vidtrace studio .glyphrun/tmp/studio/sample_artifacts"
+  cwd: "."
+  timeoutMs: 20000
+
+terminal:
+  cols: 120
+  rows: 40
+  profile: xterm-256color
+  alternateScreen: require
+
+preconditions:
+  commands:
+    - run: "go build -o ./bin/vidtrace ./cmd/vidtrace"
+      timeoutMs: 120000
+    - run: "rm -rf .glyphrun/tmp/studio && mkdir -p .glyphrun/tmp/studio/sample_artifacts/frames .glyphrun/tmp/studio/sample_artifacts/ocr .glyphrun/tmp/studio/sample_artifacts/transcript"
+      timeoutMs: 5000
+    - run: |
+        cat > .glyphrun/tmp/studio/sample_artifacts/metadata.json <<'JSON'
+        {
+          "schema_version": "1",
+          "source_video": "/tmp/login-bug.mp4",
+          "duration_seconds": 2,
+          "extract_fps": 1,
+          "ocr_languages": ["eng"],
+          "whisper_language": "en",
+          "whisper_model": "small"
+        }
+        JSON
+      timeoutMs: 5000
+    - run: |
+        cat > .glyphrun/tmp/studio/sample_artifacts/timeline.json <<'JSON'
+        {
+          "schema_version": "1",
+          "entries": [
+            {
+              "time_seconds": 0,
+              "frame": "frames/frame_0001.png",
+              "ocr": {"path": "ocr/frame_0001.txt", "text": "Login failed after submit"},
+              "transcript": [{"start_seconds": 0, "end_seconds": 1, "text": "I cannot log in"}]
+            },
+            {
+              "time_seconds": 1,
+              "frame": "frames/frame_0002.png",
+              "ocr": {"path": "ocr/frame_0002.txt", "text": "Retry button visible"},
+              "transcript": []
+            }
+          ]
+        }
+        JSON
+      timeoutMs: 5000
+    - run: "printf 'Login failed after submit\\nRetry button visible\\n' > .glyphrun/tmp/studio/sample_artifacts/ocr/ocr_all_frames.txt"
+      timeoutMs: 5000
+
+steps:
+  - wait:
+      screen:
+        contains: "vidtrace studio"
+      timeoutMs: 5000
+  - wait:
+      screen:
+        contains: "Login failed after submit"
+      timeoutMs: 5000
+  - snapshot: home
+  - press: "down"
+  - wait:
+      screen:
+        contains: "Retry button visible"
+      timeoutMs: 5000
+  - snapshot: second_entry
+  - press: "q"
+  - wait:
+      process:
+        exitCode: 0
+      timeoutMs: 5000
+
+outcomes:
+  - id: clean_exit
+    description: q exits the studio cleanly
+    verify:
+      process:
+        exitCode: 0
+  - id: fixture_metadata
+    description: studio fixture has metadata
+    verify:
+      command:
+        run: "test -f .glyphrun/tmp/studio/sample_artifacts/metadata.json"
+  - id: fixture_timeline
+    description: studio fixture has timeline evidence
+    verify:
+      command:
+        run: "grep -q 'Retry button visible' .glyphrun/tmp/studio/sample_artifacts/timeline.json"

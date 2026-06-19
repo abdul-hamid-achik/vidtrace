@@ -28,6 +28,19 @@ With `--json`, stdout contains JSON only. Agents should read `output_dir` from t
 - `transcript/*.json`
 - selected `frames/frame_*.png`
 
+Then compare the ticket with extracted evidence:
+
+```bash
+vidtrace compare "$output_dir" --ticket ticket.md --json
+vidtrace analyze "$output_dir" --ticket ticket.md
+```
+
+Open a bundle in the studio:
+
+```bash
+vidtrace studio "$output_dir"
+```
+
 ## Common Options
 
 ```bash

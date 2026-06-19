@@ -6,6 +6,7 @@
 
 - `INSTALL.md`: install the CLI and runtime media tools.
 - `USAGE.md`: run human and agent workflows.
+- `ANALYSIS.md`: compare tickets with extracted video evidence.
 - `CLI_CONTRACT.md`: command surface, flags, exit codes, and JSON output.
 - `ARTIFACT_SCHEMA.md`: generated bundle layout and JSON schemas.
 - `TESTING.md`: local, CI, smoke, and glyphrun verification.

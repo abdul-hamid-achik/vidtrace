@@ -25,17 +25,17 @@
 
 ## Iteration 4: E2E Coverage
 
-- Add `glyphrun` tests. Done for doctor/version and extract JSON flows.
+- Add `glyphrun` tests. Done for doctor/version, docs, studio, and extract JSON flows.
 - Test exit codes, stdout, stderr, and generated files. Started.
-- Add small synthetic media fixtures or fixture-generation tasks.
+- Add small synthetic media fixtures or fixture-generation tasks. Started.
 
 See `BACKLOG.md` for prioritized work beyond the roadmap.
 
 ## Iteration 5: Inspection Studio
 
-- Browse artifact bundles.
-- View transcript and OCR side by side.
-- Jump from timeline entries to frames.
+- Browse artifact bundles. Started.
+- View transcript and OCR side by side. Started.
+- Jump from timeline entries to frames. Started with frame paths.
 - Monitor long-running extraction jobs.
 
 ## Iteration 6: Distribution
@@ -43,4 +43,12 @@ See `BACKLOG.md` for prioritized work beyond the roadmap.
 - Add release builds. Done with GoReleaser config.
 - Add checksums. Done with GoReleaser config.
 - Document install paths. Done.
-- Publish a Homebrew cask through `abdul-hamid-achik/homebrew-tap` after the first `v*` tag.
+- Publish a Homebrew cask through `abdul-hamid-achik/homebrew-tap` after the first `v*` tag. Done.
+
+## Iteration 7: Ticket Analysis
+
+- Add built-in agent docs. Done.
+- Add reusable agent prompt. Done.
+- Add `vidtrace compare` JSON output. Done.
+- Add `vidtrace analyze` Markdown output. Done.
+- Improve matching with richer scoring or optional VecLite indexing.

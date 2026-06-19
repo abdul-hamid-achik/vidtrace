@@ -32,10 +32,22 @@ func Run(args []string, stdout, stderr io.Writer, version string) int {
 		return runDoctor(args[1:], stdout, stderr)
 	case "extract":
 		return runExtract(args[1:], stdout, stderr)
+	case "analyze":
+		return runAnalyze(args[1:], stdout, stderr)
+	case "compare":
+		return runCompare(args[1:], stdout, stderr)
 	case "docs":
 		return runDocs(args[1:], stdout, stderr)
 	case "studio":
-		if err := studio.Run(); err != nil {
+		if len(args[1:]) > 1 {
+			_, _ = fmt.Fprintln(stderr, "usage: vidtrace studio [bundle]")
+			return 2
+		}
+		bundleDir := ""
+		if len(args[1:]) == 1 {
+			bundleDir = args[1]
+		}
+		if err := studio.Run(bundleDir); err != nil {
 			_, _ = fmt.Fprintf(stderr, "studio failed: %v\n", err)
 			return 1
 		}
@@ -235,6 +247,8 @@ Usage:
   vidtrace <command> [flags]
 
 Commands:
+  analyze      Write a Markdown evidence report for a bundle and ticket
+  compare      Compare a ticket with bundle evidence, optionally as JSON
   doctor       Check required local tools: ffmpeg, ffprobe, tesseract, whisper
   docs         Print built-in product and agent usage docs
   extract      Extract frames, OCR, transcript, metadata, and timeline artifacts
@@ -248,6 +262,8 @@ Examples:
   vidtrace docs agent
   vidtrace extract /path/to/bug.mp4
   vidtrace extract /path/to/bug.mp4 -json
+  vidtrace analyze /path/to/bundle --ticket ticket.md
+  vidtrace compare /path/to/bundle --ticket ticket.md --json
   vidtrace studio
 `)
 }
