@@ -21,6 +21,7 @@ Read `AGENTS.md` first. It contains the canonical coding-agent instructions for 
 task check
 task smoke
 task run -- docs agent
+task run -- validate /path/to/bundle --json
 task run -- compare /path/to/bundle --ticket ticket.md --json
 task run -- analyze /path/to/bundle --ticket ticket.md
 task run -- studio /path/to/bundle

@@ -26,6 +26,9 @@ func TestRunHelp(t *testing.T) {
 	if !strings.Contains(stdout.String(), "studio") {
 		t.Fatalf("expected studio command in help, got %q", stdout.String())
 	}
+	if !strings.Contains(stdout.String(), "validate") {
+		t.Fatalf("expected validate command in help, got %q", stdout.String())
+	}
 	if strings.Contains(stdout.String(), "tui") {
 		t.Fatalf("did not expect tui command in help, got %q", stdout.String())
 	}
@@ -203,14 +206,23 @@ func TestCompareJSON(t *testing.T) {
 		t.Fatalf("expected exit code 0, got %d stderr=%q", code, stderr.String())
 	}
 	var result struct {
-		OK     bool   `json:"ok"`
-		Status string `json:"status"`
+		OK           bool     `json:"ok"`
+		Status       string   `json:"status"`
+		Confidence   string   `json:"confidence"`
+		MatchedTerms []string `json:"matched_terms"`
+		TermHits     []struct {
+			Term   string `json:"term"`
+			Source string `json:"source"`
+		} `json:"term_hits"`
 	}
 	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
 		t.Fatalf("expected valid JSON, got %q: %v", stdout.String(), err)
 	}
 	if !result.OK || result.Status != "match" {
 		t.Fatalf("unexpected result: %#v", result)
+	}
+	if result.Confidence == "" || len(result.MatchedTerms) == 0 || len(result.TermHits) == 0 {
+		t.Fatalf("expected confidence, matched terms, and term hits: %#v", result)
 	}
 	if stderr.Len() != 0 {
 		t.Fatalf("expected empty stderr, got %q", stderr.String())
@@ -248,6 +260,52 @@ func TestAnalyzeMarkdown(t *testing.T) {
 		if !strings.Contains(stdout.String(), want) {
 			t.Fatalf("expected output to contain %q, got %q", want, stdout.String())
 		}
+	}
+}
+
+func TestValidateJSON(t *testing.T) {
+	bundleDir := writeCLIBundle(t)
+	mustWrite(t, filepath.Join(bundleDir, "frames", "frame_0001.png"), "fake frame")
+	mustWrite(t, filepath.Join(bundleDir, "ocr", "frame_0001.txt"), "Login failed")
+	var stdout, stderr bytes.Buffer
+
+	code := Run([]string{"validate", bundleDir, "--json"}, &stdout, &stderr, "test")
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d stderr=%q stdout=%q", code, stderr.String(), stdout.String())
+	}
+	var report struct {
+		OK              bool `json:"ok"`
+		TimelineEntries int  `json:"timeline_entries"`
+		Checks          []struct {
+			Name string `json:"name"`
+			OK   bool   `json:"ok"`
+		} `json:"checks"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &report); err != nil {
+		t.Fatalf("expected valid JSON, got %q: %v", stdout.String(), err)
+	}
+	if !report.OK || report.TimelineEntries != 1 {
+		t.Fatalf("unexpected report: %#v", report)
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("expected empty stderr, got %q", stderr.String())
+	}
+}
+
+func TestValidateJSONFailure(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+
+	code := Run([]string{"validate", "/missing/bundle", "--json"}, &stdout, &stderr, "test")
+
+	if code != 1 {
+		t.Fatalf("expected exit code 1, got %d", code)
+	}
+	if !strings.Contains(stdout.String(), `"ok": false`) {
+		t.Fatalf("expected json failure report, got %q", stdout.String())
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("expected empty stderr for json failure, got %q", stderr.String())
 	}
 }
 

@@ -64,6 +64,45 @@ func TestBuild(t *testing.T) {
 	}
 }
 
+func TestBuildUsesFPSForFrameTime(t *testing.T) {
+	t.Parallel()
+
+	bundleDir := t.TempDir()
+	mustMkdir(t, filepath.Join(bundleDir, "frames"))
+	mustMkdir(t, filepath.Join(bundleDir, "ocr"))
+	frame1 := filepath.Join(bundleDir, "frames", "frame_0001.png")
+	frame2 := filepath.Join(bundleDir, "frames", "frame_0002.png")
+	mustWrite(t, frame1, "fake frame")
+	mustWrite(t, frame2, "fake frame")
+
+	doc, err := Build(bundleDir, []string{frame2, frame1}, 2, "")
+	if err != nil {
+		t.Fatalf("Build() failed: %v", err)
+	}
+
+	if doc.Entries[0].TimeSeconds != 0 {
+		t.Fatalf("first TimeSeconds = %v, want 0", doc.Entries[0].TimeSeconds)
+	}
+	if doc.Entries[1].TimeSeconds != 0.5 {
+		t.Fatalf("second TimeSeconds = %v, want 0.5", doc.Entries[1].TimeSeconds)
+	}
+	if doc.Entries[0].OCR.Path != "ocr/frame_0001.txt" {
+		t.Fatalf("first OCR path = %q", doc.Entries[0].OCR.Path)
+	}
+	if doc.Entries[0].OCR.Text != "" {
+		t.Fatalf("missing OCR should be represented as empty text, got %q", doc.Entries[0].OCR.Text)
+	}
+}
+
+func TestBuildRejectsInvalidFPS(t *testing.T) {
+	t.Parallel()
+
+	_, err := Build(t.TempDir(), nil, 0, "")
+	if err == nil {
+		t.Fatalf("expected invalid fps error")
+	}
+}
+
 func mustMkdir(t *testing.T, path string) {
 	t.Helper()
 	if err := os.MkdirAll(path, 0o755); err != nil {

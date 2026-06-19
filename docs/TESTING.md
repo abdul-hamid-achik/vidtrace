@@ -38,6 +38,7 @@ Current specs cover:
 
 - `cli_doctor.yml`: version and doctor output.
 - `cli_docs.yml`: built-in docs for humans and agents.
+- `cli_compare.yml`: ticket comparison and bundle validation JSON.
 - `cli_studio.yml`: interactive Studio navigation in a real PTY.
 - `extract_json.yml`: JSON extraction output and generated artifacts.
 

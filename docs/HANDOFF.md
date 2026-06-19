@@ -14,6 +14,7 @@ This document summarizes the current state for the next agent or development ses
 - `vidtrace doctor` is implemented in Go.
 - `vidtrace docs` prints built-in product and agent usage documentation.
 - `vidtrace studio <bundle>` opens a Bubble Tea v2 bundle browser.
+- `vidtrace validate <bundle> --json` checks bundle structure and referenced paths.
 - `vidtrace compare <bundle> --ticket <path> --json` emits heuristic ticket/video comparison.
 - `vidtrace analyze <bundle> --ticket <path>` emits a Markdown evidence report.
 - `vidtrace extract` is implemented in Go.
@@ -53,14 +54,14 @@ This document summarizes the current state for the next agent or development ses
 
 ## Next Best Iteration
 
-Polish artifact and timeline quality.
+Build richer review and search workflows on top of the artifact bundle.
 
 Suggested checks:
 
-1. Improve `timeline.json` matching rules.
-2. Add golden or structural JSON contract tests.
-3. Improve `vidtrace compare` scoring with better tokenization or VecLite.
-4. Add richer studio panes and frame opening actions.
+1. Add optional VecLite indexing as `vidtrace index <bundle> --db <path>`.
+2. Add richer studio panes and frame opening actions.
+3. Add a generated docs site from the Markdown docs.
+4. Improve `timeline.json` matching rules beyond frame-window overlap.
 5. Decide whether `scripts/extract.sh` should remain as legacy fallback.
 
 ## Legacy Gotchas

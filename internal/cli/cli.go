@@ -36,6 +36,8 @@ func Run(args []string, stdout, stderr io.Writer, version string) int {
 		return runAnalyze(args[1:], stdout, stderr)
 	case "compare":
 		return runCompare(args[1:], stdout, stderr)
+	case "validate":
+		return runValidate(args[1:], stdout, stderr)
 	case "docs":
 		return runDocs(args[1:], stdout, stderr)
 	case "studio":
@@ -252,7 +254,8 @@ Commands:
   doctor       Check required local tools: ffmpeg, ffprobe, tesseract, whisper
   docs         Print built-in product and agent usage docs
   extract      Extract frames, OCR, transcript, metadata, and timeline artifacts
-  studio       Open the artifact inspection studio placeholder
+  studio       Open the artifact inspection studio
+  validate     Validate an artifact bundle, optionally as JSON
   version      Print the CLI version
   help         Show this help
 
@@ -264,6 +267,7 @@ Examples:
   vidtrace extract /path/to/bug.mp4 -json
   vidtrace analyze /path/to/bundle --ticket ticket.md
   vidtrace compare /path/to/bundle --ticket ticket.md --json
+  vidtrace validate /path/to/bundle --json
   vidtrace studio
 `)
 }

@@ -24,6 +24,7 @@ The current docs are plain Markdown so they can move into a static documentation
 - Keep install instructions separate from development instructions.
 - Treat `CLI_CONTRACT.md` and `ARTIFACT_SCHEMA.md` as reference pages.
 - Treat `STUDIO.md` as a task guide for human review.
+- Include `vidtrace validate` in install, usage, and agent workflow examples.
 - Do not publish local media fixtures or generated artifact bundles.
 
 ## Next Step

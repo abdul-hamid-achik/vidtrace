@@ -51,6 +51,7 @@ Primary output:
 Common workflows:
   - Run "vidtrace doctor" before extraction.
   - Run "vidtrace extract VIDEO --json" for automation.
+  - Run "vidtrace validate BUNDLE --json" before trusting a generated bundle.
   - Run "vidtrace compare BUNDLE --ticket TICKET --json" to compare a ticket with evidence.
   - Run "vidtrace docs agent" when an agent needs the operating contract.
   - Run "vidtrace studio BUNDLE" to inspect timeline, OCR, transcript, and frame paths.
@@ -73,11 +74,12 @@ Recommended flow:
   1. Run "vidtrace doctor -json" and check that ok is true.
   2. Run "vidtrace extract VIDEO --json --out /tmp/vidtrace --name TICKET_ID".
   3. Parse stdout as JSON and read output_dir.
-  4. Inspect output_dir/metadata.json and output_dir/timeline.json first.
-  5. Use ocr/ocr_all_frames.txt for broad UI text search.
-  6. Use transcript/*.json for spoken context.
-  7. Open selected frames/frame_*.png only when text evidence is ambiguous.
-  8. Run "vidtrace compare output_dir --ticket ticket.md --json" for a first-pass mismatch check.
+  4. Run "vidtrace validate output_dir --json" and check that ok is true.
+  5. Inspect output_dir/metadata.json and output_dir/timeline.json first.
+  6. Use ocr/ocr_all_frames.txt for broad UI text search.
+  7. Use transcript/*.json for spoken context.
+  8. Open selected frames/frame_*.png only when text evidence is ambiguous.
+  9. Run "vidtrace compare output_dir --ticket ticket.md --json" for a first-pass mismatch check.
 
 Ticket comparison:
   - State whether the ticket and video appear to match, mismatch, or are inconclusive.
@@ -114,6 +116,9 @@ Commands:
   vidtrace studio [BUNDLE]
       Open the artifact inspection studio. With a bundle path, browse timeline, OCR, transcript, and frame paths.
 
+  vidtrace validate BUNDLE [--json]
+      Check that an artifact bundle has required files, parseable JSON, timeline entries, and referenced frame/OCR paths.
+
   vidtrace version
       Print the CLI version.
 
@@ -129,6 +134,9 @@ Important extract flags:
 Analyze and compare flags:
   --ticket PATH       ticket markdown or text file
   --json              emit machine-readable compare result
+
+Validate flags:
+  --json              emit machine-readable validation report
 `)
 }
 
@@ -156,6 +164,7 @@ Contracts:
   - JSON paths are relative to the bundle when possible.
   - timeline entries connect time_seconds, frame, OCR text, and transcript segments.
   - Empty OCR is valid evidence that no text was detected for that frame.
+  - Run "vidtrace validate BUNDLE --json" to check required files and referenced paths.
 `)
 }
 

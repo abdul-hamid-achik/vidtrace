@@ -45,6 +45,10 @@ type whisperSegment struct {
 }
 
 func Build(bundleDir string, framePaths []string, fps float64, transcriptJSONPath string) (Document, error) {
+	if fps <= 0 {
+		return Document{}, fmt.Errorf("fps must be greater than 0")
+	}
+
 	segments, err := readWhisperSegments(transcriptJSONPath)
 	if err != nil {
 		return Document{}, err

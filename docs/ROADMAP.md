@@ -25,7 +25,7 @@
 
 ## Iteration 4: E2E Coverage
 
-- Add `glyphrun` tests. Done for doctor/version, docs, studio, and extract JSON flows.
+- Add `glyphrun` tests. Done for doctor/version, docs, compare/validate, studio, and extract JSON flows.
 - Test exit codes, stdout, stderr, and generated files. Started.
 - Add small synthetic media fixtures or fixture-generation tasks. Started.
 
@@ -51,10 +51,17 @@ See `BACKLOG.md` for prioritized work beyond the roadmap.
 - Add reusable agent prompt. Done.
 - Add `vidtrace compare` JSON output. Done.
 - Add `vidtrace analyze` Markdown output. Done.
-- Improve matching with richer scoring or optional VecLite indexing.
+- Improve matching with normalized terms, confidence, and term hits. Done.
+- Improve matching further with optional VecLite indexing.
 
 ## Iteration 8: Documentation Site Readiness
 
 - Keep README, install, usage, analysis, Studio, release, testing, and artifact docs aligned. In progress.
 - Keep `AGENTS.md` and `CLAUDE.md` focused on current agent workflows. In progress.
 - Add a generated docs site after Markdown navigation stabilizes.
+
+## Iteration 9: Bundle Validation
+
+- Add `vidtrace validate <bundle> --json`. Done.
+- Validate required files, schema versions, timeline entries, and referenced frame/OCR paths. Done.
+- Cover validation with unit tests and glyphrun. Done.

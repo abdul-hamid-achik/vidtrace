@@ -28,6 +28,12 @@ With `--json`, stdout contains JSON only. Agents should read `output_dir` from t
 - `transcript/*.json`
 - selected `frames/frame_*.png`
 
+Validate the bundle before deeper analysis:
+
+```bash
+vidtrace validate "$output_dir" --json
+```
+
 Then compare the ticket with extracted evidence:
 
 ```bash
@@ -81,6 +87,7 @@ bin/vidtrace extract ~/Downloads/bug.mp4 \
 ```bash
 task extract VIDEO=/path/to/bug.mp4
 task agent VIDEO=/path/to/bug.mp4
+task run -- validate /path/to/bundle --json
 ```
 
 Use `task agent` when testing the JSON automation contract.

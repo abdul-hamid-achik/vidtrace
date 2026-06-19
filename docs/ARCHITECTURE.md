@@ -14,6 +14,7 @@ The Go application owns:
 - human-readable status output
 - terminal Studio for bundle review
 - ticket-vs-video analysis
+- artifact bundle validation
 
 External tools own:
 
@@ -59,6 +60,8 @@ The same CLI command supports both users:
 - Agent mode uses `-json` and writes parseable JSON only to stdout.
 
 Human-readable logs should not be required for automation. Prefer JSON fields and generated artifact files as automation contracts.
+
+`vidtrace validate <bundle> --json` is the quickest way to check whether a generated or fixture bundle is structurally useful before analysis.
 
 ## Studio Direction
 

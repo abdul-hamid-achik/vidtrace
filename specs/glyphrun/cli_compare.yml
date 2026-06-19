@@ -1,0 +1,117 @@
+version: 1
+name: cli_compare
+
+metadata:
+  feature: analysis
+  owner: core
+  priority: high
+  tags:
+    - compare
+    - validate
+    - agent
+
+intent: |
+  Verify that vidtrace can compare a ticket with an artifact bundle as JSON and
+  validate the same bundle without relying on external media tools.
+
+target:
+  cmd:
+    - "/bin/sh"
+    - "-c"
+    - "./bin/vidtrace compare .glyphrun/tmp/compare/sample_artifacts --ticket .glyphrun/tmp/compare/ticket.md --json"
+  cwd: "."
+  timeoutMs: 20000
+
+terminal:
+  cols: 120
+  rows: 40
+  profile: xterm-256color
+  alternateScreen: forbid
+
+preconditions:
+  commands:
+    - run: "go build -o ./bin/vidtrace ./cmd/vidtrace"
+      timeoutMs: 120000
+    - run: "rm -rf .glyphrun/tmp/compare && mkdir -p .glyphrun/tmp/compare/sample_artifacts/frames .glyphrun/tmp/compare/sample_artifacts/ocr .glyphrun/tmp/compare/sample_artifacts/transcript"
+      timeoutMs: 5000
+    - run: |
+        cat > .glyphrun/tmp/compare/sample_artifacts/metadata.json <<'JSON'
+        {
+          "schema_version": "1",
+          "source_video": "/tmp/login-bug.mp4",
+          "duration_seconds": 2,
+          "extract_fps": 1,
+          "ocr_languages": ["eng"],
+          "whisper_language": "en",
+          "whisper_model": "small"
+        }
+        JSON
+      timeoutMs: 5000
+    - run: |
+        cat > .glyphrun/tmp/compare/sample_artifacts/timeline.json <<'JSON'
+        {
+          "schema_version": "1",
+          "entries": [
+            {
+              "time_seconds": 0,
+              "frame": "frames/frame_0001.png",
+              "ocr": {"path": "ocr/frame_0001.txt", "text": "Login failed after submit"},
+              "transcript": [{"start_seconds": 0, "end_seconds": 1, "text": "I cannot log in"}]
+            },
+            {
+              "time_seconds": 1,
+              "frame": "frames/frame_0002.png",
+              "ocr": {"path": "ocr/frame_0002.txt", "text": "Retry button visible"},
+              "transcript": []
+            }
+          ]
+        }
+        JSON
+      timeoutMs: 5000
+    - run: "touch .glyphrun/tmp/compare/sample_artifacts/frames/frame_0001.png .glyphrun/tmp/compare/sample_artifacts/frames/frame_0002.png"
+      timeoutMs: 5000
+    - run: "printf 'Login failed after submit\\n' > .glyphrun/tmp/compare/sample_artifacts/ocr/frame_0001.txt && printf 'Retry button visible\\n' > .glyphrun/tmp/compare/sample_artifacts/ocr/frame_0002.txt"
+      timeoutMs: 5000
+    - run: "printf 'Login failed after submit\\nRetry button visible\\n' > .glyphrun/tmp/compare/sample_artifacts/ocr/ocr_all_frames.txt"
+      timeoutMs: 5000
+    - run: "printf 'Log-in failed after submit retry\\n' > .glyphrun/tmp/compare/ticket.md"
+      timeoutMs: 5000
+
+steps:
+  - wait:
+      process:
+        exitCode: 0
+      timeoutMs: 20000
+  - snapshot: result
+
+outcomes:
+  - id: clean_exit
+    description: compare exits successfully
+    verify:
+      process:
+        exitCode: 0
+  - id: match_status
+    description: compare JSON reports a match
+    verify:
+      command:
+        run: "./bin/vidtrace compare .glyphrun/tmp/compare/sample_artifacts --ticket .glyphrun/tmp/compare/ticket.md --json | grep -q '\"status\": \"match\"'"
+  - id: confidence
+    description: compare JSON includes confidence
+    verify:
+      command:
+        run: "./bin/vidtrace compare .glyphrun/tmp/compare/sample_artifacts --ticket .glyphrun/tmp/compare/ticket.md --json | grep -q '\"confidence\": \"high\"'"
+  - id: term_hits
+    description: compare JSON includes term-level hits
+    verify:
+      command:
+        run: "./bin/vidtrace compare .glyphrun/tmp/compare/sample_artifacts --ticket .glyphrun/tmp/compare/ticket.md --json | grep -q '\"term_hits\": \\['"
+  - id: validate_json
+    description: validate JSON accepts the same bundle
+    verify:
+      command:
+        run: "./bin/vidtrace validate .glyphrun/tmp/compare/sample_artifacts --json | grep -q '\"ok\": true'"
+  - id: validate_human
+    description: validate human output accepts the same bundle
+    verify:
+      command:
+        run: "./bin/vidtrace validate .glyphrun/tmp/compare/sample_artifacts | grep -q 'vidtrace validate: ok'"

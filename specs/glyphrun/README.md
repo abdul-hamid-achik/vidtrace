@@ -12,6 +12,7 @@ Current specs:
 
 - `cli_doctor.yml`: verifies `doctor` and `version`.
 - `cli_docs.yml`: verifies built-in agent and artifact docs.
+- `cli_compare.yml`: verifies `compare --json` and `validate --json` against a fixture bundle.
 - `cli_studio.yml`: verifies the interactive studio can open and navigate a bundle.
 - `extract_json.yml`: verifies `extract --json` and generated artifact files.
 

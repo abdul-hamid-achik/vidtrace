@@ -106,6 +106,13 @@ With `--json`, stdout is parseable JSON only. An agent should read `output_dir` 
 - `transcript/*.json`
 - selected `frames/frame_*.png`
 
+Validate an artifact bundle:
+
+```bash
+vidtrace validate /path/to/bug_artifacts_YYYYMMDD_HHMMSS
+vidtrace validate /path/to/bug_artifacts_YYYYMMDD_HHMMSS --json
+```
+
 Compare a ticket with an artifact bundle:
 
 ```bash
@@ -141,6 +148,7 @@ task test
 task lint
 task check
 task agent VIDEO=/path/to/bug.mp4
+task run -- validate /path/to/bundle --json
 task run -- compare /path/to/bundle --ticket ticket.md --json
 task run -- studio /path/to/bundle
 ```
@@ -199,11 +207,11 @@ Start with:
 
 Current high-value improvements:
 
-- Improve `timeline.json` matching and document frame time calculations.
-- Add golden or structural JSON contract tests.
-- Improve `vidtrace compare` confidence scoring and mismatch explanations.
 - Add optional VecLite indexing as a separate command, not as part of extraction.
 - Add richer studio panes and frame preview/opening actions.
+- Improve `timeline.json` matching beyond the current frame-window overlap rules.
+- Add a small generated docs site from the Markdown docs.
+- Evaluate signing/notarization for macOS distribution.
 
 ## Project Conventions
 

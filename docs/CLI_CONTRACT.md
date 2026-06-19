@@ -64,6 +64,26 @@ vidtrace studio /path/to/bug_artifacts_YYYYMMDD_HHMMSS
 
 With a bundle path, studio shows timeline entries, OCR text, transcript text, and frame paths.
 
+### `vidtrace validate`
+
+Validates an artifact bundle.
+
+```bash
+vidtrace validate /path/to/bug_artifacts_YYYYMMDD_HHMMSS
+vidtrace validate /path/to/bug_artifacts_YYYYMMDD_HHMMSS --json
+```
+
+Validation checks:
+
+- bundle directory exists
+- `metadata.json` parses and has `schema_version: "1"`
+- `timeline.json` parses and has `schema_version: "1"`
+- timeline has at least one entry
+- `ocr/ocr_all_frames.txt` exists
+- timeline frame paths and OCR paths exist
+
+The command exits `0` when all checks pass and `1` when any check fails. With `--json`, stdout contains a validation report and stderr stays empty unless JSON encoding itself fails.
+
 ### `vidtrace analyze`
 
 Writes a Markdown evidence report for a bundle and ticket.
@@ -82,6 +102,8 @@ vidtrace compare /path/to/bug_artifacts_YYYYMMDD_HHMMSS --ticket ticket.md --jso
 ```
 
 `status` is `match`, `mismatch`, or `inconclusive`.
+
+`confidence` is `high`, `medium`, or `low`. `term_hits` identifies which matched terms appeared in OCR or transcript evidence.
 
 ### `vidtrace extract`
 

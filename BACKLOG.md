@@ -4,6 +4,20 @@ This backlog keeps product ideas, engineering work, and integration bets visible
 
 ## Recently Completed
 
+### v0.4.0 Bundle Validation and Comparison Confidence
+
+As an agent or reviewer, I can validate an artifact bundle and understand why `compare` matched or did not match a ticket.
+
+Acceptance criteria:
+
+- [x] `vidtrace validate <bundle> --json` checks required files, JSON schemas, timeline entries, and referenced frame/OCR paths.
+- [x] `vidtrace compare` normalizes punctuation-separated terms before scoring.
+- [x] `vidtrace compare --json` includes `confidence` and `term_hits`.
+- [x] Frame time calculation is documented in `docs/ARTIFACT_SCHEMA.md`.
+- [x] Empty OCR entries are represented as empty strings and counted by validation.
+- [x] CLI JSON behavior is covered by structural unit tests.
+- [x] `task e2e` includes a glyphrun spec for `compare --json` and `validate --json`.
+
 ### v0.3.0 Agent and Human Review Loop
 
 As a reviewer, I can extract a video, compare it with a ticket, and inspect the resulting evidence bundle from the CLI or Studio.
@@ -18,40 +32,6 @@ Acceptance criteria:
 - [x] Install, usage, release, site-planning, analysis, and agent docs exist as Markdown.
 
 ## Now
-
-### Tighten Timeline Quality
-
-As a coding agent, I want `timeline.json` to align transcript segments and OCR frames predictably, so that I can cite evidence by timestamp.
-
-Acceptance criteria:
-
-- [ ] Frame time calculation is documented.
-- [x] Transcript overlap rules have unit tests.
-- [ ] Empty OCR entries are preserved but clearly represented.
-
-### Add Focused Unit Tests
-
-As a maintainer, I want unit tests around artifact naming, metadata shape, timeline generation, and JSON contracts, so that refactors do not break agent workflows.
-
-Acceptance criteria:
-
-- [x] `internal/artifacts` has tests for safe bundle names.
-- [x] `internal/timeline` has tests for segment overlap.
-- [x] `internal/analysis` has tests for ticket/video comparison decisions.
-- [ ] CLI JSON output is covered with golden or structural tests.
-
-### Improve Comparison Scoring
-
-As an agent, I want `vidtrace compare` to explain confidence clearly, so that I know when to trust the match assessment and when to inspect the bundle manually.
-
-Acceptance criteria:
-
-- [ ] Normalize terms before scoring.
-- [ ] Include strongest matched and missing terms in JSON output.
-- [ ] Document known limitations in `docs/ANALYSIS.md`.
-- [ ] Keep the command deterministic and offline.
-
-## Next
 
 ### Optional VecLite Index
 
@@ -86,6 +66,17 @@ Acceptance criteria:
 - [ ] Exclude local videos, generated bundles, `.glyphrun/`, and `dist/`.
 
 ## Later
+
+### Timeline Matching V2
+
+As a coding agent, I want `timeline.json` to align transcript segments and OCR frames beyond simple frame windows, so that evidence citations stay useful for fast UI changes.
+
+Acceptance criteria:
+
+- [ ] Document the current overlap model and its limits.
+- [ ] Add tests for fractional FPS and transcript boundary behavior.
+- [ ] Consider nearest-frame matching for sparse frame rates.
+- [ ] Keep schema changes additive.
 
 ### Multi-Language OCR
 

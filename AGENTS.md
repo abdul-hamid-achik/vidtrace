@@ -74,6 +74,7 @@ task check
 task all
 task run -- doctor
 task run -- docs agent
+task run -- validate /path/to/bundle --json
 task run -- compare /path/to/bundle --ticket ticket.md --json
 task run -- studio /path/to/bundle
 task smoke
@@ -88,6 +89,7 @@ task e2e
 - Run `task lint` when changing Go code, or rely on `task check`.
 - Run `task e2e` after command surface or Studio behavior changes.
 - For extractor work, verify generated folders and files, not only stdout.
+- Run `vidtrace validate <bundle> --json` before trusting a generated or fixture bundle.
 - Prefer stable JSON output for tests over parsing human-readable text.
 - Use glyphrun specs in `specs/glyphrun/` for real terminal behavior.
 
