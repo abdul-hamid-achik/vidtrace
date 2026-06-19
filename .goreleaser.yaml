@@ -83,7 +83,7 @@ homebrew_casks:
       The binary is not signed with an Apple Developer certificate.
       macOS may show a security warning on first run.
 
-      If macOS blocks the first run, reinstall with:
-        brew reinstall --no-quarantine --cask abdul-hamid-achik/tap/vidtrace
+      If macOS blocks the first run, clear quarantine manually:
+        xattr -dr com.apple.quarantine /opt/homebrew/Caskroom/vidtrace/*/vidtrace
 
       Run `vidtrace doctor` after installation to check ffmpeg, ffprobe, tesseract, and whisper.

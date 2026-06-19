@@ -60,7 +60,7 @@ vidtrace doctor
 If macOS blocks the unsigned binary on first run:
 
 ```bash
-brew reinstall --no-quarantine --cask abdul-hamid-achik/tap/vidtrace
+xattr -dr com.apple.quarantine /opt/homebrew/Caskroom/vidtrace/*/vidtrace
 ```
 
 See `docs/INSTALL.md` for runtime dependencies and install details.
