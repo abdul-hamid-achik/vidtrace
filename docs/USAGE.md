@@ -8,6 +8,8 @@ vidtrace extract /path/to/bug.mp4
 
 Human mode prints progress and a concise final summary.
 
+Progress is shown as numbered steps with bars for bundle creation, metadata, frames, OCR, transcript, timeline, and completion. JSON mode suppresses this text so stdout remains parseable.
+
 ## Agent Workflow
 
 ```bash
@@ -34,6 +36,22 @@ Validate the bundle before deeper analysis:
 vidtrace validate "$output_dir" --json
 ```
 
+Index and search timestamped evidence:
+
+```bash
+vidtrace index "$output_dir" --db /tmp/vidtrace-evidence.veclite --json
+vidtrace search /tmp/vidtrace-evidence.veclite "clicking a ticket does not work" --json
+```
+
+Create a handoff from video evidence to code search:
+
+```bash
+vidtrace investigate "$output_dir" \
+  --query "clicking a ticket does not work" \
+  --codebase /path/to/app \
+  --json
+```
+
 Then compare the ticket with extracted evidence:
 
 ```bash
@@ -47,7 +65,19 @@ Open a bundle in the studio:
 vidtrace studio "$output_dir"
 ```
 
-Use `up`/`down` or `k`/`j` to move through timeline entries. Press `q` to exit. See `docs/STUDIO.md` for the review workflow.
+Use `up`/`down` or `k`/`j` to move through timeline entries. Press `m` for metadata, `o` to open the selected frame, `r` to reveal it in Finder on macOS, and `c` to copy a concise evidence summary when clipboard tooling is available. Press `q` to exit. See `docs/STUDIO.md` for the review workflow.
+
+Studio is compact by default. It shows timeline and selected evidence side by side when the terminal is wide enough, and stacks them on narrow terminals.
+
+## Documentation Site
+
+Build the VitePress documentation site:
+
+```bash
+task site
+```
+
+The build output is `docs/.vitepress/dist`, which is the Vercel output directory.
 
 ## Common Options
 
@@ -77,7 +107,7 @@ A local sample may exist at `~/Downloads/bug.mp4`. Do not commit it or generated
 
 ```bash
 bin/vidtrace extract ~/Downloads/bug.mp4 \
-  --out /tmp/vidtrace-bug-smoke \
+  --out /tmp/vidtrace-real \
   --name bug \
   --json
 ```
@@ -88,6 +118,10 @@ bin/vidtrace extract ~/Downloads/bug.mp4 \
 task extract VIDEO=/path/to/bug.mp4
 task agent VIDEO=/path/to/bug.mp4
 task run -- validate /path/to/bundle --json
+task run -- index /path/to/bundle --db /tmp/vidtrace-evidence.veclite --json
+task run -- search /tmp/vidtrace-evidence.veclite "ticket click" --json
+task run -- investigate /path/to/bundle --query "ticket click" --codebase /path/to/app --json
+task site
 ```
 
 Use `task agent` when testing the JSON automation contract.

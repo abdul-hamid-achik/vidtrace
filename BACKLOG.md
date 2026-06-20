@@ -4,6 +4,61 @@ This backlog keeps product ideas, engineering work, and integration bets visible
 
 ## Recently Completed
 
+### Evidence Search Foundation
+
+As an agent, I can search bug-video evidence by keyword, so that I can find the timestamp, frame, OCR, and transcript moments that explain a bug before inspecting the codebase.
+
+Acceptance criteria:
+
+- [x] Keep extraction independent from VecLite indexing.
+- [x] Keep ADR 0003 as the evidence-search architecture record.
+- [x] Add `vidtrace index <bundle> --db <path>` as an optional command.
+- [x] Add `vidtrace search <db> <query> --json` for evidence lookup.
+- [x] Index one document per timeline entry with content built from timestamp, OCR text, transcript text, and frame path.
+- [x] Index records include `schema_version`, `bundle`, `source_video`, `time_seconds`, `source`, `frame`, `ocr_path`, `has_ocr`, and `has_transcript`.
+- [x] Support BM25 keyword search first with VecLite `v0.15.0`.
+- [x] Add unit tests and CLI JSON tests for index/search behavior.
+- [x] Document that vecgrep is the companion codebase search tool after `vidtrace` finds relevant video evidence.
+
+### Agent Investigation Handoff
+
+As a coding agent, I can generate a compact handoff from video evidence to code search, so that I can move from "the user clicked a ticket and it failed" to likely files, routes, handlers, tests, and documentation.
+
+Acceptance criteria:
+
+- [x] Add `vidtrace investigate <bundle> --query <text> [--codebase <path>]`.
+- [x] Return timestamped video evidence plus suggested code-search queries.
+- [x] When a codebase path is provided, recommend vecgrep commands rather than indexing code inside `vidtrace`.
+- [x] Keep the output useful as Markdown and JSON.
+
+### v0.5.0 Studio Dogfood and Review Workflow
+
+As a human reviewer, I can inspect bundle metadata, open or reveal selected frame paths, and copy timestamped evidence from Studio.
+
+Acceptance criteria:
+
+- [x] `PLAN.md` defines the `v0.5.0` Studio dogfood plan and keeps real-video artifacts outside the repo.
+- [x] `vidtrace studio <bundle>` has a metadata/details toggle.
+- [x] Studio can attempt to open or reveal the selected frame path and reports failures without crashing.
+- [x] Studio can copy a concise evidence summary when clipboard tooling is available.
+- [x] Studio uses a compact responsive layout for wide and narrow terminals.
+- [x] Human extraction output includes step progress bars without changing JSON output.
+- [x] Unit tests cover metadata formatting, evidence summary formatting, frame path resolution, and platform command selection.
+- [x] Glyphrun covers Studio metadata toggle, navigation, and action status text.
+
+### VitePress Documentation Site
+
+As a user, I can browse the Markdown docs on a Vercel-hosted VitePress site, so that install and workflow guidance is easy to read outside GitHub.
+
+Acceptance criteria:
+
+- [x] Reuse Markdown files instead of duplicating content.
+- [x] Include install, usage, analysis, Studio, CLI contract, artifact schema, and release pages.
+- [x] Configure VitePress under `docs/.vitepress`.
+- [x] Add Vercel build settings.
+- [x] Exclude local videos, generated bundles, `.glyphrun/`, and root `dist/`.
+- [x] Add Glyphrun coverage for the docs build.
+
 ### v0.4.0 Bundle Validation and Comparison Confidence
 
 As an agent or reviewer, I can validate an artifact bundle and understand why `compare` matched or did not match a ticket.
@@ -33,37 +88,28 @@ Acceptance criteria:
 
 ## Now
 
-### Optional VecLite Index
+### Semantic and Hybrid Evidence Search
 
-As an agent, I want to index extracted OCR and transcript chunks into VecLite, so that I can semantically search moments across a bundle or a set of bundles.
-
-Acceptance criteria:
-
-- [ ] Keep extraction independent from VecLite.
-- [ ] Add `vidtrace index <bundle> --db <path>` as an optional command.
-- [ ] Index records include `bundle`, `timestamp`, `source`, `frame`, and `text`.
-- [ ] Support plain text search first; add embeddings behind explicit config.
-
-### Studio Review Workflow
-
-As a human reviewer, I want Studio actions for common review tasks, so that I can move from evidence to a useful bug report faster.
+As an agent, I want semantic and hybrid search over video evidence, so that paraphrased bug descriptions find the right timestamp even when the exact words differ.
 
 Acceptance criteria:
 
-- [ ] Add a details pane for bundle metadata.
-- [ ] Add an action to open or reveal the selected frame path.
-- [ ] Add a copyable evidence summary for the selected timeline entry.
-- [ ] Keep keyboard navigation covered by glyphrun.
+- [ ] Add explicit embedding provider configuration.
+- [ ] Store and validate an evidence embedding profile.
+- [ ] Add semantic and hybrid search modes without changing the BM25 JSON contract.
+- [ ] Keep keyword search available when no embedding provider is configured.
 
-### Documentation Site
+### MCP Server with Go SDK
 
-As a user, I want a small documentation site generated from the Markdown docs, so that install and workflow guidance is easy to browse outside GitHub.
+As a coding agent, I want vidtrace to expose bundle validation, evidence search, and analysis through MCP tools, so that agent clients can call vidtrace without shell parsing.
 
 Acceptance criteria:
 
-- [ ] Reuse Markdown files instead of duplicating content.
-- [ ] Include install, usage, analysis, Studio, CLI contract, artifact schema, and release pages.
-- [ ] Exclude local videos, generated bundles, `.glyphrun/`, and `dist/`.
+- [ ] Use the official Go MCP SDK used by the local toolchain instead of a custom protocol layer.
+- [ ] Add read-only tools for `validate`, `search`, `compare`, and `analyze`.
+- [ ] Keep tool responses structured and aligned with existing `--json` contracts.
+- [ ] Do not expose commands that mutate videos or generated bundles by default.
+- [ ] Add tests for tool schemas and handler responses.
 
 ## Later
 

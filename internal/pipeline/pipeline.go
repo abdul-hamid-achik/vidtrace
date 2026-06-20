@@ -102,9 +102,11 @@ func Run(ctx context.Context, opts Options) (Summary, error) {
 		return Summary{}, fmt.Errorf("create artifact bundle: %w", err)
 	}
 
-	progressf(opts.Progress, "Creating artifact bundle: %s", bundleDir)
+	const totalSteps = 7
 
-	progressf(opts.Progress, "Capturing video metadata")
+	progressStep(opts.Progress, 1, totalSteps, "bundle", "created "+bundleDir)
+
+	progressStep(opts.Progress, 2, totalSteps, "metadata", "capturing video metadata")
 	mediaMetadata, err := ffmpeg.Probe(ctx, sourceVideo)
 	if err != nil {
 		return Summary{}, err
@@ -130,7 +132,7 @@ func Run(ctx context.Context, opts Options) (Summary, error) {
 		return Summary{}, fmt.Errorf("write metadata.json: %w", err)
 	}
 
-	progressf(opts.Progress, "Extracting frames at %s fps", formatFloat(opts.FPS))
+	progressStep(opts.Progress, 3, totalSteps, "frames", "extracting at "+formatFloat(opts.FPS)+" fps")
 	framesPattern := filepath.Join(bundleDir, "frames", "frame_%04d.png")
 	if err := ffmpeg.ExtractFrames(ctx, sourceVideo, opts.FPS, framesPattern); err != nil {
 		return Summary{}, err
@@ -145,8 +147,9 @@ func Run(ctx context.Context, opts Options) (Summary, error) {
 		return Summary{}, fmt.Errorf("no frames generated")
 	}
 
-	progressf(opts.Progress, "Running OCR on %d frames", len(framePaths))
-	for _, framePath := range framePaths {
+	progressStep(opts.Progress, 4, totalSteps, "ocr", fmt.Sprintf("running OCR on %d frames", len(framePaths)))
+	for i, framePath := range framePaths {
+		progressItem(opts.Progress, 4, totalSteps, "ocr", i+1, len(framePaths), filepath.Base(framePath))
 		base := strings.TrimSuffix(filepath.Base(framePath), filepath.Ext(framePath))
 		outputBase := filepath.Join(bundleDir, "ocr", base)
 		if err := tesseract.OCR(ctx, framePath, outputBase, opts.OCRLanguage); err != nil {
@@ -164,7 +167,7 @@ func Run(ctx context.Context, opts Options) (Summary, error) {
 		return Summary{}, err
 	}
 
-	progressf(opts.Progress, "Transcribing audio with Whisper %s", opts.WhisperModel)
+	progressStep(opts.Progress, 5, totalSteps, "transcript", "transcribing audio with Whisper "+opts.WhisperModel)
 	transcriptDir := filepath.Join(bundleDir, "transcript")
 	if err := whisper.Transcribe(ctx, sourceVideo, transcriptDir, opts.WhisperModel, opts.WhisperLanguage); err != nil {
 		return Summary{}, err
@@ -174,7 +177,7 @@ func Run(ctx context.Context, opts Options) (Summary, error) {
 		return Summary{}, err
 	}
 
-	progressf(opts.Progress, "Writing timeline.json")
+	progressStep(opts.Progress, 6, totalSteps, "timeline", "writing timeline.json")
 	timelineDoc, err := timeline.Build(bundleDir, framePaths, opts.FPS, whisper.JSONPath(transcriptDir, sourceVideo))
 	if err != nil {
 		return Summary{}, err
@@ -201,7 +204,7 @@ func Run(ctx context.Context, opts Options) (Summary, error) {
 		return Summary{}, err
 	}
 
-	progressf(opts.Progress, "Done: %s", bundleDir)
+	progressStep(opts.Progress, 7, totalSteps, "done", bundleDir)
 	return summary, nil
 }
 
@@ -313,11 +316,38 @@ func relFiles(bundleDir string, paths []string) []string {
 	return files
 }
 
-func progressf(w io.Writer, format string, args ...any) {
+func progressStep(w io.Writer, step, total int, label, detail string) {
 	if w == nil {
 		return
 	}
-	writeLine(w, ">>> "+format, args...)
+	writeLine(w, "[%d/%d] %-10s %s %s", step, total, label, progressBar(step, total, 18), detail)
+}
+
+func progressItem(w io.Writer, step, total int, label string, done, itemTotal int, detail string) {
+	if w == nil {
+		return
+	}
+	writeLine(w, "[%d/%d] %-10s %s %d/%d %s", step, total, label, progressBar(done, itemTotal, 18), done, itemTotal, detail)
+}
+
+func progressBar(done, total, width int) string {
+	if width <= 0 {
+		return "[]"
+	}
+	if total <= 0 {
+		total = 1
+	}
+	if done < 0 {
+		done = 0
+	}
+	if done > total {
+		done = total
+	}
+	filled := done * width / total
+	if filled > width {
+		filled = width
+	}
+	return "[" + strings.Repeat("#", filled) + strings.Repeat(".", width-filled) + "]"
 }
 
 func writeLine(w io.Writer, format string, args ...any) {

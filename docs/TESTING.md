@@ -10,6 +10,7 @@
 | Lint | `task lint` | Static checks through golangci-lint |
 | Build check | `task build` | Compile the CLI |
 | Synthetic smoke | `task smoke` | Run extraction against generated media outside the repo |
+| Docs build | `task site` | Build the VitePress site for Vercel |
 | Glyphrun E2E | `task e2e` | Verify specs, real PTY CLI behavior, and artifacts |
 
 ## Standard Checks
@@ -39,10 +40,15 @@ Current specs cover:
 - `cli_doctor.yml`: version and doctor output.
 - `cli_docs.yml`: built-in docs for humans and agents.
 - `cli_compare.yml`: ticket comparison and bundle validation JSON.
-- `cli_studio.yml`: interactive Studio navigation in a real PTY.
+- `cli_evidence_search.yml`: evidence indexing and search JSON.
+- `cli_investigate.yml`: investigation handoff JSON and Markdown output.
+- `docs_site.yml`: VitePress documentation build.
+- `cli_studio.yml`: interactive Studio navigation, metadata toggle, and action status text in a real PTY.
 - `extract_json.yml`: JSON extraction output and generated artifacts.
 
 Artifacts are written to `.glyphrun/`, which is ignored by Git.
+
+Evidence search is covered by Go tests in `internal/evidence` and CLI JSON tests in `internal/cli`. These tests use temporary bundles and temporary `.veclite` databases outside the repo.
 
 ## CI
 
@@ -78,5 +84,6 @@ For agent-facing behavior, prefer JSON and generated files over human text:
 - `metadata.json` exists and has `schema_version`
 - `timeline.json` exists and has entries
 - `compare --json` emits a stable result shape
+- `index --json` and `search --json` emit stable evidence-search JSON
 - transcript files exist
 - OCR files match the frame count

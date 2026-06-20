@@ -1,0 +1,69 @@
+version: 1
+name: docs_site
+
+metadata:
+  feature: docs-site
+  owner: core
+  priority: normal
+  tags:
+    - docs
+    - site
+    - vitepress
+    - vercel
+
+intent: |
+  Verify that the VitePress documentation site builds for Vercel without
+  publishing local media or generated artifact bundles.
+
+target:
+  cmd:
+    - "/bin/sh"
+    - "-c"
+    - "task site"
+  cwd: "."
+  timeoutMs: 120000
+
+terminal:
+  cols: 120
+  rows: 40
+  profile: xterm-256color
+  alternateScreen: forbid
+
+preconditions:
+  commands:
+    - run: "rm -rf docs/.vitepress/dist"
+      timeoutMs: 5000
+
+steps:
+  - wait:
+      process:
+        exitCode: 0
+      timeoutMs: 120000
+  - snapshot: result
+
+outcomes:
+  - id: clean_exit
+    description: VitePress build exits successfully
+    verify:
+      process:
+        exitCode: 0
+  - id: required_pages
+    description: generated site includes required documentation pages
+    verify:
+      command:
+        run: "test -f docs/.vitepress/dist/index.html && test -f docs/.vitepress/dist/INSTALL.html && test -f docs/.vitepress/dist/USAGE.html && test -f docs/.vitepress/dist/STUDIO.html && test -f docs/.vitepress/dist/CLI_CONTRACT.html && test -f docs/.vitepress/dist/ARTIFACT_SCHEMA.html && test -f docs/.vitepress/dist/RELEASE.html"
+  - id: generated_from_markdown
+    description: generated page contains rendered markdown content
+    verify:
+      command:
+        run: "grep -q 'Human Workflow' docs/.vitepress/dist/USAGE.html"
+  - id: navigation_generated
+    description: generated site contains VitePress navigation for core docs
+    verify:
+      command:
+        run: "grep -q 'Install' docs/.vitepress/dist/index.html && grep -q 'Studio' docs/.vitepress/dist/index.html"
+  - id: no_local_artifacts
+    description: generated site does not copy local videos or generated bundles
+    verify:
+      command:
+        run: "test -z \"$(find docs/.vitepress/dist \\( -name '*.mp4' -o -name '*_artifacts_*' -o -name '*.veclite' -o -name '.glyphrun' \\) -print -quit)\""

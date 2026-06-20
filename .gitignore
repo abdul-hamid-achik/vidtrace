@@ -1,6 +1,9 @@
 .DS_Store
 bin/
 dist/
+node_modules/
+docs/.vitepress/cache/
+docs/.vitepress/dist/
 .glyphrun/
 coverage.out
 *.test

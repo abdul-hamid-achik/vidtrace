@@ -31,6 +31,8 @@ cmd/vidtrace
     ├── internal/analysis
     ├── internal/bundle
     ├── internal/doctor
+    ├── internal/evidence
+    ├── internal/investigate
     ├── internal/studio
     ├── internal/pipeline
     ├── internal/artifacts
@@ -61,11 +63,23 @@ The same CLI command supports both users:
 
 Human-readable logs should not be required for automation. Prefer JSON fields and generated artifact files as automation contracts.
 
+Human extraction progress is intentionally coarse and step-based. It should help a reviewer understand which external tool is running without becoming a machine contract.
+
 `vidtrace validate <bundle> --json` is the quickest way to check whether a generated or fixture bundle is structurally useful before analysis.
+
+## Search Boundary
+
+Evidence search is optional and separate from extraction. `internal/evidence` reads validated bundles and writes a local VecLite database for BM25 keyword search over timeline entries. Source-code search stays outside the core pipeline and should use vecgrep as the companion tool.
+
+`internal/investigate` builds on evidence search to create a compact handoff: timestamped video evidence, suggested code-search queries, and vecgrep command suggestions when a codebase path is provided.
+
+## Documentation Site
+
+The documentation site is a VitePress app rooted at `docs/` and built with Bun scripts. This keeps public docs deployable on Vercel without adding a docs generator to the Go CLI. The build output is `docs/.vitepress/dist`, and local media or generated bundles stay outside the site root.
 
 ## Studio Direction
 
-The studio is not the primary execution path. It should help users inspect existing artifacts and monitor future pipeline runs.
+The studio is not the primary execution path. It should help users inspect existing artifacts in a compact terminal layout and monitor future pipeline runs.
 
 Current and planned panels:
 
@@ -74,6 +88,7 @@ Current and planned panels:
 - selected OCR text
 - selected frame path
 - artifact metadata details
+- frame open/reveal and evidence copy actions
 - future pipeline run monitor
 
 Use Bubble Tea commands for async work. Do not block `Update`.

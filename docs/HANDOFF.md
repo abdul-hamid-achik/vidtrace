@@ -19,6 +19,10 @@ This document summarizes the current state for the next agent or development ses
 - `vidtrace analyze <bundle> --ticket <path>` emits a Markdown evidence report.
 - `vidtrace extract` is implemented in Go.
 - `vidtrace extract -json` emits machine-readable run summaries for agents.
+- `vidtrace index <bundle> --db <path> --json` indexes timeline evidence into a VecLite BM25 database.
+- `vidtrace search <db> <query> --json` returns timestamped evidence hits.
+- `vidtrace investigate <bundle> --query <text> [--codebase <path>] --json` returns video evidence, suggested code searches, and vecgrep commands.
+- `task site` builds the VitePress documentation site for Vercel.
 
 ## Key Files
 
@@ -54,15 +58,14 @@ This document summarizes the current state for the next agent or development ses
 
 ## Next Best Iteration
 
-Build richer review and search workflows on top of the artifact bundle.
+Build richer review and search workflows on top of the artifact bundle. Use `BACKLOG.md` and `docs/ROADMAP.md` as the source of truth for semantic evidence search and MCP tooling.
 
 Suggested checks:
 
-1. Add optional VecLite indexing as `vidtrace index <bundle> --db <path>`.
-2. Add richer studio panes and frame opening actions.
-3. Add a generated docs site from the Markdown docs.
-4. Improve `timeline.json` matching rules beyond frame-window overlap.
-5. Decide whether `scripts/extract.sh` should remain as legacy fallback.
+1. Add semantic and hybrid evidence search behind explicit embedding configuration.
+2. Add MCP server tools using the Go MCP SDK.
+3. Improve `timeline.json` matching rules beyond frame-window overlap.
+4. Decide whether `scripts/extract.sh` should remain as legacy fallback.
 
 ## Legacy Gotchas
 

@@ -12,7 +12,8 @@ metadata:
 
 intent: |
   Verify that vidtrace studio opens an artifact bundle in a real PTY, displays
-  timeline evidence, supports keyboard navigation, and exits cleanly with q.
+  timeline evidence, supports metadata and action keys, keeps keyboard
+  navigation working, and exits cleanly with q.
 
 target:
   cmd:
@@ -39,7 +40,11 @@ preconditions:
         {
           "schema_version": "1",
           "source_video": "/tmp/login-bug.mp4",
+          "generated_at": "2026-06-19T10:00:00Z",
           "duration_seconds": 2,
+          "width": 1280,
+          "height": 720,
+          "frame_rate": 30,
           "extract_fps": 1,
           "ocr_languages": ["eng"],
           "whisper_language": "en",
@@ -81,12 +86,33 @@ steps:
         contains: "Login failed after submit"
       timeoutMs: 5000
   - snapshot: home
+  - press: "m"
+  - wait:
+      screen:
+        contains: "Bundle metadata"
+      timeoutMs: 5000
+  - wait:
+      screen:
+        contains: "Extract FPS: 1.00"
+      timeoutMs: 5000
+  - snapshot: metadata
+  - press: "m"
+  - wait:
+      screen:
+        contains: "Selected evidence"
+      timeoutMs: 5000
   - press: "down"
   - wait:
       screen:
         contains: "Retry button visible"
       timeoutMs: 5000
   - snapshot: second_entry
+  - press: "o"
+  - wait:
+      screen:
+        contains: "open failed: frame not found"
+      timeoutMs: 5000
+  - snapshot: open_status
   - press: "q"
   - wait:
       process:
@@ -109,3 +135,8 @@ outcomes:
     verify:
       command:
         run: "grep -q 'Retry button visible' .glyphrun/tmp/studio/sample_artifacts/timeline.json"
+  - id: documented_action_keys
+    description: studio docs include public action keys
+    verify:
+      command:
+        run: "./bin/vidtrace docs studio | grep -q 'c                   copy a concise evidence summary'"

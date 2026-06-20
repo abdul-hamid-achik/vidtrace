@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-label="vidtrace">
+  <rect width="48" height="48" rx="10" fill="#1b1f23"/>
+  <path d="M12 15h24v18H12z" fill="#ffffff"/>
+  <path d="M18 20l12 4-12 4z" fill="#0b57d0"/>
+  <path d="M10 38h28" stroke="#0b57d0" stroke-width="4" stroke-linecap="round"/>
+</svg>

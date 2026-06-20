@@ -1,0 +1,117 @@
+version: 1
+name: cli_evidence_search
+
+metadata:
+  feature: evidence-search
+  owner: core
+  priority: high
+  tags:
+    - evidence
+    - veclite
+    - agent
+
+intent: |
+  Verify that vidtrace can index a fixture bundle into a local VecLite database
+  and search timestamped evidence as JSON without external media tools.
+
+target:
+  cmd:
+    - "/bin/sh"
+    - "-c"
+    - "./bin/vidtrace search .glyphrun/tmp/evidence/evidence.veclite \"ticket does not work\" --json"
+  cwd: "."
+  timeoutMs: 20000
+
+terminal:
+  cols: 120
+  rows: 40
+  profile: xterm-256color
+  alternateScreen: forbid
+
+preconditions:
+  commands:
+    - run: "go build -o ./bin/vidtrace ./cmd/vidtrace"
+      timeoutMs: 120000
+    - run: "rm -rf .glyphrun/tmp/evidence && mkdir -p .glyphrun/tmp/evidence/sample_artifacts/frames .glyphrun/tmp/evidence/sample_artifacts/ocr .glyphrun/tmp/evidence/sample_artifacts/transcript"
+      timeoutMs: 5000
+    - run: |
+        cat > .glyphrun/tmp/evidence/sample_artifacts/metadata.json <<'JSON'
+        {
+          "schema_version": "1",
+          "source_video": "/tmp/ticket-bug.mp4",
+          "duration_seconds": 2,
+          "extract_fps": 1,
+          "ocr_languages": ["eng"],
+          "whisper_language": "en",
+          "whisper_model": "small"
+        }
+        JSON
+      timeoutMs: 5000
+    - run: |
+        cat > .glyphrun/tmp/evidence/sample_artifacts/timeline.json <<'JSON'
+        {
+          "schema_version": "1",
+          "entries": [
+            {
+              "time_seconds": 0,
+              "frame": "frames/frame_0001.png",
+              "ocr": {"path": "ocr/frame_0001.txt", "text": "Ticket list"},
+              "transcript": [{"start_seconds": 0, "end_seconds": 1, "text": "I am opening the ticket"}]
+            },
+            {
+              "time_seconds": 1,
+              "frame": "frames/frame_0002.png",
+              "ocr": {"path": "ocr/frame_0002.txt", "text": "Ticket OPG-14010 details"},
+              "transcript": [{"start_seconds": 1, "end_seconds": 2, "text": "I clicked the ticket and it does not work"}]
+            }
+          ]
+        }
+        JSON
+      timeoutMs: 5000
+    - run: "touch .glyphrun/tmp/evidence/sample_artifacts/frames/frame_0001.png .glyphrun/tmp/evidence/sample_artifacts/frames/frame_0002.png"
+      timeoutMs: 5000
+    - run: "printf 'Ticket list\\n' > .glyphrun/tmp/evidence/sample_artifacts/ocr/frame_0001.txt && printf 'Ticket OPG-14010 details\\n' > .glyphrun/tmp/evidence/sample_artifacts/ocr/frame_0002.txt"
+      timeoutMs: 5000
+    - run: "printf 'Ticket list\\nTicket OPG-14010 details\\n' > .glyphrun/tmp/evidence/sample_artifacts/ocr/ocr_all_frames.txt"
+      timeoutMs: 5000
+    - run: "./bin/vidtrace index .glyphrun/tmp/evidence/sample_artifacts --db .glyphrun/tmp/evidence/evidence.veclite --json"
+      timeoutMs: 20000
+
+steps:
+  - wait:
+      process:
+        exitCode: 0
+      timeoutMs: 20000
+  - snapshot: result
+
+outcomes:
+  - id: clean_exit
+    description: search exits successfully
+    verify:
+      process:
+        exitCode: 0
+  - id: json_ok
+    description: search JSON reports success
+    verify:
+      screen:
+        contains: '"ok": true'
+  - id: keyword_mode
+    description: search uses keyword mode
+    verify:
+      screen:
+        contains: '"mode": "keyword"'
+  - id: timestamped_result
+    description: search result includes timestamp and frame
+    verify:
+      screen:
+        contains: '"frame": "frames/frame_0002.png"'
+  - id: transcript_result
+    description: search result includes transcript evidence
+    verify:
+      screen:
+        contains: '"transcript": "I clicked the ticket and it does not work"'
+  - id: index_json
+    description: index JSON reports indexed entries
+    verify:
+      command:
+        run: "./bin/vidtrace index .glyphrun/tmp/evidence/sample_artifacts --db .glyphrun/tmp/evidence/evidence.veclite --json | grep -q '\"indexed_entries\": 2'"

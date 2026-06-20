@@ -4,23 +4,22 @@
 
 ## Start Here
 
-- `INSTALL.md`: install the CLI and runtime media tools.
-- `USAGE.md`: run human and agent workflows.
-- `ANALYSIS.md`: compare tickets with extracted video evidence.
-- `STUDIO.md`: inspect a generated bundle in the terminal Studio.
-- `CLI_CONTRACT.md`: command surface, flags, exit codes, and JSON output.
-- `ARTIFACT_SCHEMA.md`: generated bundle layout and JSON schemas.
-- `TESTING.md`: local, CI, smoke, and glyphrun verification.
-- `RELEASE.md`: GitHub Actions, GoReleaser, and Homebrew tap publishing.
+- [Install](INSTALL.md): install the CLI and runtime media tools.
+- [Usage](USAGE.md): run human and agent workflows.
+- [Analysis](ANALYSIS.md): compare tickets with extracted video evidence.
+- [Studio](STUDIO.md): inspect a generated bundle in the terminal Studio.
 
-## Design Notes
+## Reference
 
-- `ARCHITECTURE.md`: component boundaries and pipeline shape.
-- `ROADMAP.md`: iteration plan.
-- `adr/`: architecture decision records.
+- [CLI Contract](CLI_CONTRACT.md): command surface, flags, exit codes, and JSON output.
+- [Artifact Schema](ARTIFACT_SCHEMA.md): generated bundle layout and JSON schemas.
+- [Testing](TESTING.md): local, CI, smoke, and glyphrun verification.
+- [Release](RELEASE.md): GitHub Actions, GoReleaser, and Homebrew tap publishing.
+- [Documentation Site](SITE.md): VitePress and Vercel deployment.
 
-## Product Planning
+## Architecture
 
-- `../BACKLOG.md`: prioritized product and engineering work.
-- `../prompts/analyze-bundle.md`: reusable agent prompt for ticket/video analysis.
-- `SITE.md`: how to turn these Markdown files into a documentation site.
+- [Architecture](ARCHITECTURE.md): component boundaries and pipeline shape.
+- [Roadmap](ROADMAP.md): iteration plan.
+- [Agent Handoff](HANDOFF.md): current agent workflow notes.
+- [Architecture Decision Records](adr/): durable technical decisions.

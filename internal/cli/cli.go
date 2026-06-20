@@ -32,6 +32,12 @@ func Run(args []string, stdout, stderr io.Writer, version string) int {
 		return runDoctor(args[1:], stdout, stderr)
 	case "extract":
 		return runExtract(args[1:], stdout, stderr)
+	case "index":
+		return runIndex(args[1:], stdout, stderr)
+	case "search":
+		return runSearch(args[1:], stdout, stderr)
+	case "investigate":
+		return runInvestigate(args[1:], stdout, stderr)
 	case "analyze":
 		return runAnalyze(args[1:], stdout, stderr)
 	case "compare":
@@ -254,6 +260,9 @@ Commands:
   doctor       Check required local tools: ffmpeg, ffprobe, tesseract, whisper
   docs         Print built-in product and agent usage docs
   extract      Extract frames, OCR, transcript, metadata, and timeline artifacts
+  index        Index bundle evidence into a local VecLite database
+  investigate  Create a video-evidence to code-search handoff
+  search       Search an evidence database for timestamped video evidence
   studio       Open the artifact inspection studio
   validate     Validate an artifact bundle, optionally as JSON
   version      Print the CLI version
@@ -265,6 +274,9 @@ Examples:
   vidtrace docs agent
   vidtrace extract /path/to/bug.mp4
   vidtrace extract /path/to/bug.mp4 -json
+  vidtrace index /path/to/bundle --db /tmp/evidence.veclite --json
+  vidtrace search /tmp/evidence.veclite "ticket click does not work" --json
+  vidtrace investigate /path/to/bundle --query "ticket click does not work" --codebase /path/to/app
   vidtrace analyze /path/to/bundle --ticket ticket.md
   vidtrace compare /path/to/bundle --ticket ticket.md --json
   vidtrace validate /path/to/bundle --json

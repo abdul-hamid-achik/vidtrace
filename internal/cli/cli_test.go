@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/abdul-hamid-achik/vidtrace/internal/evidence"
 )
 
 func TestRunHelp(t *testing.T) {
@@ -28,6 +30,15 @@ func TestRunHelp(t *testing.T) {
 	}
 	if !strings.Contains(stdout.String(), "validate") {
 		t.Fatalf("expected validate command in help, got %q", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "index") || !strings.Contains(stdout.String(), "search") {
+		t.Fatalf("expected evidence search commands in help, got %q", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "investigate") {
+		t.Fatalf("expected investigate command in help, got %q", stdout.String())
+	}
+	if strings.Contains(stdout.String(), "vidtrace site") {
+		t.Fatalf("did not expect site command in help, got %q", stdout.String())
 	}
 	if strings.Contains(stdout.String(), "tui") {
 		t.Fatalf("did not expect tui command in help, got %q", stdout.String())
@@ -96,6 +107,9 @@ func TestRunDocsOverview(t *testing.T) {
 	if !strings.Contains(stdout.String(), "vidtrace docs studio") {
 		t.Fatalf("expected studio docs topic, got %q", stdout.String())
 	}
+	if !strings.Contains(stdout.String(), "docs/SITE.md") {
+		t.Fatalf("expected site docs pointer, got %q", stdout.String())
+	}
 	if stderr.Len() != 0 {
 		t.Fatalf("expected empty stderr, got %q", stderr.String())
 	}
@@ -113,6 +127,9 @@ func TestRunDocsAgent(t *testing.T) {
 	for _, want := range []string{
 		"vidtrace agent guide",
 		"vidtrace extract VIDEO --json",
+		"vidtrace index output_dir",
+		"vidtrace search /tmp/vidtrace-evidence.veclite",
+		"vidtrace investigate output_dir",
 		"metadata.json",
 		"timeline.json",
 		"match, mismatch, or are inconclusive",
@@ -138,6 +155,9 @@ func TestRunDocsStudio(t *testing.T) {
 	for _, want := range []string{
 		"vidtrace studio docs",
 		"up/down or k/j",
+		"m                   toggle bundle metadata/details",
+		"o                   open the selected frame",
+		"c                   copy a concise evidence summary",
 		"selected frame path",
 	} {
 		if !strings.Contains(output, want) {
@@ -309,6 +329,149 @@ func TestValidateJSONFailure(t *testing.T) {
 	}
 }
 
+func TestIndexAndSearchJSON(t *testing.T) {
+	bundleDir := writeCLIBundle(t)
+	mustWrite(t, filepath.Join(bundleDir, "frames", "frame_0001.png"), "fake frame")
+	mustWrite(t, filepath.Join(bundleDir, "ocr", "frame_0001.txt"), "Login failed after submit")
+	dbPath := filepath.Join(t.TempDir(), "evidence.veclite")
+
+	var indexStdout, indexStderr bytes.Buffer
+	indexCode := Run([]string{"index", bundleDir, "--db", dbPath, "--json"}, &indexStdout, &indexStderr, "test")
+	if indexCode != 0 {
+		t.Fatalf("expected index exit code 0, got %d stderr=%q stdout=%q", indexCode, indexStderr.String(), indexStdout.String())
+	}
+	var indexReport struct {
+		OK             bool   `json:"ok"`
+		Collection     string `json:"collection"`
+		IndexedEntries int    `json:"indexed_entries"`
+	}
+	if err := json.Unmarshal(indexStdout.Bytes(), &indexReport); err != nil {
+		t.Fatalf("expected index JSON, got %q: %v", indexStdout.String(), err)
+	}
+	if !indexReport.OK || indexReport.Collection == "" || indexReport.IndexedEntries != 1 {
+		t.Fatalf("unexpected index report: %#v", indexReport)
+	}
+	if indexStderr.Len() != 0 {
+		t.Fatalf("expected empty index stderr, got %q", indexStderr.String())
+	}
+
+	var searchStdout, searchStderr bytes.Buffer
+	searchCode := Run([]string{"search", dbPath, "Login failed", "--json"}, &searchStdout, &searchStderr, "test")
+	if searchCode != 0 {
+		t.Fatalf("expected search exit code 0, got %d stderr=%q stdout=%q", searchCode, searchStderr.String(), searchStdout.String())
+	}
+	var searchReport struct {
+		OK      bool `json:"ok"`
+		Results []struct {
+			Frame      string `json:"frame"`
+			OCR        string `json:"ocr"`
+			Transcript string `json:"transcript"`
+		} `json:"results"`
+	}
+	if err := json.Unmarshal(searchStdout.Bytes(), &searchReport); err != nil {
+		t.Fatalf("expected search JSON, got %q: %v", searchStdout.String(), err)
+	}
+	if !searchReport.OK || len(searchReport.Results) != 1 {
+		t.Fatalf("unexpected search report: %#v", searchReport)
+	}
+	if searchReport.Results[0].Frame != "frames/frame_0001.png" || searchReport.Results[0].OCR == "" {
+		t.Fatalf("unexpected search result: %#v", searchReport.Results[0])
+	}
+	if searchStderr.Len() != 0 {
+		t.Fatalf("expected empty search stderr, got %q", searchStderr.String())
+	}
+}
+
+func TestSearchJSONFailure(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+
+	code := Run([]string{"search", "/missing/evidence.veclite", "ticket", "--json"}, &stdout, &stderr, "test")
+
+	if code != 1 {
+		t.Fatalf("expected exit code 1, got %d", code)
+	}
+	if !strings.Contains(stdout.String(), `"ok": false`) {
+		t.Fatalf("expected json failure, got %q", stdout.String())
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("expected empty stderr for json failure, got %q", stderr.String())
+	}
+}
+
+func TestConciseEvidenceTextTruncatesHumanSearchText(t *testing.T) {
+	result := evidence.SearchResult{
+		Frame: "frames/frame_0001.png",
+		OCR:   "Visible title\n" + strings.Repeat("dense OCR ", 20),
+	}
+
+	output := conciseEvidenceText(result, 40)
+	if len(output) > 40 || !strings.HasSuffix(output, "...") {
+		t.Fatalf("expected truncated evidence text, got %q", output)
+	}
+	if strings.Contains(output, "\n") {
+		t.Fatalf("expected single-line evidence text, got %q", output)
+	}
+}
+
+func TestInvestigateJSON(t *testing.T) {
+	bundleDir := writeCLIBundle(t)
+	mustWrite(t, filepath.Join(bundleDir, "frames", "frame_0001.png"), "fake frame")
+	mustWrite(t, filepath.Join(bundleDir, "ocr", "frame_0001.txt"), "Login failed after submit")
+	var stdout, stderr bytes.Buffer
+
+	code := Run([]string{"investigate", bundleDir, "--query", "login failed", "--codebase", "/tmp/app", "--json"}, &stdout, &stderr, "test")
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d stderr=%q stdout=%q", code, stderr.String(), stdout.String())
+	}
+	var report struct {
+		OK              bool     `json:"ok"`
+		Evidence        []any    `json:"evidence"`
+		Suggested       []string `json:"suggested_queries"`
+		VecgrepCommands []string `json:"vecgrep_commands"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &report); err != nil {
+		t.Fatalf("expected investigate JSON, got %q: %v", stdout.String(), err)
+	}
+	if !report.OK || len(report.Evidence) == 0 || len(report.Suggested) == 0 || len(report.VecgrepCommands) == 0 {
+		t.Fatalf("unexpected investigate report: %#v", report)
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("expected empty stderr, got %q", stderr.String())
+	}
+}
+
+func TestInvestigateMarkdown(t *testing.T) {
+	bundleDir := writeCLIBundle(t)
+	mustWrite(t, filepath.Join(bundleDir, "frames", "frame_0001.png"), "fake frame")
+	mustWrite(t, filepath.Join(bundleDir, "ocr", "frame_0001.txt"), "Login failed after submit")
+	var stdout, stderr bytes.Buffer
+
+	code := Run([]string{"investigate", bundleDir, "--query", "login failed"}, &stdout, &stderr, "test")
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d stderr=%q", code, stderr.String())
+	}
+	for _, want := range []string{"# Investigation Handoff", "## Video Evidence", "frames/frame_0001.png", "## Suggested Code Searches"} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("expected markdown to contain %q, got %q", want, stdout.String())
+		}
+	}
+}
+
+func TestInvestigateRequiresQuery(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+
+	code := Run([]string{"investigate", "/tmp/bundle"}, &stdout, &stderr, "test")
+
+	if code != 2 {
+		t.Fatalf("expected exit code 2, got %d", code)
+	}
+	if !strings.Contains(stderr.String(), "missing required --query") {
+		t.Fatalf("expected query error, got %q", stderr.String())
+	}
+}
+
 func TestNormalizeExtractArgsAllowsFlagsAfterPath(t *testing.T) {
 	args, err := normalizeExtractArgs([]string{"/tmp/bug.mp4", "--fps", "2", "--json", "--out=/tmp/out"})
 	if err != nil {
@@ -361,6 +524,9 @@ func mustMkdir(t *testing.T, path string) {
 
 func mustWrite(t *testing.T, path, value string) {
 	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(path, []byte(value), 0o644); err != nil {
 		t.Fatal(err)
 	}

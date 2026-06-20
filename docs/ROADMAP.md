@@ -29,13 +29,14 @@
 - Test exit codes, stdout, stderr, and generated files. Started.
 - Add small synthetic media fixtures or fixture-generation tasks. Started.
 
-See `BACKLOG.md` for prioritized work beyond the roadmap.
+See the repository root `BACKLOG.md` for prioritized work beyond the roadmap.
 
 ## Iteration 5: Inspection Studio
 
-- Browse artifact bundles. Started.
-- View transcript and OCR side by side. Started.
-- Jump from timeline entries to frames. Started with frame paths.
+- Browse artifact bundles. Done.
+- View transcript, OCR, metadata, and frame paths side by side. Done.
+- Jump from timeline entries to frames with open/reveal actions. Done for local platform tools.
+- Copy concise timestamped evidence summaries. Done.
 - Monitor long-running extraction jobs.
 
 ## Iteration 6: Distribution
@@ -52,16 +53,32 @@ See `BACKLOG.md` for prioritized work beyond the roadmap.
 - Add `vidtrace compare` JSON output. Done.
 - Add `vidtrace analyze` Markdown output. Done.
 - Improve matching with normalized terms, confidence, and term hits. Done.
-- Improve matching further with optional VecLite indexing.
+- Improve matching further with semantic evidence search and vecgrep codebase handoff.
 
 ## Iteration 8: Documentation Site Readiness
 
 - Keep README, install, usage, analysis, Studio, release, testing, and artifact docs aligned. In progress.
 - Keep `AGENTS.md` and `CLAUDE.md` focused on current agent workflows. In progress.
-- Add a generated docs site after Markdown navigation stabilizes.
+- Publish the docs site with VitePress and Vercel. Done.
 
 ## Iteration 9: Bundle Validation
 
 - Add `vidtrace validate <bundle> --json`. Done.
 - Validate required files, schema versions, timeline entries, and referenced frame/OCR paths. Done.
 - Cover validation with unit tests and glyphrun. Done.
+
+## Iteration 10: Evidence Search
+
+- Document the VecLite evidence-search architecture. Done.
+- Add `vidtrace index <bundle> --db <path>` for VecLite evidence records. Done.
+- Add `vidtrace search <db> <query> --json` for timestamped bundle search. Done.
+- Start with BM25 keyword search. Done.
+- Add semantic and hybrid modes behind explicit embedding config.
+- Keep extraction independent from indexing. Done.
+- Use vecgrep as the codebase search companion after video evidence is found. Done for handoff command suggestions.
+
+## Iteration 11: Agent Tooling
+
+- Add an MCP server using the Go MCP SDK.
+- Expose read-only bundle validation, evidence search, compare, and analysis tools.
+- Keep tool responses aligned with CLI JSON contracts.

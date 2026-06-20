@@ -6,7 +6,9 @@ Turn bug videos into timestamped evidence bundles that humans and coding agents 
 
 ## Status
 
-`v0.3.0` is published. The Go CLI can extract evidence bundles, emit stable JSON for automation, compare a ticket against video evidence, open a terminal Studio for human review, and ship through GitHub Releases plus the Homebrew tap.
+`v0.4.0` is published. The Go CLI can extract evidence bundles, emit stable JSON for automation, validate bundles, compare a ticket against video evidence, open a terminal Studio for human review, and ship through GitHub Releases plus the Homebrew tap.
+
+The current development line adds Studio dogfood actions and BM25 evidence search over generated bundles with VecLite `v0.15.0`.
 
 The project is still early. Treat `--json`, `metadata.json`, and `timeline.json` as the main contracts and change them deliberately.
 
@@ -92,6 +94,8 @@ Run a human-readable extraction:
 vidtrace extract /path/to/bug.mp4
 ```
 
+Human extraction prints step progress bars for bundle creation, metadata, frame extraction, OCR, transcript, and timeline writing.
+
 Run an agent-readable extraction:
 
 ```bash
@@ -113,6 +117,22 @@ vidtrace validate /path/to/bug_artifacts_YYYYMMDD_HHMMSS
 vidtrace validate /path/to/bug_artifacts_YYYYMMDD_HHMMSS --json
 ```
 
+Index and search timestamped evidence:
+
+```bash
+vidtrace index /path/to/bug_artifacts_YYYYMMDD_HHMMSS --db /tmp/vidtrace-evidence.veclite --json
+vidtrace search /tmp/vidtrace-evidence.veclite "clicking a ticket does not work" --json
+```
+
+Create an investigation handoff for code search:
+
+```bash
+vidtrace investigate /path/to/bug_artifacts_YYYYMMDD_HHMMSS \
+  --query "clicking a ticket does not work" \
+  --codebase /path/to/app \
+  --json
+```
+
 Compare a ticket with an artifact bundle:
 
 ```bash
@@ -125,6 +145,10 @@ Open the studio browser:
 ```bash
 vidtrace studio /path/to/bug_artifacts_YYYYMMDD_HHMMSS
 ```
+
+In Studio, use `up`/`down` or `k`/`j` to move through timeline entries, `m` to toggle metadata, `o` to open the selected frame, `r` to reveal it in Finder on macOS, and `c` to copy a concise evidence summary when clipboard tooling is available.
+
+Studio uses a compact keyboard-first layout. Wide terminals show timeline and evidence details side by side; narrow terminals stack the panes.
 
 ```bash
 vidtrace extract /path/to/bug.mp4 \
@@ -149,8 +173,12 @@ task lint
 task check
 task agent VIDEO=/path/to/bug.mp4
 task run -- validate /path/to/bundle --json
+task run -- index /path/to/bundle --db /tmp/vidtrace-evidence.veclite --json
+task run -- search /tmp/vidtrace-evidence.veclite "ticket click" --json
+task run -- investigate /path/to/bundle --query "ticket click" --codebase /path/to/app --json
 task run -- compare /path/to/bundle --ticket ticket.md --json
 task run -- studio /path/to/bundle
+task site
 ```
 
 Useful local tasks:
@@ -161,6 +189,7 @@ Useful local tasks:
 | `task extract VIDEO=/path/to/bug.mp4` | Human extraction wrapper |
 | `task agent VIDEO=/path/to/bug.mp4` | JSON extraction wrapper |
 | `task smoke` | Synthetic end-to-end extraction outside the repo |
+| `task site` | Build the VitePress docs site into `docs/.vitepress/dist` |
 | `task e2e` | Verify and run glyphrun CLI specs |
 | `task all` | Full local verification |
 
@@ -169,6 +198,14 @@ Run the synthetic smoke extraction outside the repo:
 ```bash
 task smoke
 ```
+
+Generate the local documentation site:
+
+```bash
+task site
+```
+
+The docs site is a VitePress app configured for Vercel. Vercel runs `bun install --frozen-lockfile`, `bun run docs:build`, and serves `docs/.vitepress/dist`.
 
 ## Real Video Fixture
 
@@ -182,6 +219,17 @@ Do not commit that video. Use `/tmp` for generated artifacts:
 
 ```bash
 bin/vidtrace extract ~/Downloads/bug.mp4 --out /tmp/vidtrace-bug-smoke --name bug --json
+```
+
+For `v0.5.0` Studio dogfood, keep the generated bundle outside the repo:
+
+```bash
+bin/vidtrace extract ~/Downloads/bug.mp4 --out /tmp/vidtrace-real --name bug --json
+bin/vidtrace validate /tmp/vidtrace-real/bug_artifacts_* --json
+bin/vidtrace index /tmp/vidtrace-real/bug_artifacts_* --db /tmp/vidtrace-real/evidence.veclite --json
+bin/vidtrace search /tmp/vidtrace-real/evidence.veclite "clicking a task does not take me to the assessment" --json
+bin/vidtrace investigate /tmp/vidtrace-real/bug_artifacts_* --query "clicking a task does not take me to the assessment" --codebase /path/to/repo --json
+bin/vidtrace studio /tmp/vidtrace-real/bug_artifacts_*
 ```
 
 ## Release
@@ -207,10 +255,10 @@ Start with:
 
 Current high-value improvements:
 
-- Add optional VecLite indexing as a separate command, not as part of extraction.
-- Add richer studio panes and frame preview/opening actions.
+- Add semantic/hybrid evidence search and MCP workflows tracked in `BACKLOG.md`.
+- Use `docs/adr/0003-use-veclite-for-optional-evidence-search.md` as the architecture record for optional VecLite indexing.
+- Dogfood the `v0.5.0` Studio review workflow with real videos.
 - Improve `timeline.json` matching beyond the current frame-window overlap rules.
-- Add a small generated docs site from the Markdown docs.
 - Evaluate signing/notarization for macOS distribution.
 
 ## Project Conventions

@@ -1,0 +1,116 @@
+version: 1
+name: cli_investigate
+
+metadata:
+  feature: investigation
+  owner: core
+  priority: high
+  tags:
+    - investigate
+    - evidence
+    - vecgrep
+    - agent
+
+intent: |
+  Verify that vidtrace can create a compact handoff from video evidence to
+  code-search queries and vecgrep command suggestions.
+
+target:
+  cmd:
+    - "/bin/sh"
+    - "-c"
+    - "./bin/vidtrace investigate .glyphrun/tmp/investigate/sample_artifacts --query \"ticket does not work\" --codebase . --json"
+  cwd: "."
+  timeoutMs: 20000
+
+terminal:
+  cols: 120
+  rows: 40
+  profile: xterm-256color
+  alternateScreen: forbid
+
+preconditions:
+  commands:
+    - run: "go build -o ./bin/vidtrace ./cmd/vidtrace"
+      timeoutMs: 120000
+    - run: "rm -rf .glyphrun/tmp/investigate && mkdir -p .glyphrun/tmp/investigate/sample_artifacts/frames .glyphrun/tmp/investigate/sample_artifacts/ocr .glyphrun/tmp/investigate/sample_artifacts/transcript"
+      timeoutMs: 5000
+    - run: |
+        cat > .glyphrun/tmp/investigate/sample_artifacts/metadata.json <<'JSON'
+        {
+          "schema_version": "1",
+          "source_video": "/tmp/ticket-bug.mp4",
+          "duration_seconds": 2,
+          "extract_fps": 1,
+          "ocr_languages": ["eng"],
+          "whisper_language": "en",
+          "whisper_model": "small"
+        }
+        JSON
+      timeoutMs: 5000
+    - run: |
+        cat > .glyphrun/tmp/investigate/sample_artifacts/timeline.json <<'JSON'
+        {
+          "schema_version": "1",
+          "entries": [
+            {
+              "time_seconds": 0,
+              "frame": "frames/frame_0001.png",
+              "ocr": {"path": "ocr/frame_0001.txt", "text": "Ticket list"},
+              "transcript": [{"start_seconds": 0, "end_seconds": 1, "text": "I am opening the ticket"}]
+            },
+            {
+              "time_seconds": 1,
+              "frame": "frames/frame_0002.png",
+              "ocr": {"path": "ocr/frame_0002.txt", "text": "Ticket OPG-14010 details"},
+              "transcript": [{"start_seconds": 1, "end_seconds": 2, "text": "I clicked the ticket and it does not work"}]
+            }
+          ]
+        }
+        JSON
+      timeoutMs: 5000
+    - run: "touch .glyphrun/tmp/investigate/sample_artifacts/frames/frame_0001.png .glyphrun/tmp/investigate/sample_artifacts/frames/frame_0002.png"
+      timeoutMs: 5000
+    - run: "printf 'Ticket list\\n' > .glyphrun/tmp/investigate/sample_artifacts/ocr/frame_0001.txt && printf 'Ticket OPG-14010 details\\n' > .glyphrun/tmp/investigate/sample_artifacts/ocr/frame_0002.txt"
+      timeoutMs: 5000
+    - run: "printf 'Ticket list\\nTicket OPG-14010 details\\n' > .glyphrun/tmp/investigate/sample_artifacts/ocr/ocr_all_frames.txt"
+      timeoutMs: 5000
+
+steps:
+  - wait:
+      process:
+        exitCode: 0
+      timeoutMs: 20000
+  - snapshot: result
+
+outcomes:
+  - id: clean_exit
+    description: investigate exits successfully
+    verify:
+      process:
+        exitCode: 0
+  - id: json_ok
+    description: investigate JSON reports success
+    verify:
+      command:
+        run: "./bin/vidtrace investigate .glyphrun/tmp/investigate/sample_artifacts --query \"ticket does not work\" --codebase . --json | grep -q '\"ok\": true'"
+  - id: evidence_result
+    description: investigation includes timestamped video evidence
+    verify:
+      screen:
+        contains: '"frame": "frames/frame_0002.png"'
+  - id: suggested_queries
+    description: investigation includes suggested code searches
+    verify:
+      screen:
+        contains: '"suggested_queries": ['
+  - id: vecgrep_commands
+    description: investigation includes vecgrep command suggestions
+    verify:
+      screen:
+        contains: 'vecgrep search'
+  - id: markdown_output
+    description: human output renders a Markdown handoff
+    verify:
+      command:
+        run: "./bin/vidtrace investigate .glyphrun/tmp/investigate/sample_artifacts --query \"ticket does not work\" --codebase . | grep -q '# Investigation Handoff'"
