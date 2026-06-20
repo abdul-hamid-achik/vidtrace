@@ -20,6 +20,10 @@ func TestRunRejectsNonInteractiveTerminal(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "interactive terminal") {
 		t.Fatalf("expected an interactive-terminal error, got %v", err)
 	}
+	// The message must route automated callers somewhere usable.
+	if !strings.Contains(err.Error(), "docs agent") {
+		t.Fatalf("guard message should point agents to docs agent / JSON commands, got %q", err.Error())
+	}
 }
 
 func TestMetadataDetailIncludesReviewFields(t *testing.T) {

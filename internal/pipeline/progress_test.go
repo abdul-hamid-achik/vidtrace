@@ -69,6 +69,9 @@ func TestProgressReporterInteractiveRedraws(t *testing.T) {
 	if !strings.Contains(output, "\r") {
 		t.Fatalf("interactive mode should redraw the item line with a carriage return, got %q", output)
 	}
+	if !strings.Contains(output, "\x1b[K") {
+		t.Fatalf("interactive redraw must clear to end of line (\\x1b[K) to avoid leftovers, got %q", output)
+	}
 	for _, want := range []string{"[4/7] ocr", "3/6", "frame_0003.png"} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("expected interactive item line to contain %q, got %q", want, output)

@@ -2,9 +2,11 @@ package pipeline
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -74,18 +76,6 @@ func Run(ctx context.Context, opts Options) (Summary, error) {
 		return Summary{}, fmt.Errorf("whisper model is required")
 	}
 
-	// Fail fast when a requested OCR language is not installed, before extracting
-	// any frames, so the user fixes language data up front instead of after a
-	// long extraction.
-	requestedLanguages := tesseract.SplitLanguages(opts.OCRLanguage)
-	availableLanguages, err := tesseract.AvailableLanguages(ctx)
-	if err != nil {
-		return Summary{}, err
-	}
-	if missing := tesseract.MissingLanguages(requestedLanguages, availableLanguages); len(missing) > 0 {
-		return Summary{}, fmt.Errorf("OCR language data not installed: %s; install the tesseract language pack(s) (see docs/INSTALL.md) or change --ocr-lang", strings.Join(missing, ", "))
-	}
-
 	sourceVideo, err := filepath.Abs(opts.SourceVideo)
 	if err != nil {
 		return Summary{}, fmt.Errorf("resolve source video: %w", err)
@@ -94,6 +84,22 @@ func Run(ctx context.Context, opts Options) (Summary, error) {
 		return Summary{}, fmt.Errorf("source video not found: %s", sourceVideo)
 	} else if info.IsDir() {
 		return Summary{}, fmt.Errorf("source video is a directory: %s", sourceVideo)
+	}
+
+	// Fail fast when a requested OCR language is not installed, before creating a
+	// bundle or extracting frames, so the user fixes language data up front
+	// instead of after a long extraction. This runs after the cheaper input
+	// checks so an invalid path still reports the clearer error first.
+	requestedLanguages := tesseract.SplitLanguages(opts.OCRLanguage)
+	availableLanguages, err := tesseract.AvailableLanguages(ctx)
+	if err != nil {
+		if errors.Is(err, exec.ErrNotFound) {
+			return Summary{}, fmt.Errorf("tesseract is not installed; install it and any OCR language data (see docs/INSTALL.md), then run vidtrace doctor")
+		}
+		return Summary{}, err
+	}
+	if missing := tesseract.MissingLanguages(requestedLanguages, availableLanguages); len(missing) > 0 {
+		return Summary{}, fmt.Errorf("OCR language data not installed: %s; install the tesseract language pack(s) (see docs/INSTALL.md) or change --ocr-lang", strings.Join(missing, ", "))
 	}
 
 	outputParentDir := opts.OutputParentDir

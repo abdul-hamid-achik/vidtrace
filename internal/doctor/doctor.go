@@ -11,6 +11,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/abdul-hamid-achik/vidtrace/internal/tesseract"
 )
 
 type Result struct {
@@ -181,16 +183,12 @@ func firstLine(output string) string {
 }
 
 func tesseractLanguages() []string {
-	output := runCommand("tesseract", "--list-langs")
-	var languages []string
-	for _, line := range strings.Split(output, "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" || strings.HasPrefix(line, "List of available languages") {
-			continue
-		}
-		languages = append(languages, line)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	languages, err := tesseract.AvailableLanguages(ctx)
+	if err != nil {
+		return nil
 	}
-	sort.Strings(languages)
 	return languages
 }
 
