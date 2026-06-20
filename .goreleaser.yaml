@@ -33,6 +33,26 @@ archives:
     files:
       - README.md
 
+nfpms:
+  - id: vidtrace
+    ids:
+      - vidtrace
+    package_name: vidtrace
+    vendor: Abdul Hamid Achik
+    homepage: "https://github.com/abdul-hamid-achik/vidtrace"
+    maintainer: "Abdul Hamid Achik <abdulachik@icloud.com>"
+    description: "Turn bug videos into timestamped evidence bundles for humans and coding agents"
+    license: MIT
+    formats:
+      - deb
+      - rpm
+    bindir: /usr/bin
+    section: utils
+    # ffmpeg, ffprobe, tesseract, and whisper are runtime tools checked by
+    # `vidtrace doctor`; they are not declared as hard package dependencies
+    # because their package names differ across distributions and whisper is
+    # installed via pip rather than a system package.
+
 checksum:
   name_template: "checksums.txt"
 

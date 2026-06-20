@@ -44,6 +44,28 @@ pipx install openai-whisper
 
 Whisper downloads its model on first use. `vidtrace` defaults to the `small` model.
 
+## Linux packages
+
+Tagged releases publish `.deb` and `.rpm` packages (amd64 and arm64) as GitHub release assets. Download the one for your distribution and architecture, then install it:
+
+```bash
+# Debian / Ubuntu
+sudo dpkg -i vidtrace_<version>_linux_amd64.deb
+
+# Fedora / RHEL
+sudo rpm -i vidtrace_<version>_linux_amd64.rpm
+```
+
+The package installs `vidtrace` to `/usr/bin`. It does not pull the media tools as hard dependencies (their package names vary and Whisper is installed via pip), so install them separately and confirm with `vidtrace doctor`:
+
+```bash
+# Debian / Ubuntu
+sudo apt-get install ffmpeg tesseract-ocr
+pipx install openai-whisper
+```
+
+A `.tar.gz` of just the binary is also attached to every release for manual installation.
+
 ## Source Build
 
 Development tool versions are pinned in `.tool-versions`.

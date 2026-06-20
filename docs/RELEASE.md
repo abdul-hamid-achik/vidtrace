@@ -44,9 +44,33 @@ git push origin vX.Y.Z
 GoReleaser creates:
 
 - darwin and linux archives for amd64 and arm64
+- Linux `.deb` and `.rpm` packages for amd64 and arm64
 - `checksums.txt`
 - GitHub release notes
 - `Casks/vidtrace.rb` in the tap
+
+## Distribution decisions
+
+- **Homebrew: cask, not formula.** `vidtrace` ships a prebuilt binary, so the cask installs it directly without a build step. A formula would only duplicate that for a CLI, so it is intentionally not added. The cask currently strips the macOS quarantine attribute as a workaround for the unsigned binary; once signing and notarization are in place (below), that workaround and the security caveat can be removed.
+- **Linux: `.deb` + `.rpm` via nfpms**, attached to each release. No system dependencies are declared (see `docs/INSTALL.md`); `vidtrace doctor` reports the runtime tools.
+
+## macOS signing and notarization (playbook)
+
+The binary is currently unsigned, so macOS Gatekeeper quarantines it (the cask works around this with `xattr`). Proper Developer ID signing + notarization removes the warning. This requires credentials that must be provided before it can be wired up:
+
+Prerequisites (maintainer):
+
+1. Enroll in the **Apple Developer Program** (paid; an Apple ID alone is not enough). Enrollment can take a few days.
+2. Create a **Developer ID Application** certificate and export it as a password-protected `.p12`.
+3. Create an **App Store Connect API key** (Issuer ID, Key ID, and the `.p8` private key) for `notarytool`.
+
+GitHub repository secrets to add once obtained:
+
+- `MACOS_SIGN_P12` — base64-encoded `.p12` certificate
+- `MACOS_SIGN_PASSWORD` — the `.p12` export password
+- `APPLE_API_ISSUER_ID`, `APPLE_API_KEY_ID`, `APPLE_API_KEY` — App Store Connect API key fields
+
+When those exist, the release will sign and notarize the macOS binaries (using `rcodesign` so it runs on the existing Linux runner), gated so a release without the secrets still succeeds unsigned, and the cask's quarantine workaround and caveat will be dropped. Until then, releases ship unsigned and the cask keeps the workaround.
 
 ## One-Time Setup
 

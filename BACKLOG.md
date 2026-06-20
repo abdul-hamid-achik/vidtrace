@@ -228,6 +228,6 @@ Acceptance criteria:
 
 - [x] Release builds produce checksums.
 - [x] Installation docs cover source builds and Homebrew cask installs.
-- [ ] Decide whether a Homebrew formula is useful in addition to the cask.
-- [ ] Evaluate Apple Developer signing and notarization.
-- [ ] Add Linux package guidance after there is user demand.
+- [x] Decide whether a Homebrew formula is useful in addition to the cask (decided: keep the cask, no formula; see `docs/RELEASE.md`).
+- [x] Publish Linux `.deb` and `.rpm` packages (amd64 + arm64) via nfpms, documented in `docs/INSTALL.md`.
+- [ ] Apple Developer signing and notarization: playbook written in `docs/RELEASE.md`; blocked on Apple Developer Program enrollment and the signing/notarization credentials. Wire up and test once provided.
