@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+### Removed
+
+- `PLAN.md` and `docs/HANDOFF.md` after the `v0.5.0` release; the release record lives in this changelog and `BACKLOG.md`, and durable extractor gotchas moved into `AGENTS.md`.
+
+## [0.5.0] - 2026-06-20
+
 ### Added
 
 - `PLAN.md` for the `v0.5.0` Studio dogfood and review workflow.

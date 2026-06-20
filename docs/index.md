@@ -21,5 +21,4 @@
 
 - [Architecture](ARCHITECTURE.md): component boundaries and pipeline shape.
 - [Roadmap](ROADMAP.md): iteration plan.
-- [Agent Handoff](HANDOFF.md): current agent workflow notes.
 - [Architecture Decision Records](adr/): durable technical decisions.

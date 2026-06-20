@@ -74,7 +74,6 @@ The VitePress sidebar exposes:
 - `docs/RELEASE.md`
 - `docs/ARCHITECTURE.md`
 - `docs/ROADMAP.md`
-- `docs/HANDOFF.md`
 - ADRs under `docs/adr/`
 
 ## Exclusions

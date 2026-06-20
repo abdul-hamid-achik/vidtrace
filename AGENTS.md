@@ -44,6 +44,13 @@ This file guides coding agents working on `vidtrace`.
 - Put future media-tool wrappers in separate internal packages, for example `internal/ffmpeg`, `internal/tesseract`, and `internal/whisper`.
 - Keep artifact schemas explicit and versionable.
 
+## Extractor Gotchas
+
+- The OCR combiner glob must stay scoped to `frame_*.txt`; a broader glob can read its own combined output.
+- `whisper small` is the preferred default for English bug videos.
+- 1 fps is a useful default for UI bug recordings, but fast animation bugs may need `--fps 2`.
+- Whisper writes into an output directory, not to a single target file path.
+
 ## Agent Workflow
 
 Use the built-in docs when you need to learn the product from the CLI:

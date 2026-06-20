@@ -4,6 +4,18 @@ This backlog keeps product ideas, engineering work, and integration bets visible
 
 ## Recently Completed
 
+### v0.5.0 Release
+
+As a maintainer, I can ship the Studio review, BM25 evidence search, investigation handoff, and VitePress docs work as a tagged release.
+
+Acceptance criteria:
+
+- [x] Commit `e8ce88d` is pushed to `main`.
+- [x] Tag `v0.5.0` is pushed.
+- [x] GitHub release `v0.5.0` is published with checksums and Darwin/Linux tarballs.
+- [x] CI and release workflows pass.
+- [x] No source videos, generated artifact bundles, local VecLite databases, `node_modules`, or VitePress build output are tracked.
+
 ### Evidence Search Foundation
 
 As an agent, I can search bug-video evidence by keyword, so that I can find the timestamp, frame, OCR, and transcript moments that explain a bug before inspecting the codebase.
