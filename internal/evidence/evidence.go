@@ -296,7 +296,12 @@ func IndexBundles(bundleDirs []string, dbPath string, embedder embed.Embedder) (
 			}
 			bundleResult.SemanticEntries = semanticCount
 			report.SemanticEntries += semanticCount
-			report.Embedding = profile
+			// A bundle with no timeline entries returns a nil profile; do not let
+			// it clear a profile already set by an earlier bundle, so the
+			// "SemanticEntries > 0 implies Embedding != nil" invariant holds.
+			if profile != nil {
+				report.Embedding = profile
+			}
 		}
 		report.Bundles = append(report.Bundles, bundleResult)
 		report.IndexedEntries += counts.Indexed
@@ -367,12 +372,23 @@ func indexSemanticBundle(ctx context.Context, db *veclite.DB, embedder embed.Emb
 	if len(vectors) != len(records) {
 		return 0, nil, fmt.Errorf("embedder returned %d vectors for %d records", len(vectors), len(records))
 	}
-	if len(vectors[0]) == 0 {
+	// Validate the whole batch before any destructive write below. The replace
+	// loop deletes the prior vector before inserting the new one, and veclite
+	// always persists on Close, so a mid-loop InsertDocument failure (for example
+	// a ragged-dimension vector) would otherwise leave a record deleted with no
+	// replacement. Rejecting a bad batch up front keeps re-indexing safe.
+	dim := len(vectors[0])
+	if dim == 0 {
 		return 0, nil, fmt.Errorf("embedder returned empty vectors")
+	}
+	for i, vec := range vectors {
+		if len(vec) != dim {
+			return 0, nil, fmt.Errorf("embedder returned inconsistent vector length at index %d: got %d, want %d", i, len(vec), dim)
+		}
 	}
 
 	profile := embedder.Profile()
-	profile.Dimensions = len(vectors[0])
+	profile.Dimensions = dim
 	if err := ensureEmbeddingProfile(db, profile); err != nil {
 		return 0, nil, err
 	}

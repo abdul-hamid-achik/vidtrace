@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/abdul-hamid-achik/veclite"
 	"github.com/abdul-hamid-achik/vidtrace/internal/embed"
 )
 
@@ -24,6 +25,10 @@ type fakeEmbedder struct {
 
 func newFakeEmbedder(model string) fakeEmbedder {
 	return fakeEmbedder{model: model, dims: 32}
+}
+
+func newFakeEmbedderDims(model string, dims int) fakeEmbedder {
+	return fakeEmbedder{model: model, dims: dims}
 }
 
 func (f fakeEmbedder) Embed(_ context.Context, texts []string) ([][]float32, error) {
@@ -682,6 +687,135 @@ func TestIndexRejectsMixedEmbeddingProfiles(t *testing.T) {
 	_, err := IndexBundle(IndexOptions{BundleDir: bundleB, DBPath: dbPath, Embedder: newFakeEmbedder("model-b")})
 	if err == nil || !strings.Contains(err.Error(), "profile mismatch") {
 		t.Fatalf("expected profile mismatch when mixing embedders, got %v", err)
+	}
+}
+
+func TestSemanticReindexDoesNotDuplicateVectors(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "evidence.veclite")
+	embedder := newFakeEmbedder("fake-model")
+	bundleDir := writeCustomEvidenceBundle(t, "/tmp/a.mp4", 10, []evidenceEntry{
+		{time: 0, ocr: "Login", transcript: "open the ticket"},
+		{time: 1, ocr: "Ticket details", transcript: "click the ticket"},
+	})
+	for i := 0; i < 2; i++ {
+		if _, err := IndexBundle(IndexOptions{BundleDir: bundleDir, DBPath: dbPath, Embedder: embedder}); err != nil {
+			t.Fatalf("semantic index pass %d failed: %v", i, err)
+		}
+	}
+
+	db, err := veclite.Open(dbPath, veclite.WithReadOnly(true))
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+	coll, err := db.GetCollection(TextCollection)
+	if err != nil {
+		t.Fatalf("get text collection: %v", err)
+	}
+	if coll.Count() != 2 {
+		t.Fatalf("expected 2 vectors after re-index (no duplicates), got %d", coll.Count())
+	}
+}
+
+func TestSemanticAndHybridSearchOverFetchFiltered(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "evidence.veclite")
+	embedder := newFakeEmbedder("fake-model")
+
+	var noise []evidenceEntry
+	for i := 0; i < 20; i++ {
+		noise = append(noise, evidenceEntry{time: float64(i), ocr: "checkout error", transcript: "checkout error checkout error"})
+	}
+	noiseBundle := writeCustomEvidenceBundle(t, "/tmp/noise.mp4", 30, noise)
+	var target []evidenceEntry
+	for i := 0; i < 5; i++ {
+		target = append(target, evidenceEntry{time: float64(i), ocr: "checkout error", transcript: "checkout error"})
+	}
+	targetBundle := writeCustomEvidenceBundle(t, "/tmp/target.mp4", 10, target)
+	if _, err := IndexBundles([]string{noiseBundle, targetBundle}, dbPath, embedder); err != nil {
+		t.Fatalf("semantic multi-index failed: %v", err)
+	}
+	absTarget, _ := filepath.Abs(targetBundle)
+
+	for _, mode := range []string{ModeSemantic, ModeHybrid} {
+		res, err := Search(SearchOptions{
+			DBPath:   dbPath,
+			Query:    "checkout error",
+			Limit:    50,
+			Mode:     mode,
+			Embedder: embedder,
+			Bundle:   targetBundle,
+		})
+		if err != nil {
+			t.Fatalf("%s filtered search failed: %v", mode, err)
+		}
+		if len(res.Results) != len(target) {
+			t.Fatalf("%s: expected %d target results despite noise, got %d", mode, len(target), len(res.Results))
+		}
+		for _, r := range res.Results {
+			if r.Bundle != absTarget {
+				t.Fatalf("%s filter leaked non-target bundle %q", mode, r.Bundle)
+			}
+		}
+	}
+}
+
+func TestSemanticSearchRejectsDimensionMismatch(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "evidence.veclite")
+	bundleDir := writeCustomEvidenceBundle(t, "/tmp/a.mp4", 10, []evidenceEntry{
+		{time: 0, ocr: "Login", transcript: "open the ticket"},
+	})
+	if _, err := IndexBundle(IndexOptions{BundleDir: bundleDir, DBPath: dbPath, Embedder: newFakeEmbedderDims("same-model", 32)}); err != nil {
+		t.Fatalf("index failed: %v", err)
+	}
+	// Same provider/model but a different dimension must be rejected by Search.
+	_, err := Search(SearchOptions{DBPath: dbPath, Query: "ticket", Mode: ModeSemantic, Embedder: newFakeEmbedderDims("same-model", 16)})
+	if err == nil || !strings.Contains(err.Error(), "dimension mismatch") {
+		t.Fatalf("Search error = %v, want dimension mismatch", err)
+	}
+}
+
+func TestIndexRejectsDimensionMismatchAcrossBundles(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "evidence.veclite")
+	bundleA := writeCustomEvidenceBundle(t, "/tmp/a.mp4", 10, []evidenceEntry{
+		{time: 0, ocr: "Login", transcript: "open the ticket"},
+	})
+	bundleB := writeCustomEvidenceBundle(t, "/tmp/b.mp4", 10, []evidenceEntry{
+		{time: 0, ocr: "Checkout", transcript: "open the checkout"},
+	})
+	if _, err := IndexBundle(IndexOptions{BundleDir: bundleA, DBPath: dbPath, Embedder: newFakeEmbedderDims("same-model", 32)}); err != nil {
+		t.Fatalf("first index failed: %v", err)
+	}
+	_, err := IndexBundle(IndexOptions{BundleDir: bundleB, DBPath: dbPath, Embedder: newFakeEmbedderDims("same-model", 16)})
+	if err == nil || !strings.Contains(err.Error(), "profile mismatch") {
+		t.Fatalf("expected profile mismatch for differing dimensions, got %v", err)
+	}
+}
+
+func TestMultiBundleSemanticCounts(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "evidence.veclite")
+	embedder := newFakeEmbedder("fake-model")
+	bundleA := writeCustomEvidenceBundle(t, "/tmp/a.mp4", 10, []evidenceEntry{
+		{time: 0, ocr: "Login", transcript: "open the ticket"},
+		{time: 1, ocr: "Ticket", transcript: "click the ticket"},
+	})
+	bundleB := writeCustomEvidenceBundle(t, "/tmp/b.mp4", 10, []evidenceEntry{
+		{time: 0, ocr: "Checkout", transcript: "open the checkout"},
+		{time: 1, ocr: "Pay", transcript: "pay now"},
+		{time: 2, ocr: "Done", transcript: "order done"},
+	})
+
+	report, err := IndexBundles([]string{bundleA, bundleB}, dbPath, embedder)
+	if err != nil {
+		t.Fatalf("semantic multi-index failed: %v", err)
+	}
+	if report.SemanticEntries != 5 {
+		t.Fatalf("expected 5 aggregate semantic entries, got %d", report.SemanticEntries)
+	}
+	if report.Bundles[0].SemanticEntries != 2 || report.Bundles[1].SemanticEntries != 3 {
+		t.Fatalf("unexpected per-bundle semantic counts: %#v", report.Bundles)
+	}
+	if report.Embedding == nil || report.Embedding.Model != "fake-model" || report.Embedding.Dimensions != 32 {
+		t.Fatalf("expected embedding profile echoed, got %#v", report.Embedding)
 	}
 }
 

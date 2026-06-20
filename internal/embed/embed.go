@@ -22,6 +22,10 @@ const (
 
 const defaultOllamaURL = "http://localhost:11434"
 
+// ollamaBatchSize bounds how many texts are sent per request so a large bundle
+// does not become one oversized, timeout-prone HTTP call.
+const ollamaBatchSize = 64
+
 // Profile describes the embedding configuration used to build a semantic index.
 // It is stored alongside the index so search can reject a mismatched embedder.
 type Profile struct {
@@ -75,7 +79,8 @@ type ollamaEmbedResponse struct {
 	Error      string      `json:"error"`
 }
 
-// Embed calls the Ollama /api/embed batch endpoint.
+// Embed calls the Ollama /api/embed batch endpoint, sending texts in bounded
+// batches and validating that every returned vector shares one non-zero length.
 func (o *Ollama) Embed(ctx context.Context, texts []string) ([][]float32, error) {
 	if len(texts) == 0 {
 		return nil, nil
@@ -84,6 +89,34 @@ func (o *Ollama) Embed(ctx context.Context, texts []string) ([][]float32, error)
 		return nil, fmt.Errorf("embedding model is required")
 	}
 
+	all := make([][]float32, 0, len(texts))
+	for start := 0; start < len(texts); start += ollamaBatchSize {
+		end := start + ollamaBatchSize
+		if end > len(texts) {
+			end = len(texts)
+		}
+		batch := texts[start:end]
+		vectors, err := o.embedBatch(ctx, batch)
+		if err != nil {
+			return nil, err
+		}
+		all = append(all, vectors...)
+	}
+
+	dim := len(all[0])
+	if dim == 0 {
+		return nil, fmt.Errorf("ollama returned empty embeddings")
+	}
+	for i, vec := range all {
+		if len(vec) != dim {
+			return nil, fmt.Errorf("ollama returned inconsistent embedding length at index %d: got %d, want %d", i, len(vec), dim)
+		}
+	}
+	o.dims = dim
+	return all, nil
+}
+
+func (o *Ollama) embedBatch(ctx context.Context, texts []string) ([][]float32, error) {
 	payload, err := json.Marshal(ollamaEmbedRequest{Model: o.Model, Input: texts})
 	if err != nil {
 		return nil, fmt.Errorf("encode ollama request: %w", err)
@@ -122,10 +155,6 @@ func (o *Ollama) Embed(ctx context.Context, texts []string) ([][]float32, error)
 	if len(decoded.Embeddings) != len(texts) {
 		return nil, fmt.Errorf("ollama returned %d embeddings for %d inputs", len(decoded.Embeddings), len(texts))
 	}
-	if len(decoded.Embeddings[0]) == 0 {
-		return nil, fmt.Errorf("ollama returned empty embeddings")
-	}
-	o.dims = len(decoded.Embeddings[0])
 	return decoded.Embeddings, nil
 }
 

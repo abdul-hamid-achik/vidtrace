@@ -75,6 +75,63 @@ func TestOllamaEmbedRejectsCountMismatch(t *testing.T) {
 	}
 }
 
+func TestOllamaEmbedRejectsRaggedVectors(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req ollamaEmbedRequest
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		// Return the right count, but a later vector has a different length.
+		vecs := make([][]float32, len(req.Input))
+		for i := range req.Input {
+			if i == 0 {
+				vecs[i] = []float32{1, 2, 3}
+			} else {
+				vecs[i] = []float32{1, 2}
+			}
+		}
+		_ = json.NewEncoder(w).Encode(ollamaEmbedResponse{Embeddings: vecs})
+	}))
+	defer server.Close()
+
+	embedder := NewOllama(server.URL, "nomic-embed-text")
+	if _, err := embedder.Embed(context.Background(), []string{"a", "b"}); err == nil {
+		t.Fatal("expected error for inconsistent embedding lengths")
+	}
+}
+
+func TestOllamaEmbedBatchesLargeInputs(t *testing.T) {
+	var requests int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		var req ollamaEmbedRequest
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		if len(req.Input) > ollamaBatchSize {
+			t.Errorf("batch of %d exceeds limit %d", len(req.Input), ollamaBatchSize)
+		}
+		vecs := make([][]float32, len(req.Input))
+		for i := range req.Input {
+			vecs[i] = []float32{1, 0}
+		}
+		_ = json.NewEncoder(w).Encode(ollamaEmbedResponse{Embeddings: vecs})
+	}))
+	defer server.Close()
+
+	texts := make([]string, ollamaBatchSize+5)
+	for i := range texts {
+		texts[i] = "text"
+	}
+	embedder := NewOllama(server.URL, "m")
+	vecs, err := embedder.Embed(context.Background(), texts)
+	if err != nil {
+		t.Fatalf("Embed failed: %v", err)
+	}
+	if len(vecs) != len(texts) {
+		t.Fatalf("expected %d vectors, got %d", len(texts), len(vecs))
+	}
+	if requests < 2 {
+		t.Fatalf("expected the oversized input to be split into multiple requests, got %d", requests)
+	}
+}
+
 func TestNewOllamaDefaultsBaseURL(t *testing.T) {
 	embedder := NewOllama("", "m")
 	if embedder.BaseURL != defaultOllamaURL {
