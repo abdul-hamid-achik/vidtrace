@@ -73,14 +73,32 @@ A GoReleaser `notarize.macos` block (which uses the bundled `quill`) was wired u
 failed to verify certificate chain: x509: unhandled critical extension
 ```
 
-Inspecting the certificate confirms the cause: newly-issued Developer ID certificates mark the Apple extension OID `1.2.840.113635.100.6.1.13` as **critical**. Go's `crypto/x509` (which `quill` is built on) treats any unrecognized critical extension as a hard failure, so it cannot build the chain. This is an Apple/toolchain problem, not a configuration error, and GoReleaser's `notarize` offers no option to skip chain verification. The signing changes were reverted (commit history) so releases continue to publish unsigned.
+Inspecting the certificate confirms the trigger: Developer ID certificates mark the Apple extension OID `1.2.840.113635.100.6.1.13` as **critical**, and Go's `crypto/x509` (which `quill` is built on) treats an unrecognized critical extension as a hard failure. This is **not** a problem with the certificate — that OID being critical is by-design on *every* Developer ID cert (global, non-removable; Apple's own US-issued certs carry it, confirmed on Apple Developer Forums thread 803047). **Reissuing the certificate will not help.**
 
-### Options to re-enable later
+A nuance worth knowing before re-attempting `quill`: the `quill` version GoReleaser pins *already strips* `1.2.840.113635.100.6.1.13` (and `.6.1.18`) from the leaf before verifying (anchore/quill since v0.5.0). So our failure was most likely a **missing Developer ID G2 intermediate in the exported `.p12`**, or a critical extension on a non-leaf cert — `quill` runs with `failWithoutFullChain=true` and Go's strictness either way. Re-exporting the `.p12` with the full chain (leaf + key + "Developer ID Certification Authority - G2") might rescue the `quill` path, but that is unverified.
 
-- **`rcodesign`** (Rust `apple-codesign`): sign each darwin binary with `rcodesign sign` plus a separate `rcodesign notary-submit` step, instead of GoReleaser's quill-based `notarize`. Its X.509 parser may tolerate the critical extension. This is not native to GoReleaser OSS, so it needs custom workflow steps and is untested here.
-- **Wait for `quill`/Go** to handle the extension, then restore the reverted `notarize.macos` block as-is.
+### Recommended re-enable path: `rcodesign`
 
-Until one of those lands, releases ship unsigned and the cask keeps the `xattr` quarantine workaround and caveat.
+The lowest-risk fix (researched 2026-06-20, not yet implemented) is to replace `quill` with **`rcodesign`** (Rust `apple-codesign`, indygreg/apple-platform-rs), which runs on the **existing Linux runner**:
+
+- Its `x509-certificate` crate has **no critical-extension rejection path** — it cannot reproduce the Go failure. (`rcodesign` itself even *generates* Developer ID certs with that OID marked critical and round-trips it.)
+- It **bundles the Apple intermediates** (incl. Developer ID G2) and auto-embeds them, neutralizing the missing-intermediate failure mode.
+- Caveat: no published third-party success report for this exact cert, so confidence rests on source-code analysis — prove it on a throwaway prerelease tag (or a local `rcodesign sign` on a darwin build) before trusting it.
+
+Sketch (keep GoReleaser for build/archive/checksum/cask; remove `notarize.macos`; add post-build steps on `ubuntu-latest`):
+
+```bash
+# build the App Store Connect key JSON from the existing .p8 / issuer / key-id secrets
+rcodesign encode-app-store-connect-api-key "$APPLE_API_ISSUER_ID" "$APPLE_API_KEY_ID" AuthKey.p8 key.json
+# sign each darwin binary with the .p12 secret
+rcodesign sign --p12-file cert.p12 --p12-password "$MACOS_SIGN_PASSWORD" --for-notarization ./vidtrace
+# notarize (bare Mach-O binaries cannot be stapled; Gatekeeper does an online ticket check on first run)
+rcodesign notary-submit --api-key-file key.json --wait ./vidtrace
+```
+
+Either use `indygreg/apple-code-sign-action@v1` (pin `rcodesign_version: 0.29.0`; inputs map directly onto the existing secrets) or the CLI above as a GoReleaser build hook. A macOS-runner native `codesign` + `xcrun notarytool` job is a viable fallback but is strictly more CI surgery (temp keychain, `set-key-partition-list`, explicit G2 intermediate install, sign-before-checksum ordering) for the same outcome.
+
+Until this is wired up, releases ship unsigned and the cask keeps the `xattr` quarantine workaround and caveat. The user-facing impact is limited to direct GitHub-Release downloaders; Homebrew users are unaffected.
 
 ## One-Time Setup
 
