@@ -2,13 +2,21 @@ package mcpserver
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
+	"fmt"
+	"io/fs"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 	"testing"
 
 	mcp "github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/abdul-hamid-achik/vidtrace/internal/embed"
 	"github.com/abdul-hamid-achik/vidtrace/internal/evidence"
 )
 
@@ -116,21 +124,6 @@ func TestInvestigateTool(t *testing.T) {
 	}
 }
 
-func TestBuildEmbedder(t *testing.T) {
-	if e, err := buildEmbedder("", "", ""); err != nil || e != nil {
-		t.Fatalf("empty provider should yield nil embedder, got %v %v", e, err)
-	}
-	if _, err := buildEmbedder("ollama", "", ""); err == nil {
-		t.Fatal("ollama without model should error")
-	}
-	if e, err := buildEmbedder("ollama", "nomic-embed-text", ""); err != nil || e == nil {
-		t.Fatalf("ollama with model should build, got %v %v", e, err)
-	}
-	if _, err := buildEmbedder("magic", "m", ""); err == nil {
-		t.Fatal("unknown provider should error")
-	}
-}
-
 func TestServerRoundTripListsAndCallsTools(t *testing.T) {
 	ctx := context.Background()
 	bundleDir := writeBundle(t)
@@ -196,6 +189,197 @@ func TestServerRoundTripListsAndCallsTools(t *testing.T) {
 	if !bad.IsError {
 		t.Fatalf("expected IsError for missing db, got %#v", bad)
 	}
+}
+
+func TestSearchToolSemanticViaOllamaHTTP(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Input []string `json:"input"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		vecs := make([][]float32, len(req.Input))
+		for i := range req.Input {
+			vecs[i] = []float32{1, 0.5, 0.25, 0.125}
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"embeddings": vecs})
+	}))
+	defer server.Close()
+
+	bundleDir := writeBundle(t)
+	dbPath := filepath.Join(t.TempDir(), "evidence.veclite")
+	if _, err := evidence.IndexBundle(evidence.IndexOptions{
+		BundleDir: bundleDir,
+		DBPath:    dbPath,
+		Embedder:  embed.NewOllama(server.URL, "nomic-embed-text"),
+	}); err != nil {
+		t.Fatalf("semantic index failed: %v", err)
+	}
+
+	result, report, err := searchTool(context.Background(), nil, SearchInput{
+		DBPath:     dbPath,
+		Query:      "login",
+		Mode:       "semantic",
+		Embed:      "ollama",
+		EmbedModel: "nomic-embed-text",
+		OllamaURL:  server.URL,
+	})
+	if err != nil {
+		t.Fatalf("searchTool error: %v", err)
+	}
+	if result != nil && result.IsError {
+		t.Fatalf("unexpected tool error: %#v", result)
+	}
+	if !report.OK || report.Mode != "semantic" || len(report.Results) == 0 {
+		t.Fatalf("unexpected semantic search report: %#v", report)
+	}
+}
+
+func TestToolsDoNotMutateBundle(t *testing.T) {
+	ctx := context.Background()
+	bundleDir := writeBundle(t)
+	ticket := filepath.Join(t.TempDir(), "ticket.md")
+	mustWrite(t, ticket, "login fails after submit")
+	dbPath := filepath.Join(t.TempDir(), "evidence.veclite") // deliberately outside the bundle
+	if _, err := evidence.IndexBundle(evidence.IndexOptions{BundleDir: bundleDir, DBPath: dbPath}); err != nil {
+		t.Fatalf("index failed: %v", err)
+	}
+
+	before := snapshotDir(t, bundleDir)
+
+	if _, _, err := validateTool(ctx, nil, ValidateInput{BundleDir: bundleDir}); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := searchTool(ctx, nil, SearchInput{DBPath: dbPath, Query: "login"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := compareTool(ctx, nil, CompareInput{BundleDir: bundleDir, TicketPath: ticket}); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := analyzeTool(ctx, nil, AnalyzeInput{BundleDir: bundleDir, TicketPath: ticket}); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := investigateTool(ctx, nil, InvestigateInput{BundleDir: bundleDir, Query: "login"}); err != nil {
+		t.Fatal(err)
+	}
+
+	after := snapshotDir(t, bundleDir)
+	if len(before) != len(after) {
+		t.Fatalf("bundle file set changed: before=%d after=%d files", len(before), len(after))
+	}
+	for path, sum := range before {
+		if after[path] != sum {
+			t.Fatalf("bundle file %q was added, removed, or modified by a tool", path)
+		}
+	}
+}
+
+func TestRoundTripExposesExpectedToolSetAndSchema(t *testing.T) {
+	ctx := context.Background()
+	server := New("test")
+	clientT, serverT := mcp.NewInMemoryTransports()
+	ss, err := server.Connect(ctx, serverT, nil)
+	if err != nil {
+		t.Fatalf("server connect: %v", err)
+	}
+	defer func() { _ = ss.Close() }()
+	client := mcp.NewClient(&mcp.Implementation{Name: "c", Version: "0"}, nil)
+	cs, err := client.Connect(ctx, clientT, nil)
+	if err != nil {
+		t.Fatalf("client connect: %v", err)
+	}
+	defer func() { _ = cs.Close() }()
+
+	tools, err := cs.ListTools(ctx, nil)
+	if err != nil {
+		t.Fatalf("ListTools: %v", err)
+	}
+	var names []string
+	var validateSchema string
+	for _, tool := range tools.Tools {
+		names = append(names, tool.Name)
+		if tool.Name == "validate" {
+			raw, _ := json.Marshal(tool.InputSchema)
+			validateSchema = string(raw)
+		}
+	}
+	sort.Strings(names)
+	want := append([]string(nil), ToolNames()...)
+	sort.Strings(want)
+	if fmt.Sprint(names) != fmt.Sprint(want) {
+		t.Fatalf("registered tools %v != ToolNames %v", names, want)
+	}
+	if !strings.Contains(validateSchema, `"required"`) || !strings.Contains(validateSchema, "bundle_dir") {
+		t.Fatalf("validate input schema missing required bundle_dir: %s", validateSchema)
+	}
+}
+
+func TestRoundTripCallsCompareAnalyzeInvestigate(t *testing.T) {
+	ctx := context.Background()
+	bundleDir := writeBundle(t)
+	ticket := filepath.Join(t.TempDir(), "ticket.md")
+	mustWrite(t, ticket, "login fails after submit")
+
+	server := New("test")
+	clientT, serverT := mcp.NewInMemoryTransports()
+	ss, err := server.Connect(ctx, serverT, nil)
+	if err != nil {
+		t.Fatalf("server connect: %v", err)
+	}
+	defer func() { _ = ss.Close() }()
+	client := mcp.NewClient(&mcp.Implementation{Name: "c", Version: "0"}, nil)
+	cs, err := client.Connect(ctx, clientT, nil)
+	if err != nil {
+		t.Fatalf("client connect: %v", err)
+	}
+	defer func() { _ = cs.Close() }()
+
+	calls := []struct {
+		name string
+		args map[string]any
+	}{
+		{"compare", map[string]any{"bundle_dir": bundleDir, "ticket_path": ticket}},
+		{"analyze", map[string]any{"bundle_dir": bundleDir, "ticket_path": ticket}},
+		{"investigate", map[string]any{"bundle_dir": bundleDir, "query": "login fails"}},
+	}
+	for _, c := range calls {
+		res, err := cs.CallTool(ctx, &mcp.CallToolParams{Name: c.name, Arguments: c.args})
+		if err != nil {
+			t.Fatalf("CallTool %s: %v", c.name, err)
+		}
+		if res.IsError {
+			t.Fatalf("tool %s returned error: %#v", c.name, res)
+		}
+		if len(res.Content) == 0 {
+			t.Fatalf("tool %s returned no content", c.name)
+		}
+	}
+}
+
+func snapshotDir(t *testing.T, dir string) map[string]string {
+	t.Helper()
+	out := map[string]string{}
+	err := filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+		content, err := os.ReadFile(p)
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(dir, p)
+		if err != nil {
+			return err
+		}
+		out[rel] = fmt.Sprintf("%x", sha256.Sum256(content))
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("snapshot %s: %v", dir, err)
+	}
+	return out
 }
 
 func writeBundle(t *testing.T) string {

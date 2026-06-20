@@ -2,7 +2,6 @@ package cli
 
 import (
 	"context"
-	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -27,8 +26,9 @@ func runMCP(args []string, stderr io.Writer, version string) int {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	if err := mcpserver.Serve(ctx, version); err != nil &&
-		!errors.Is(err, context.Canceled) && !errors.Is(err, io.EOF) {
+	// Serve normalizes a normal client disconnect to nil; anything returned here
+	// is a real error.
+	if err := mcpserver.Serve(ctx, version); err != nil {
 		_, _ = fmt.Fprintf(stderr, "mcp server error: %v\n", err)
 		return 1
 	}

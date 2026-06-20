@@ -7,7 +7,6 @@ package mcpserver
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"strings"
 
@@ -69,16 +68,14 @@ func Serve(ctx context.Context, version string) error {
 }
 
 func isCleanShutdown(err error) bool {
-	if errors.Is(err, io.EOF) || errors.Is(err, context.Canceled) {
+	if errors.Is(err, io.EOF) || errors.Is(err, context.Canceled) || errors.Is(err, mcp.ErrConnectionClosed) {
 		return true
 	}
-	// The jsonrpc2 layer reports normal stream/connection close with these
-	// messages; their error types live in an internal package, so match the text.
+	// The jsonrpc2 layer reports a normal stream close with these messages, whose
+	// error types live in an internal package and cannot be matched by type. Match
+	// only these specific phrases so genuine transport errors still surface.
 	msg := err.Error()
-	return strings.Contains(msg, "server is closing") ||
-		strings.Contains(msg, "client is closing") ||
-		strings.Contains(msg, "connection closed") ||
-		strings.HasSuffix(msg, "EOF")
+	return strings.Contains(msg, "server is closing") || strings.Contains(msg, "client is closing")
 }
 
 // ToolNames lists the registered tool names, for documentation and tests.
@@ -115,7 +112,7 @@ type SearchInput struct {
 }
 
 func searchTool(_ context.Context, _ *mcp.CallToolRequest, in SearchInput) (*mcp.CallToolResult, evidence.SearchReport, error) {
-	embedder, err := buildEmbedder(in.Embed, in.EmbedModel, in.OllamaURL)
+	embedder, err := embed.Build(in.Embed, in.EmbedModel, in.OllamaURL)
 	if err != nil {
 		return toolError[evidence.SearchReport](err.Error())
 	}
@@ -173,7 +170,9 @@ func analyzeTool(_ context.Context, _ *mcp.CallToolRequest, in AnalyzeInput) (*m
 	}, AnalyzeOutput{Markdown: markdown}, nil
 }
 
-// InvestigateInput mirrors the `vidtrace investigate` flags.
+// InvestigateInput mirrors the `vidtrace investigate` flags. DBPath is
+// intentionally omitted so investigation always uses an ephemeral temp database
+// and can never point indexing at a persistent, user-writable location.
 type InvestigateInput struct {
 	BundleDir   string `json:"bundle_dir" jsonschema:"path to the artifact bundle directory"`
 	Query       string `json:"query" jsonschema:"bug or evidence query"`
@@ -192,22 +191,6 @@ func investigateTool(_ context.Context, _ *mcp.CallToolRequest, in InvestigateIn
 		return toolError[investigate.Report](err.Error())
 	}
 	return nil, report, nil
-}
-
-// buildEmbedder constructs an embedder from tool inputs. An empty provider means
-// keyword-only (nil embedder). Only Ollama is supported.
-func buildEmbedder(provider, model, ollamaURL string) (embed.Embedder, error) {
-	switch strings.TrimSpace(strings.ToLower(provider)) {
-	case "", "none":
-		return nil, nil
-	case embed.ProviderOllama:
-		if strings.TrimSpace(model) == "" {
-			return nil, fmt.Errorf("embed_model is required for the ollama provider")
-		}
-		return embed.NewOllama(ollamaURL, model), nil
-	default:
-		return nil, fmt.Errorf("unknown embedding provider %q (supported: ollama)", provider)
-	}
 }
 
 // toolError reports a tool-level failure to the client (visible to the model)

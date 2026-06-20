@@ -132,6 +132,24 @@ func TestOllamaEmbedBatchesLargeInputs(t *testing.T) {
 	}
 }
 
+func TestBuild(t *testing.T) {
+	if e, err := Build("", "", ""); err != nil || e != nil {
+		t.Fatalf("empty provider should yield a nil embedder, got %v %v", e, err)
+	}
+	if e, err := Build("none", "", ""); err != nil || e != nil {
+		t.Fatalf("none provider should yield a nil embedder, got %v %v", e, err)
+	}
+	if _, err := Build("ollama", "", ""); err == nil {
+		t.Fatal("ollama without a model should error")
+	}
+	if e, err := Build("ollama", "nomic-embed-text", ""); err != nil || e == nil {
+		t.Fatalf("ollama with a model should build, got %v %v", e, err)
+	}
+	if _, err := Build("magic", "m", ""); err == nil {
+		t.Fatal("unknown provider should error")
+	}
+}
+
 func TestNewOllamaDefaultsBaseURL(t *testing.T) {
 	embedder := NewOllama("", "m")
 	if embedder.BaseURL != defaultOllamaURL {

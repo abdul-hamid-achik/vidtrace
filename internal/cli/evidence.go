@@ -10,22 +10,6 @@ import (
 	"github.com/abdul-hamid-achik/vidtrace/internal/evidence"
 )
 
-// buildEmbedder constructs an Embedder from CLI flags. An empty provider returns
-// a nil Embedder (keyword-only). Currently only Ollama is supported.
-func buildEmbedder(provider, model, ollamaURL string) (embed.Embedder, error) {
-	switch strings.TrimSpace(strings.ToLower(provider)) {
-	case "", "none":
-		return nil, nil
-	case embed.ProviderOllama:
-		if strings.TrimSpace(model) == "" {
-			return nil, fmt.Errorf("--embed-model is required for the ollama provider")
-		}
-		return embed.NewOllama(ollamaURL, model), nil
-	default:
-		return nil, fmt.Errorf("unknown embedding provider %q (supported: ollama)", provider)
-	}
-}
-
 func runIndex(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("index", flag.ContinueOnError)
 	fs.SetOutput(stderr)
@@ -61,7 +45,7 @@ func runIndex(args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		return writeEvidenceFailure(stdout, stderr, *jsonOutput, fmt.Errorf("resolve db path: %w", err), "index")
 	}
-	embedder, err := buildEmbedder(*embedProvider, *embedModel, *ollamaURL)
+	embedder, err := embed.Build(*embedProvider, *embedModel, *ollamaURL)
 	if err != nil {
 		return writeEvidenceFailure(stdout, stderr, *jsonOutput, err, "index")
 	}
@@ -175,7 +159,7 @@ func runSearch(args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		return writeEvidenceFailure(stdout, stderr, *jsonOutput, fmt.Errorf("resolve db path: %w", err), "search")
 	}
-	embedder, err := buildEmbedder(*embedProvider, *embedModel, *ollamaURL)
+	embedder, err := embed.Build(*embedProvider, *embedModel, *ollamaURL)
 	if err != nil {
 		return writeEvidenceFailure(stdout, stderr, *jsonOutput, err, "search")
 	}

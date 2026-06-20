@@ -163,3 +163,20 @@ func (o *Ollama) embedBatch(ctx context.Context, texts []string) ([][]float32, e
 func (o *Ollama) Profile() Profile {
 	return Profile{Provider: ProviderOllama, Model: o.Model, Dimensions: o.dims}
 }
+
+// Build constructs an Embedder from a provider name, model, and optional base
+// URL. An empty (or "none") provider returns a nil Embedder for keyword-only
+// use. It is the single constructor shared by the CLI and the MCP server.
+func Build(provider, model, ollamaURL string) (Embedder, error) {
+	switch strings.TrimSpace(strings.ToLower(provider)) {
+	case "", "none":
+		return nil, nil
+	case ProviderOllama:
+		if strings.TrimSpace(model) == "" {
+			return nil, fmt.Errorf("embedding model is required for the ollama provider")
+		}
+		return NewOllama(ollamaURL, model), nil
+	default:
+		return nil, fmt.Errorf("unknown embedding provider %q (supported: ollama)", provider)
+	}
+}
