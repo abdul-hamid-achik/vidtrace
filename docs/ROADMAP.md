@@ -81,6 +81,6 @@ See the repository root `BACKLOG.md` for prioritized work beyond the roadmap.
 
 ## Iteration 11: Agent Tooling
 
-- Add an MCP server using the Go MCP SDK.
-- Expose read-only bundle validation, evidence search, compare, and analysis tools.
-- Keep tool responses aligned with CLI JSON contracts.
+- Add an MCP server using the Go MCP SDK. Done with `vidtrace mcp`.
+- Expose read-only bundle validation, evidence search, compare, analysis, and investigation tools. Done.
+- Keep tool responses aligned with CLI JSON contracts. Done.

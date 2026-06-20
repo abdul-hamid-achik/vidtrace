@@ -44,6 +44,8 @@ func Run(args []string, stdout, stderr io.Writer, version string) int {
 		return runCompare(args[1:], stdout, stderr)
 	case "validate":
 		return runValidate(args[1:], stdout, stderr)
+	case "mcp":
+		return runMCP(args[1:], stderr, version)
 	case "docs":
 		return runDocs(args[1:], stdout, stderr)
 	case "studio":
@@ -262,6 +264,7 @@ Commands:
   extract      Extract frames, OCR, transcript, metadata, and timeline artifacts
   index        Index bundle evidence into a local VecLite database
   investigate  Create a video-evidence to code-search handoff
+  mcp          Run the MCP server (read-only evidence tools over stdio)
   search       Search an evidence database for timestamped video evidence
   studio       Open the artifact inspection studio
   validate     Validate an artifact bundle, optionally as JSON

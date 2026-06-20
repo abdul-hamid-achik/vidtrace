@@ -383,6 +383,36 @@ Example failure JSON:
 }
 ```
 
+### `vidtrace mcp`
+
+Runs a Model Context Protocol server over stdio so agent clients can call vidtrace's read-only evidence tools without shell parsing. Built on the official Go MCP SDK.
+
+```bash
+vidtrace mcp
+```
+
+It exposes these read-only tools, whose inputs and structured outputs mirror the corresponding `--json` contracts:
+
+| Tool | Purpose |
+|---|---|
+| `validate` | Validate an artifact bundle (`bundle_dir`). |
+| `search` | Search an evidence database (`db_path`, `query`, optional `mode`, filters, and `embed`/`embed_model`/`ollama_url`). |
+| `compare` | Structured ticket-vs-bundle comparison (`bundle_dir`, `ticket_path`). |
+| `analyze` | Markdown evidence report (`bundle_dir`, `ticket_path`). |
+| `investigate` | Video-evidence to code-search handoff (`bundle_dir`, `query`, optional `codebase_dir`). |
+
+No tool mutates source videos or generated artifact bundles. Tool failures are returned as MCP tool errors (visible to the model), not protocol errors. A client disconnect (stdin EOF) is a clean shutdown.
+
+Example client registration (Claude Desktop / MCP client config):
+
+```json
+{
+  "mcpServers": {
+    "vidtrace": { "command": "vidtrace", "args": ["mcp"] }
+  }
+}
+```
+
 ## Planned Commands
 
 ### `vidtrace timeline`

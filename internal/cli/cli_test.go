@@ -614,6 +614,25 @@ func TestSearchBundleAndSourceFiltersJSON(t *testing.T) {
 	}
 }
 
+func TestMCPRejectsExtraArgs(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"mcp", "unexpected"}, &stdout, &stderr, "test")
+	if code != 2 {
+		t.Fatalf("expected exit 2 for extra args, got %d", code)
+	}
+	if !strings.Contains(stderr.String(), "usage: vidtrace mcp") {
+		t.Fatalf("expected usage message, got %q", stderr.String())
+	}
+}
+
+func TestHelpListsMCPCommand(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	Run([]string{"help"}, &stdout, &stderr, "test")
+	if !strings.Contains(stdout.String(), "mcp ") {
+		t.Fatalf("expected help to list the mcp command, got:\n%s", stdout.String())
+	}
+}
+
 func TestSemanticIndexAndSearchViaOllamaHTTP(t *testing.T) {
 	// A stand-in Ollama server returns deterministic fixed-dimension vectors so
 	// the CLI -> embed -> evidence wiring is exercised without a live model.

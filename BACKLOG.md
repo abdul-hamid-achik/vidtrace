@@ -4,6 +4,18 @@ This backlog keeps product ideas, engineering work, and integration bets visible
 
 ## Recently Completed
 
+### MCP Server with Go SDK
+
+As a coding agent, I want vidtrace to expose bundle validation, evidence search, and analysis through MCP tools, so that agent clients can call vidtrace without shell parsing.
+
+Acceptance criteria:
+
+- [x] Use the official Go MCP SDK instead of a custom protocol layer.
+- [x] Add read-only tools for `validate`, `search`, `compare`, and `analyze` (plus `investigate`).
+- [x] Keep tool responses structured and aligned with existing `--json` contracts.
+- [x] Do not expose commands that mutate videos or generated bundles by default.
+- [x] Add tests for tool schemas and handler responses (handlers plus an in-memory round trip).
+
 ### v0.5.0 Release
 
 As a maintainer, I can ship the Studio review, BM25 evidence search, investigation handoff, and VitePress docs work as a tagged release.
@@ -148,17 +160,7 @@ Acceptance criteria:
 
 ## Now
 
-### MCP Server with Go SDK
-
-As a coding agent, I want vidtrace to expose bundle validation, evidence search, and analysis through MCP tools, so that agent clients can call vidtrace without shell parsing.
-
-Acceptance criteria:
-
-- [ ] Use the official Go MCP SDK used by the local toolchain instead of a custom protocol layer.
-- [ ] Add read-only tools for `validate`, `search`, `compare`, and `analyze`.
-- [ ] Keep tool responses structured and aligned with existing `--json` contracts.
-- [ ] Do not expose commands that mutate videos or generated bundles by default.
-- [ ] Add tests for tool schemas and handler responses.
+_No active iteration. The next candidates are in **Later**._
 
 ## Later
 
