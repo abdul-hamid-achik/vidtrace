@@ -4,6 +4,10 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+No unreleased changes yet.
+
+## [0.7.0] - 2026-06-20
+
 ### Added
 
 - `vidtrace extract` fails fast when a requested `--ocr-lang` is not installed, listing the missing tesseract language packs before any frames are extracted, instead of failing partway through OCR.

@@ -4,6 +4,17 @@ This backlog keeps product ideas, engineering work, and integration bets visible
 
 ## Recently Completed
 
+### v0.7.0 Release
+
+As a maintainer, I can ship timeline matching v2, multi-language OCR fail-fast, the live progress bar, and the studio agent guard as a tagged release.
+
+Acceptance criteria:
+
+- [x] `CHANGELOG.md` has a `0.7.0` section and `README.md` reports `v0.7.0`.
+- [x] Tag `v0.7.0` is pushed and drives the build version.
+- [x] The GitHub release workflow publishes checksums and Darwin/Linux tarballs.
+- [x] No source videos, generated bundles, databases, or build output are tracked.
+
 ### Multi-Language OCR
 
 As a QA engineer testing localized apps, I want non-English OCR to work, so that UI text in other languages is captured correctly.
