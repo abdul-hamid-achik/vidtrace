@@ -6,7 +6,7 @@ Turn bug videos into timestamped evidence bundles that humans and coding agents 
 
 ## Status
 
-`v0.9.0` is published. The Go CLI extracts evidence bundles (with a live progress bar on a terminal and fail-fast OCR-language checks), emits stable JSON for automation, validates bundles, compares and analyzes a ticket against video evidence, opens a compact terminal Studio for human review (and refuses non-interactive callers so agents are never trapped in the TUI), searches bundle evidence (BM25 keyword plus optional semantic and hybrid search via Ollama) with bundle, source-video, evidence-source, and time-window filters across many bundles, and exposes read-only evidence tools to agents over MCP (`vidtrace mcp`). It ships through GitHub Releases as cross-platform archives (macOS binaries signed with a Developer ID certificate and notarized by Apple), Linux `.deb`/`.rpm` packages, and a Homebrew tap.
+`v0.8.0` is published. The Go CLI extracts evidence bundles (with a live progress bar on a terminal and fail-fast OCR-language checks), emits stable JSON for automation, validates bundles, compares and analyzes a ticket against video evidence, opens a compact terminal Studio for human review (and refuses non-interactive callers so agents are never trapped in the TUI), searches bundle evidence (BM25 keyword plus optional semantic and hybrid search via Ollama) with bundle, source-video, evidence-source, and time-window filters across many bundles, and exposes read-only evidence tools to agents over MCP (`vidtrace mcp`). It ships through GitHub Releases as cross-platform archives, Linux `.deb`/`.rpm` packages, and a Homebrew tap.
 
 Extraction stays independent from the optional VecLite indexes and embedding providers.
 

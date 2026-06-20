@@ -23,24 +23,6 @@ builds:
       - -X main.version={{ .Version }}
     mod_timestamp: "{{ .CommitTimestamp }}"
 
-notarize:
-  macos:
-    # Enabled only when the signing secret is present, so local and fork builds
-    # (and any build missing the secrets) still succeed unsigned. GoReleaser uses
-    # the bundled quill, so no external signing tool is required on the runner.
-    - enabled: '{{ isEnvSet "MACOS_SIGN_P12" }}'
-      ids:
-        - vidtrace
-      sign:
-        certificate: "{{ .Env.MACOS_SIGN_P12 }}"
-        password: "{{ .Env.MACOS_SIGN_PASSWORD }}"
-      notarize:
-        issuer_id: "{{ .Env.APPLE_API_ISSUER_ID }}"
-        key_id: "{{ .Env.APPLE_API_KEY_ID }}"
-        key: "{{ .Env.NOTARY_KEY_B64 }}"
-        wait: true
-        timeout: 20m
-
 archives:
   - id: vidtrace
     ids:
@@ -111,7 +93,17 @@ homebrew_casks:
     description: "Turn bug videos into timestamped evidence bundles for humans and coding agents"
     license: "MIT"
     skip_upload: "{{ if .Env.HOMEBREW_TAP_TOKEN }}false{{ else }}true{{ end }}"
+    hooks:
+      post:
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/vidtrace"]
+          end
     caveats: |
-      The binary is signed with a Developer ID certificate and notarized by Apple.
+      The binary is not signed with an Apple Developer certificate.
+      macOS may show a security warning on first run.
+
+      If macOS blocks the first run, clear quarantine manually:
+        xattr -dr com.apple.quarantine /opt/homebrew/Caskroom/vidtrace/*/vidtrace
 
       Run `vidtrace doctor` after installation to check ffmpeg, ffprobe, tesseract, and whisper.
