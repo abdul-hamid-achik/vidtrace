@@ -73,6 +73,14 @@ For example, `frame_0001.png` is `0` seconds and `frame_0002.png` is `0.5` secon
 
 Empty OCR text is represented as an empty string. This means OCR ran for the frame but no text was detected or retained.
 
+### Transcript matching
+
+Each frame owns the half-open interval from its own `time_seconds` to the **next frame's actual `time_seconds`** (the last frame owns everything to the end of the recording). A transcript segment is attached to every frame whose interval it overlaps, so a sentence spoken across several frames appears on each of them, and the screen visible while it was spoken is always reachable.
+
+This model tiles the whole recording with no gaps and behaves correctly for fractional frame rates and for sparse extraction (when frames are missing, a frame's interval extends to the next frame that actually exists). Because the interval is half-open, a segment that touches a frame boundary is attached to a single frame, not double-counted. A segment that still overlaps no interval — for example a zero-length segment exactly on a boundary — falls back to the nearest frame by its midpoint, so no transcript is dropped.
+
+Limits: matching is purely temporal; it does not align spoken words to the specific on-screen element they refer to, and at sparse frame rates a frame can own a long interval, so an attached segment may have been spoken several seconds before or after that frame was captured.
+
 ## Compatibility
 
 - Add new fields instead of changing field meaning.

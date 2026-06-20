@@ -4,7 +4,9 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
-No unreleased changes yet.
+### Changed
+
+- Timeline transcript matching now tiles each frame to the next actual frame's time as a half-open interval (the last frame extends to the end of the recording). This handles fractional frame rates and missing frames, captures trailing audio on the last frame, and stops boundary segments from being double-counted. A segment that overlaps no interval falls back to the nearest frame by midpoint so no transcript is dropped. The `timeline.json` schema is unchanged.
 
 ## [0.6.0] - 2026-06-20
 

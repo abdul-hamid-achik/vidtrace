@@ -3,6 +3,7 @@ package timeline
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"sort"
@@ -54,9 +55,12 @@ func Build(bundleDir string, framePaths []string, fps float64, transcriptJSONPat
 		return Document{}, err
 	}
 
-	sort.Strings(framePaths)
-	entries := make([]Entry, 0, len(framePaths))
-	for _, framePath := range framePaths {
+	sorted := append([]string(nil), framePaths...)
+	sort.Strings(sorted)
+
+	entries := make([]Entry, 0, len(sorted))
+	frameTimes := make([]float64, 0, len(sorted))
+	for _, framePath := range sorted {
 		index, err := frameIndex(framePath)
 		if err != nil {
 			return Document{}, err
@@ -76,14 +80,65 @@ func Build(bundleDir string, framePaths []string, fps float64, transcriptJSONPat
 				Path: artifacts.RelSlash(bundleDir, ocrPath),
 				Text: ocrText,
 			},
-			Transcript: overlappingSegments(segments, timeSeconds, timeSeconds+(1/fps)),
 		})
+		frameTimes = append(frameTimes, timeSeconds)
 	}
+
+	assignSegments(entries, frameTimes, segments)
 
 	return Document{
 		SchemaVersion: "1",
 		Entries:       entries,
 	}, nil
+}
+
+// assignSegments attaches transcript segments to frames. Each frame owns the
+// half-open interval from its own time to the next frame's actual time; the last
+// frame owns everything to the end of the recording. A segment is attached to
+// every frame whose interval it overlaps, so a sentence spoken across several
+// frames appears on each of them. This tiles the timeline with no gaps even when
+// the frame rate is fractional or some frames are missing, and the half-open
+// bound means a segment touching a boundary is not double-counted.
+//
+// Any segment that overlaps no interval (for example a zero-length segment
+// exactly on a boundary) is attached to the single nearest frame by midpoint, so
+// no transcript is ever dropped.
+func assignSegments(entries []Entry, frameTimes []float64, segments []Segment) {
+	for _, segment := range segments {
+		matched := false
+		for i := range entries {
+			start := frameTimes[i]
+			end := math.Inf(1)
+			if i+1 < len(frameTimes) {
+				end = frameTimes[i+1]
+			}
+			if segment.EndSeconds > start && segment.StartSeconds < end {
+				entries[i].Transcript = append(entries[i].Transcript, segment)
+				matched = true
+			}
+		}
+		if !matched {
+			if nearest := nearestFrame(frameTimes, segmentMidpoint(segment)); nearest >= 0 {
+				entries[nearest].Transcript = append(entries[nearest].Transcript, segment)
+			}
+		}
+	}
+}
+
+func segmentMidpoint(s Segment) float64 {
+	return (s.StartSeconds + s.EndSeconds) / 2
+}
+
+func nearestFrame(frameTimes []float64, t float64) int {
+	best := -1
+	var bestDist float64
+	for i, ft := range frameTimes {
+		dist := math.Abs(t - ft)
+		if best == -1 || dist < bestDist {
+			best, bestDist = i, dist
+		}
+	}
+	return best
 }
 
 func readWhisperSegments(path string) ([]Segment, error) {
@@ -134,14 +189,4 @@ func frameIndex(path string) (int, error) {
 func matchingOCRPath(bundleDir, framePath string) string {
 	base := strings.TrimSuffix(filepath.Base(framePath), filepath.Ext(framePath)) + ".txt"
 	return filepath.Join(bundleDir, "ocr", base)
-}
-
-func overlappingSegments(segments []Segment, start, end float64) []Segment {
-	var matches []Segment
-	for _, segment := range segments {
-		if segment.EndSeconds >= start && segment.StartSeconds <= end {
-			matches = append(matches, segment)
-		}
-	}
-	return matches
 }

@@ -21,7 +21,7 @@
 - Add `metadata.json` from `ffprobe`. Done.
 - Add stable run summary JSON. Done.
 - Add initial `timeline.json` from OCR and transcript files. Done.
-- Improve timeline matching and add focused unit tests.
+- Improve timeline matching and add focused unit tests. Done: half-open tiling by actual next-frame time, trailing-audio capture, and a nearest-frame fallback, with fractional/boundary/sparse tests.
 
 ## Iteration 4: E2E Coverage
 

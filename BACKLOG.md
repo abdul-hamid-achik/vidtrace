@@ -4,6 +4,18 @@ This backlog keeps product ideas, engineering work, and integration bets visible
 
 ## Recently Completed
 
+### Timeline Matching V2
+
+As a coding agent, I want `timeline.json` to align transcript segments to frames beyond simple fixed windows, so that evidence citations stay useful for fractional and sparse frame rates.
+
+Acceptance criteria:
+
+- [x] Document the matching model and its limits (`docs/ARTIFACT_SCHEMA.md`).
+- [x] Tile each frame to the next actual frame's time (half-open) so fractional FPS and missing frames are handled, and a boundary segment is not double-counted.
+- [x] Attach trailing audio after the last frame to the last frame.
+- [x] Add nearest-frame fallback so a segment overlapping no interval is never dropped.
+- [x] Add tests for fractional FPS, boundary, trailing, spanning, and fallback behavior; keep the JSON schema unchanged.
+
 ### v0.6.0 Release
 
 As a maintainer, I can ship the evidence-search filters, multi-bundle indexing, semantic/hybrid search via Ollama, investigate noise filtering, the e2e spec reorg, and the MCP server as a tagged release.
@@ -174,17 +186,6 @@ Acceptance criteria:
 _No active iteration. The next candidates are in **Later**._
 
 ## Later
-
-### Timeline Matching V2
-
-As a coding agent, I want `timeline.json` to align transcript segments and OCR frames beyond simple frame windows, so that evidence citations stay useful for fast UI changes.
-
-Acceptance criteria:
-
-- [ ] Document the current overlap model and its limits.
-- [ ] Add tests for fractional FPS and transcript boundary behavior.
-- [ ] Consider nearest-frame matching for sparse frame rates.
-- [ ] Keep schema changes additive.
 
 ### Multi-Language OCR
 
