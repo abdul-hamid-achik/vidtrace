@@ -4,6 +4,16 @@ This backlog keeps product ideas, engineering work, and integration bets visible
 
 ## Recently Completed
 
+### v0.8.0 Release
+
+As a maintainer, I can ship Linux `.deb`/`.rpm` packages and the documented distribution decisions as a tagged release.
+
+Acceptance criteria:
+
+- [x] `CHANGELOG.md` has a `0.8.0` section and `README.md` reports `v0.8.0`.
+- [x] Tag `v0.8.0` is pushed and the release publishes Linux `.deb`/`.rpm` (amd64 + arm64) alongside the archives and checksums.
+- [x] CI and the release workflow pass.
+
 ### v0.7.0 Release
 
 As a maintainer, I can ship timeline matching v2, multi-language OCR fail-fast, the live progress bar, and the studio agent guard as a tagged release.

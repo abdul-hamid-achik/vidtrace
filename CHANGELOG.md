@@ -4,6 +4,10 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+No unreleased changes yet.
+
+## [0.8.0] - 2026-06-20
+
 ### Added
 
 - Linux `.deb` and `.rpm` packages (amd64 and arm64) are published with each release via nfpms and documented in `docs/INSTALL.md`. The Homebrew-cask-vs-formula decision and an Apple signing/notarization playbook are recorded in `docs/RELEASE.md`.
