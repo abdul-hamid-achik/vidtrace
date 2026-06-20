@@ -35,6 +35,11 @@ type Segment struct {
 	Text         string  `json:"text"`
 }
 
+type frameRef struct {
+	path  string
+	index int
+}
+
 type whisperDocument struct {
 	Segments []whisperSegment `json:"segments"`
 }
@@ -55,19 +60,25 @@ func Build(bundleDir string, framePaths []string, fps float64, transcriptJSONPat
 		return Document{}, err
 	}
 
-	sorted := append([]string(nil), framePaths...)
-	sort.Strings(sorted)
-
-	entries := make([]Entry, 0, len(sorted))
-	frameTimes := make([]float64, 0, len(sorted))
-	for _, framePath := range sorted {
+	// Order by the parsed numeric frame index, not by lexical path. The extractor
+	// pads to a minimum width (frame_%04d), so frame_10000.png sorts before
+	// frame_9999.png lexically; sorting by index keeps frame times ascending,
+	// which the interval tiling below relies on, and emits entries in time order.
+	refs := make([]frameRef, 0, len(framePaths))
+	for _, framePath := range framePaths {
 		index, err := frameIndex(framePath)
 		if err != nil {
 			return Document{}, err
 		}
+		refs = append(refs, frameRef{path: framePath, index: index})
+	}
+	sort.SliceStable(refs, func(i, j int) bool { return refs[i].index < refs[j].index })
 
-		timeSeconds := float64(index-1) / fps
-		ocrPath := matchingOCRPath(bundleDir, framePath)
+	entries := make([]Entry, 0, len(refs))
+	frameTimes := make([]float64, 0, len(refs))
+	for _, ref := range refs {
+		timeSeconds := float64(ref.index-1) / fps
+		ocrPath := matchingOCRPath(bundleDir, ref.path)
 		ocrText := ""
 		if data, err := os.ReadFile(ocrPath); err == nil {
 			ocrText = strings.TrimSpace(string(data))
@@ -75,7 +86,7 @@ func Build(bundleDir string, framePaths []string, fps float64, transcriptJSONPat
 
 		entries = append(entries, Entry{
 			TimeSeconds: timeSeconds,
-			Frame:       artifacts.RelSlash(bundleDir, framePath),
+			Frame:       artifacts.RelSlash(bundleDir, ref.path),
 			OCR: OCR{
 				Path: artifacts.RelSlash(bundleDir, ocrPath),
 				Text: ocrText,

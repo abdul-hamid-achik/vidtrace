@@ -1,9 +1,11 @@
 package timeline
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -158,6 +160,111 @@ func TestBuildNearestFrameFallbackForUncoveredSegment(t *testing.T) {
 	assertTexts(t, "frame1", doc.Entries[0].Transcript)
 	assertTexts(t, "frame2", doc.Entries[1].Transcript, "zero")
 	assertTexts(t, "frame3", doc.Entries[2].Transcript)
+}
+
+func TestBuildOrdersFramesByNumericIndexAcrossWidthBoundary(t *testing.T) {
+	t.Parallel()
+	// Past 9999 frames the %04d names are wider; lexical order would mis-sort
+	// frame_10000.png before frame_9999.png. Build must order by numeric index so
+	// frame times stay ascending and matching stays correct. Pass shuffled.
+	doc := buildDocFrames(t, 1, []int{10000, 9998, 10001, 9999}, `[
+		{"start": 9999.2, "end": 9999.4, "text": "boundary"}
+	]`)
+	wantTimes := []float64{9997, 9998, 9999, 10000}
+	for i, want := range wantTimes {
+		if doc.Entries[i].TimeSeconds != want {
+			t.Fatalf("entry %d time = %v, want %v (entries must be ascending by index)", i, doc.Entries[i].TimeSeconds, want)
+		}
+	}
+	// The segment at ~9999.3 belongs to the frame at t=9999 (index 10000), exactly once.
+	assertTexts(t, "t=9997", doc.Entries[0].Transcript)
+	assertTexts(t, "t=9998", doc.Entries[1].Transcript)
+	assertTexts(t, "t=9999", doc.Entries[2].Transcript, "boundary")
+	assertTexts(t, "t=10000", doc.Entries[3].Transcript)
+}
+
+func TestBuildFramesNotStartingAtIndexOne(t *testing.T) {
+	t.Parallel()
+	// Frames starting at index 3 -> times [2,3,4]. A segment before the first
+	// frame overlaps no interval and falls back to the nearest (first) frame.
+	doc := buildDocFrames(t, 1, []int{3, 4, 5}, `[{"start": 0, "end": 1, "text": "early"}]`)
+	if doc.Entries[0].TimeSeconds != 2 || doc.Entries[2].TimeSeconds != 4 {
+		t.Fatalf("frame times = %v, want first 2 / last 4", []float64{doc.Entries[0].TimeSeconds, doc.Entries[2].TimeSeconds})
+	}
+	assertTexts(t, "frame@2", doc.Entries[0].Transcript, "early")
+}
+
+func TestBuildNonConsecutiveFrameIndicesExtendInterval(t *testing.T) {
+	t.Parallel()
+	// A missing middle frame: indices 1 and 4 -> times [0,3]. A segment in the gap
+	// attaches to the earlier frame, whose interval extends to the next real frame.
+	doc := buildDocFrames(t, 1, []int{1, 4}, `[{"start": 1.5, "end": 2.0, "text": "gap"}]`)
+	assertTexts(t, "frame@0", doc.Entries[0].Transcript, "gap")
+	assertTexts(t, "frame@3", doc.Entries[1].Transcript)
+}
+
+func TestBuildNearestFrameFallbackHandlesMultipleUncoveredSegments(t *testing.T) {
+	t.Parallel()
+	// fps 1 -> times [0,1,2]. Two zero-length segments on boundaries overlap no
+	// interval; each must land on its own nearest frame.
+	doc := buildDocFrames(t, 1, []int{1, 2, 3}, `[
+		{"start": 1, "end": 1, "text": "one"},
+		{"start": 2, "end": 2, "text": "two"}
+	]`)
+	assertTexts(t, "frame@0", doc.Entries[0].Transcript)
+	assertTexts(t, "frame@1", doc.Entries[1].Transcript, "one")
+	assertTexts(t, "frame@2", doc.Entries[2].Transcript, "two")
+}
+
+func TestBuildEmptyTranscriptMarshalsToNull(t *testing.T) {
+	t.Parallel()
+	doc := buildDocFrames(t, 1, []int{1, 2}, `[{"start": 0, "end": 0.5, "text": "a"}]`)
+	raw, err := json.Marshal(doc)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if !strings.Contains(string(raw), `"transcript":null`) {
+		t.Fatalf("expected an entry with \"transcript\":null, got: %s", raw)
+	}
+}
+
+func TestNearestFrameBreaksTiesToEarlierFrame(t *testing.T) {
+	t.Parallel()
+	if got := nearestFrame([]float64{0, 2}, 1); got != 0 {
+		t.Fatalf("nearestFrame tie should pick the earlier frame, got index %d", got)
+	}
+	if got := nearestFrame([]float64{0, 2, 4}, 3); got != 1 {
+		t.Fatalf("nearestFrame(3) over [0,2,4] = %d, want 1", got)
+	}
+	if got := nearestFrame(nil, 1); got != -1 {
+		t.Fatalf("nearestFrame over no frames = %d, want -1", got)
+	}
+}
+
+func buildDocFrames(t *testing.T, fps float64, indices []int, segmentsJSON string) Document {
+	t.Helper()
+	dir := t.TempDir()
+	mustMkdir(t, filepath.Join(dir, "frames"))
+	mustMkdir(t, filepath.Join(dir, "ocr"))
+	var frames []string
+	for _, i := range indices {
+		p := filepath.Join(dir, "frames", fmt.Sprintf("frame_%04d.png", i))
+		mustWrite(t, p, "f")
+		frames = append(frames, p)
+	}
+	transcriptPath := ""
+	if segmentsJSON != "" {
+		transcriptPath = filepath.Join(dir, "transcript.json")
+		mustWrite(t, transcriptPath, fmt.Sprintf(`{"segments": %s}`, segmentsJSON))
+	}
+	doc, err := Build(dir, frames, fps, transcriptPath)
+	if err != nil {
+		t.Fatalf("Build() failed: %v", err)
+	}
+	if len(doc.Entries) != len(indices) {
+		t.Fatalf("len(Entries) = %d, want %d", len(doc.Entries), len(indices))
+	}
+	return doc
 }
 
 func buildDoc(t *testing.T, fps float64, numFrames int, segmentsJSON string) Document {
