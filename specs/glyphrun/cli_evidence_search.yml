@@ -135,3 +135,8 @@ outcomes:
     verify:
       command:
         run: "cp -r .glyphrun/tmp/evidence/sample_artifacts .glyphrun/tmp/evidence/sample_artifacts_b && ./bin/vidtrace index .glyphrun/tmp/evidence/sample_artifacts .glyphrun/tmp/evidence/sample_artifacts_b --db .glyphrun/tmp/evidence/multi.veclite --json | jq -e '(.bundles|length)==2 and (.indexed_entries == ([.bundles[].indexed_entries]|add))' >/dev/null"
+  - id: semantic_without_embedder_fails
+    description: semantic search without an embedding provider fails with a clear error
+    verify:
+      command:
+        run: "./bin/vidtrace search .glyphrun/tmp/evidence/evidence.veclite \"ticket\" --mode semantic --json | grep -q 'requires an embedding provider'"

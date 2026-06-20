@@ -3,6 +3,8 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -609,6 +611,99 @@ func TestSearchBundleAndSourceFiltersJSON(t *testing.T) {
 	minZero := run(t, "--min-time", "0")
 	if minZero.Filters == nil || minZero.Filters.MinTime == nil || *minZero.Filters.MinTime != 0 {
 		t.Fatalf("expected echoed min_time=0, got %#v", minZero.Filters)
+	}
+}
+
+func TestSemanticIndexAndSearchViaOllamaHTTP(t *testing.T) {
+	// A stand-in Ollama server returns deterministic fixed-dimension vectors so
+	// the CLI -> embed -> evidence wiring is exercised without a live model.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Input []string `json:"input"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		vecs := make([][]float32, len(req.Input))
+		for i := range req.Input {
+			vecs[i] = []float32{1, 0.5, 0.25, 0.125}
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"embeddings": vecs})
+	}))
+	defer server.Close()
+
+	bundleDir := writeCLIBundle(t)
+	mustWrite(t, filepath.Join(bundleDir, "frames", "frame_0001.png"), "fake frame")
+	mustWrite(t, filepath.Join(bundleDir, "ocr", "frame_0001.txt"), "Login failed after submit")
+	dbPath := filepath.Join(t.TempDir(), "evidence.veclite")
+
+	var idxOut, idxErr bytes.Buffer
+	idxCode := Run([]string{"index", bundleDir, "--db", dbPath, "--embed", "ollama", "--embed-model", "nomic-embed-text", "--ollama-url", server.URL, "--json"}, &idxOut, &idxErr, "test")
+	if idxCode != 0 {
+		t.Fatalf("semantic index failed: code=%d stderr=%q", idxCode, idxErr.String())
+	}
+	var idxReport struct {
+		OK              bool `json:"ok"`
+		SemanticEntries int  `json:"semantic_entries"`
+		Embedding       *struct {
+			Provider   string `json:"provider"`
+			Dimensions int    `json:"dimensions"`
+		} `json:"embedding"`
+	}
+	if err := json.Unmarshal(idxOut.Bytes(), &idxReport); err != nil {
+		t.Fatalf("expected index JSON, got %q: %v", idxOut.String(), err)
+	}
+	if !idxReport.OK || idxReport.SemanticEntries != 1 || idxReport.Embedding == nil || idxReport.Embedding.Provider != "ollama" || idxReport.Embedding.Dimensions != 4 {
+		t.Fatalf("unexpected semantic index report: %#v", idxReport)
+	}
+
+	var searchOut, searchErr bytes.Buffer
+	searchCode := Run([]string{"search", dbPath, "login problem", "--mode", "hybrid", "--embed", "ollama", "--embed-model", "nomic-embed-text", "--ollama-url", server.URL, "--json"}, &searchOut, &searchErr, "test")
+	if searchCode != 0 {
+		t.Fatalf("semantic search failed: code=%d stderr=%q", searchCode, searchErr.String())
+	}
+	var searchReport struct {
+		OK      bool   `json:"ok"`
+		Mode    string `json:"mode"`
+		Results []struct {
+			Frame string `json:"frame"`
+		} `json:"results"`
+	}
+	if err := json.Unmarshal(searchOut.Bytes(), &searchReport); err != nil {
+		t.Fatalf("expected search JSON, got %q: %v", searchOut.String(), err)
+	}
+	if !searchReport.OK || searchReport.Mode != "hybrid" || len(searchReport.Results) == 0 {
+		t.Fatalf("unexpected hybrid search report: %#v", searchReport)
+	}
+}
+
+func TestSemanticSearchWithoutEmbedderJSONFailure(t *testing.T) {
+	bundleDir := writeCLIBundle(t)
+	mustWrite(t, filepath.Join(bundleDir, "frames", "frame_0001.png"), "fake frame")
+	mustWrite(t, filepath.Join(bundleDir, "ocr", "frame_0001.txt"), "Login failed after submit")
+	dbPath := filepath.Join(t.TempDir(), "evidence.veclite")
+	if code := Run([]string{"index", bundleDir, "--db", dbPath, "--json"}, &bytes.Buffer{}, &bytes.Buffer{}, "test"); code != 0 {
+		t.Fatalf("keyword index failed: %d", code)
+	}
+
+	var out, errBuf bytes.Buffer
+	code := Run([]string{"search", dbPath, "login", "--mode", "semantic", "--json"}, &out, &errBuf, "test")
+	if code != 1 {
+		t.Fatalf("expected exit 1, got %d", code)
+	}
+	if !strings.Contains(out.String(), `"ok": false`) || !strings.Contains(out.String(), "requires an embedding provider") {
+		t.Fatalf("expected embedding-provider error JSON, got %q", out.String())
+	}
+}
+
+func TestIndexRejectsUnknownEmbedProviderJSON(t *testing.T) {
+	bundleDir := writeCLIBundle(t)
+	dbPath := filepath.Join(t.TempDir(), "evidence.veclite")
+	var out, errBuf bytes.Buffer
+	code := Run([]string{"index", bundleDir, "--db", dbPath, "--embed", "magic", "--json"}, &out, &errBuf, "test")
+	if code != 1 {
+		t.Fatalf("expected exit 1, got %d", code)
+	}
+	if !strings.Contains(out.String(), `"ok": false`) || !strings.Contains(out.String(), "unknown embedding provider") {
+		t.Fatalf("expected unknown-provider error JSON, got %q", out.String())
 	}
 }
 

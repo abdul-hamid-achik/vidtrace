@@ -6,16 +6,41 @@ import (
 	"io"
 	"strings"
 
+	"github.com/abdul-hamid-achik/vidtrace/internal/embed"
 	"github.com/abdul-hamid-achik/vidtrace/internal/evidence"
 )
+
+// buildEmbedder constructs an Embedder from CLI flags. An empty provider returns
+// a nil Embedder (keyword-only). Currently only Ollama is supported.
+func buildEmbedder(provider, model, ollamaURL string) (embed.Embedder, error) {
+	switch strings.TrimSpace(strings.ToLower(provider)) {
+	case "", "none":
+		return nil, nil
+	case embed.ProviderOllama:
+		if strings.TrimSpace(model) == "" {
+			return nil, fmt.Errorf("--embed-model is required for the ollama provider")
+		}
+		return embed.NewOllama(ollamaURL, model), nil
+	default:
+		return nil, fmt.Errorf("unknown embedding provider %q (supported: ollama)", provider)
+	}
+}
 
 func runIndex(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("index", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	dbPath := fs.String("db", "", "evidence database path")
+	embedProvider := fs.String("embed", "", "embedding provider for semantic index (e.g. ollama)")
+	embedModel := fs.String("embed-model", "", "embedding model name for the provider")
+	ollamaURL := fs.String("ollama-url", "", "Ollama base URL (default http://localhost:11434)")
 	jsonOutput := fs.Bool("json", false, "print machine-readable JSON")
 
-	normalizedArgs, err := normalizeBundleArgs(args, map[string]struct{}{"json": {}}, map[string]struct{}{"db": {}})
+	normalizedArgs, err := normalizeBundleArgs(args, map[string]struct{}{"json": {}}, map[string]struct{}{
+		"db":          {},
+		"embed":       {},
+		"embed-model": {},
+		"ollama-url":  {},
+	})
 	if err != nil {
 		_, _ = fmt.Fprintln(stderr, err)
 		return 2
@@ -24,7 +49,7 @@ func runIndex(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	if fs.NArg() < 1 {
-		_, _ = fmt.Fprintln(stderr, "usage: vidtrace index /path/to/bundle [/path/to/bundle ...] --db /path/to/evidence.veclite [--json]")
+		_, _ = fmt.Fprintln(stderr, "usage: vidtrace index /path/to/bundle [/path/to/bundle ...] --db /path/to/evidence.veclite [--embed ollama --embed-model MODEL] [--json]")
 		return 2
 	}
 	if strings.TrimSpace(*dbPath) == "" {
@@ -36,6 +61,10 @@ func runIndex(args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		return writeEvidenceFailure(stdout, stderr, *jsonOutput, fmt.Errorf("resolve db path: %w", err), "index")
 	}
+	embedder, err := buildEmbedder(*embedProvider, *embedModel, *ollamaURL)
+	if err != nil {
+		return writeEvidenceFailure(stdout, stderr, *jsonOutput, err, "index")
+	}
 
 	// Single bundle keeps the original IndexReport contract unchanged.
 	if fs.NArg() == 1 {
@@ -46,6 +75,7 @@ func runIndex(args []string, stdout, stderr io.Writer) int {
 		report, err := evidence.IndexBundle(evidence.IndexOptions{
 			BundleDir: resolvedBundlePath,
 			DBPath:    resolvedDBPath,
+			Embedder:  embedder,
 		})
 		if err != nil {
 			return writeEvidenceFailure(stdout, stderr, *jsonOutput, err, "index")
@@ -62,6 +92,9 @@ func runIndex(args []string, stdout, stderr io.Writer) int {
 		_, _ = fmt.Fprintf(stdout, "DB: %s\n", report.DBPath)
 		_, _ = fmt.Fprintf(stdout, "Collection: %s\n", report.Collection)
 		_, _ = fmt.Fprintf(stdout, "Entries: %d indexed, %d inserted, %d updated\n", report.IndexedEntries, report.InsertedEntries, report.UpdatedEntries)
+		if report.SemanticEntries > 0 {
+			_, _ = fmt.Fprintf(stdout, "Semantic: %d entries (%s/%s)\n", report.SemanticEntries, report.Embedding.Provider, report.Embedding.Model)
+		}
 		return 0
 	}
 
@@ -74,7 +107,7 @@ func runIndex(args []string, stdout, stderr io.Writer) int {
 		}
 		bundlePaths = append(bundlePaths, resolved)
 	}
-	report, err := evidence.IndexBundles(bundlePaths, resolvedDBPath)
+	report, err := evidence.IndexBundles(bundlePaths, resolvedDBPath, embedder)
 	if err != nil {
 		return writeEvidenceFailure(stdout, stderr, *jsonOutput, err, "index")
 	}
@@ -93,6 +126,9 @@ func runIndex(args []string, stdout, stderr io.Writer) int {
 		_, _ = fmt.Fprintf(stdout, "  - %s: %d indexed, %d inserted, %d updated\n", b.BundleDir, b.IndexedEntries, b.InsertedEntries, b.UpdatedEntries)
 	}
 	_, _ = fmt.Fprintf(stdout, "Total: %d indexed, %d inserted, %d updated\n", report.IndexedEntries, report.InsertedEntries, report.UpdatedEntries)
+	if report.SemanticEntries > 0 {
+		_, _ = fmt.Fprintf(stdout, "Semantic: %d entries (%s/%s)\n", report.SemanticEntries, report.Embedding.Provider, report.Embedding.Model)
+	}
 	return 0
 }
 
@@ -106,6 +142,10 @@ func runSearch(args []string, stdout, stderr io.Writer) int {
 	source := fs.String("source", "", "filter results by evidence source (e.g. timeline)")
 	minTime := fs.Float64("min-time", 0, "filter results at or after this time in seconds")
 	maxTime := fs.Float64("max-time", 0, "filter results at or before this time in seconds")
+	mode := fs.String("mode", "keyword", "search mode: keyword, semantic, or hybrid")
+	embedProvider := fs.String("embed", "", "embedding provider for semantic/hybrid search (e.g. ollama)")
+	embedModel := fs.String("embed-model", "", "embedding model name for the provider")
+	ollamaURL := fs.String("ollama-url", "", "Ollama base URL (default http://localhost:11434)")
 
 	normalizedArgs, err := normalizeBundleArgs(args, map[string]struct{}{"json": {}}, map[string]struct{}{
 		"limit":        {},
@@ -114,6 +154,10 @@ func runSearch(args []string, stdout, stderr io.Writer) int {
 		"source":       {},
 		"min-time":     {},
 		"max-time":     {},
+		"mode":         {},
+		"embed":        {},
+		"embed-model":  {},
+		"ollama-url":   {},
 	})
 	if err != nil {
 		_, _ = fmt.Fprintln(stderr, err)
@@ -123,7 +167,7 @@ func runSearch(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	if fs.NArg() < 2 {
-		_, _ = fmt.Fprintln(stderr, "usage: vidtrace search /path/to/evidence.veclite QUERY [--limit N] [--bundle DIR] [--source-video PATH] [--source SOURCE] [--min-time SECONDS] [--max-time SECONDS] [--json]")
+		_, _ = fmt.Fprintln(stderr, "usage: vidtrace search /path/to/evidence.veclite QUERY [--mode keyword|semantic|hybrid] [--embed ollama --embed-model MODEL] [--limit N] [--bundle DIR] [--source-video PATH] [--source SOURCE] [--min-time SECONDS] [--max-time SECONDS] [--json]")
 		return 2
 	}
 
@@ -131,10 +175,16 @@ func runSearch(args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		return writeEvidenceFailure(stdout, stderr, *jsonOutput, fmt.Errorf("resolve db path: %w", err), "search")
 	}
+	embedder, err := buildEmbedder(*embedProvider, *embedModel, *ollamaURL)
+	if err != nil {
+		return writeEvidenceFailure(stdout, stderr, *jsonOutput, err, "search")
+	}
 	searchOpts := evidence.SearchOptions{
 		DBPath:      resolvedDBPath,
 		Query:       strings.Join(fs.Args()[1:], " "),
 		Limit:       *limit,
+		Mode:        *mode,
+		Embedder:    embedder,
 		SourceVideo: strings.TrimSpace(*sourceVideo),
 		Source:      strings.TrimSpace(*source),
 	}
@@ -168,7 +218,7 @@ func runSearch(args []string, stdout, stderr io.Writer) int {
 		return 0
 	}
 
-	_, _ = fmt.Fprintf(stdout, "vidtrace search: %d result(s)\n", len(report.Results))
+	_, _ = fmt.Fprintf(stdout, "vidtrace search (%s): %d result(s)\n", report.Mode, len(report.Results))
 	for _, result := range report.Results {
 		_, _ = fmt.Fprintf(stdout, "  - %.2fs %s score %.3f: %s\n", result.TimeSeconds, result.Frame, result.Score, conciseEvidenceText(result, 160))
 	}

@@ -49,6 +49,15 @@ Index several bundles into one database (a shell glob expands to multiple paths)
 vidtrace index /tmp/vidtrace-real/bug_artifacts_* --db /tmp/vidtrace-evidence.veclite --json
 ```
 
+For semantic and hybrid search, also build an embedding index with a running [Ollama](https://ollama.com) server, then search with `--mode`:
+
+```bash
+vidtrace index "$output_dir" --db /tmp/vidtrace-evidence.veclite --embed ollama --embed-model nomic-embed-text --json
+vidtrace search /tmp/vidtrace-evidence.veclite "a task click does nothing" --mode hybrid --embed ollama --embed-model nomic-embed-text --json
+```
+
+Keyword search remains the default and needs no embedder. `vidtrace doctor` reports whether Ollama is installed.
+
 One database can index many bundles. Narrow a search to a single bundle, source video, evidence source, or time window:
 
 ```bash

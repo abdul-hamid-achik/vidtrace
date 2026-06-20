@@ -16,6 +16,7 @@ import (
 type Result struct {
 	OK                   bool         `json:"ok"`
 	Tools                []ToolStatus `json:"tools"`
+	OptionalTools        []ToolStatus `json:"optional_tools,omitempty"`
 	TesseractLanguages   []string     `json:"tesseract_languages,omitempty"`
 	WhisperCachedModels  []string     `json:"whisper_cached_models,omitempty"`
 	RecommendedNextSteps []string     `json:"recommended_next_steps,omitempty"`
@@ -36,9 +37,15 @@ func Check() Result {
 		checkTool("whisper", "--help"),
 	}
 
+	// Optional tools enable extra features but never fail the doctor check.
+	optionalTools := []ToolStatus{
+		checkTool("ollama", "--version"),
+	}
+
 	result := Result{
 		OK:                  true,
 		Tools:               tools,
+		OptionalTools:       optionalTools,
 		TesseractLanguages:  tesseractLanguages(),
 		WhisperCachedModels: whisperCachedModels(),
 	}
@@ -48,6 +55,10 @@ func Check() Result {
 			result.OK = false
 			result.RecommendedNextSteps = append(result.RecommendedNextSteps, fmt.Sprintf("Install %s and make sure it is on PATH.", tool.Name))
 		}
+	}
+
+	if !optionalTools[0].Found {
+		result.RecommendedNextSteps = append(result.RecommendedNextSteps, "Optional: install Ollama for semantic and hybrid evidence search (vidtrace index/search --embed ollama).")
 	}
 
 	if !contains(result.TesseractLanguages, "eng") {
@@ -83,6 +94,21 @@ func PrintHuman(w io.Writer, result Result) {
 			writeLine(w, "  - %s: %s (%s)", tool.Name, status, tool.Path)
 		} else {
 			writeLine(w, "  - %s: %s", tool.Name, status)
+		}
+	}
+
+	if len(result.OptionalTools) > 0 {
+		writeLine(w, "\nOptional tools:")
+		for _, tool := range result.OptionalTools {
+			status := "missing"
+			if tool.Found {
+				status = "found"
+			}
+			if tool.Path != "" {
+				writeLine(w, "  - %s: %s (%s)", tool.Name, status, tool.Path)
+			} else {
+				writeLine(w, "  - %s: %s", tool.Name, status)
+			}
 		}
 	}
 

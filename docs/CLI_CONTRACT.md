@@ -111,6 +111,24 @@ The command validates each bundle, reads `metadata.json` and `timeline.json`, an
 
 Pass multiple bundle paths (for example a shell glob) to build one searchable database that spans many bundles; combine with the `vidtrace search` filters to narrow back to a single bundle, source video, or time window. All bundle paths are validated before any database write, so an invalid path is rejected before the database is created or modified, and duplicate paths (including symlink aliases) are indexed once. Indexing is idempotent by `evidence_id`, so re-running after an interruption is safe.
 
+Add `--embed ollama --embed-model <model>` to also build a semantic index (vector + content) for semantic and hybrid search. This requires a running Ollama server (default `http://localhost:11434`, override with `--ollama-url`). The keyword index is always built; the embedding flags are additive.
+
+```bash
+vidtrace index /path/to/bundle --db /path/to/evidence.veclite --embed ollama --embed-model nomic-embed-text --json
+```
+
+Index flags:
+
+| Flag | Default | Meaning |
+|---|---|---|
+| `--db` | none (required) | Evidence database path |
+| `--embed` | none | Embedding provider for the semantic index (`ollama`) |
+| `--embed-model` | none | Embedding model name (required with `--embed`) |
+| `--ollama-url` | `http://localhost:11434` | Ollama base URL |
+| `--json` | `false` | Emit machine-readable JSON |
+
+When `--embed` is set, the JSON adds `semantic_entries` and an `embedding` object (`provider`, `model`, `dimensions`); both are omitted for keyword-only indexing. The embedding profile is stored in the database, and indexing or searching it later with a different provider/model is rejected.
+
 Example single-bundle success JSON:
 
 ```json
@@ -174,6 +192,10 @@ Flags:
 
 | Flag | Default | Meaning |
 |---|---|---|
+| `--mode` | `keyword` | Search mode: `keyword`, `semantic`, or `hybrid` |
+| `--embed` | none | Embedding provider for semantic/hybrid search (`ollama`) |
+| `--embed-model` | none | Embedding model name (required with `--embed`) |
+| `--ollama-url` | `http://localhost:11434` | Ollama base URL |
 | `--limit` | `10` | Maximum results |
 | `--bundle` | none | Restrict to one bundle directory (resolved to an absolute path) |
 | `--source-video` | none | Restrict to records whose `source_video` matches exactly |
@@ -181,6 +203,12 @@ Flags:
 | `--min-time` | none | Keep results at or after this time in seconds |
 | `--max-time` | none | Keep results at or before this time in seconds |
 | `--json` | `false` | Emit machine-readable JSON |
+
+`keyword` (the default) uses BM25 and needs no embedder. `semantic` and `hybrid` embed the query and require `--embed` plus a semantic index built with the same provider and model; a mismatch is rejected. The `mode` field in the JSON output reflects the mode used, and all filters above apply in every mode.
+
+```bash
+vidtrace search /path/to/evidence.veclite "clicking a task fails" --mode hybrid --embed ollama --embed-model nomic-embed-text --json
+```
 
 When any filter is active, JSON output adds a `filters` object that echoes the applied filters. It is omitted when no filter is set, so the unfiltered BM25 contract is unchanged. A `--min-time` greater than `--max-time` fails before opening the database.
 

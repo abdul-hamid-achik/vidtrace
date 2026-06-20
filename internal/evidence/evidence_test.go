@@ -1,12 +1,60 @@
 package evidence
 
 import (
+	"context"
 	"fmt"
+	"hash/fnv"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/abdul-hamid-achik/vidtrace/internal/embed"
 )
+
+// fakeEmbedder is a deterministic offline embedder for tests. It hashes words
+// into a fixed-dimension bag-of-words vector and L2-normalizes, so texts sharing
+// words rank closer under cosine similarity. It exercises the semantic pipeline
+// without a live provider; real paraphrase quality comes from a real model.
+type fakeEmbedder struct {
+	model string
+	dims  int
+}
+
+func newFakeEmbedder(model string) fakeEmbedder {
+	return fakeEmbedder{model: model, dims: 32}
+}
+
+func (f fakeEmbedder) Embed(_ context.Context, texts []string) ([][]float32, error) {
+	vectors := make([][]float32, len(texts))
+	for i, text := range texts {
+		vec := make([]float32, f.dims)
+		for _, word := range strings.Fields(strings.ToLower(text)) {
+			h := fnv.New32a()
+			_, _ = h.Write([]byte(word))
+			vec[h.Sum32()%uint32(f.dims)] += 1
+		}
+		var norm float32
+		for _, x := range vec {
+			norm += x * x
+		}
+		if norm > 0 {
+			scale := float32(math.Sqrt(float64(norm)))
+			for j := range vec {
+				vec[j] /= scale
+			}
+		} else {
+			vec[0] = 1 // avoid an all-zero vector
+		}
+		vectors[i] = vec
+	}
+	return vectors, nil
+}
+
+func (f fakeEmbedder) Profile() embed.Profile {
+	return embed.Profile{Provider: "fake", Model: f.model, Dimensions: f.dims}
+}
 
 func TestIndexBundleAndSearchKeywordEvidence(t *testing.T) {
 	bundleDir := writeEvidenceBundle(t)
@@ -328,7 +376,7 @@ func TestIndexBundlesIndexesMultipleBundlesIntoOneDB(t *testing.T) {
 		{time: 0, ocr: "Checkout", transcript: "I open the checkout page"},
 	})
 
-	report, err := IndexBundles([]string{bundleA, bundleB}, dbPath)
+	report, err := IndexBundles([]string{bundleA, bundleB}, dbPath, nil)
 	if err != nil {
 		t.Fatalf("IndexBundles failed: %v", err)
 	}
@@ -348,7 +396,7 @@ func TestIndexBundlesIndexesMultipleBundlesIntoOneDB(t *testing.T) {
 	}
 
 	// Re-indexing the same bundles updates in place rather than duplicating.
-	again, err := IndexBundles([]string{bundleA, bundleB}, dbPath)
+	again, err := IndexBundles([]string{bundleA, bundleB}, dbPath, nil)
 	if err != nil {
 		t.Fatalf("second IndexBundles failed: %v", err)
 	}
@@ -364,7 +412,7 @@ func TestIndexBundlesDeduplicatesRepeatedPaths(t *testing.T) {
 		{time: 1, ocr: "Ticket details", transcript: "click the ticket"},
 	})
 
-	report, err := IndexBundles([]string{bundleA, bundleA}, dbPath)
+	report, err := IndexBundles([]string{bundleA, bundleA}, dbPath, nil)
 	if err != nil {
 		t.Fatalf("IndexBundles failed: %v", err)
 	}
@@ -380,7 +428,7 @@ func TestIndexBundlesFailsFastWithoutWritingDB(t *testing.T) {
 	})
 	invalid := t.TempDir() // empty directory is not a valid bundle
 
-	_, err := IndexBundles([]string{valid, invalid}, dbPath)
+	_, err := IndexBundles([]string{valid, invalid}, dbPath, nil)
 	if err == nil || !strings.Contains(err.Error(), "bundle validation failed") {
 		t.Fatalf("IndexBundles error = %v, want validation failure", err)
 	}
@@ -390,7 +438,7 @@ func TestIndexBundlesFailsFastWithoutWritingDB(t *testing.T) {
 }
 
 func TestIndexBundlesRequiresAtLeastOneBundle(t *testing.T) {
-	_, err := IndexBundles(nil, filepath.Join(t.TempDir(), "evidence.veclite"))
+	_, err := IndexBundles(nil, filepath.Join(t.TempDir(), "evidence.veclite"), nil)
 	if err == nil || !strings.Contains(err.Error(), "at least one bundle") {
 		t.Fatalf("IndexBundles error = %v, want empty-input failure", err)
 	}
@@ -411,7 +459,7 @@ func TestIndexBundlesMixedInsertAndUpdateCounts(t *testing.T) {
 		t.Fatalf("pre-index failed: %v", err)
 	}
 
-	report, err := IndexBundles([]string{bundleA, bundleB}, dbPath)
+	report, err := IndexBundles([]string{bundleA, bundleB}, dbPath, nil)
 	if err != nil {
 		t.Fatalf("IndexBundles failed: %v", err)
 	}
@@ -446,7 +494,7 @@ func TestIndexBundlesDeduplicatesSymlinkAlias(t *testing.T) {
 		t.Skipf("symlink not supported: %v", err)
 	}
 
-	report, err := IndexBundles([]string{bundleA, link}, dbPath)
+	report, err := IndexBundles([]string{bundleA, link}, dbPath, nil)
 	if err != nil {
 		t.Fatalf("IndexBundles failed: %v", err)
 	}
@@ -473,7 +521,7 @@ func TestIndexBundlesPersistsProcessedBundlesOnLaterFailure(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := IndexBundles([]string{good, bad}, dbPath); err == nil {
+	if _, err := IndexBundles([]string{good, bad}, dbPath, nil); err == nil {
 		t.Fatal("expected a load failure for the second bundle")
 	}
 
@@ -487,6 +535,165 @@ func TestIndexBundlesPersistsProcessedBundlesOnLaterFailure(t *testing.T) {
 	}
 	if report.InsertedEntries != 0 || report.UpdatedEntries != 1 {
 		t.Fatalf("expected good bundle already persisted before failure, got: %#v", report)
+	}
+}
+
+func TestIndexAndSearchSemanticAndHybrid(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "evidence.veclite")
+	bundleDir := writeCustomEvidenceBundle(t, "/tmp/ticket.mp4", 10, []evidenceEntry{
+		{time: 0, ocr: "Login screen", transcript: "I am on the login page"},
+		{time: 1, ocr: "Ticket OPG-14010", transcript: "I clicked the ticket and it does not open"},
+	})
+	embedder := newFakeEmbedder("fake-model")
+
+	report, err := IndexBundle(IndexOptions{BundleDir: bundleDir, DBPath: dbPath, Embedder: embedder})
+	if err != nil {
+		t.Fatalf("semantic index failed: %v", err)
+	}
+	if report.SemanticEntries != 2 || report.Embedding == nil || report.Embedding.Model != "fake-model" || report.Embedding.Dimensions != 32 {
+		t.Fatalf("unexpected semantic index report: %#v", report)
+	}
+
+	for _, mode := range []string{ModeSemantic, ModeHybrid} {
+		res, err := Search(SearchOptions{
+			DBPath:   dbPath,
+			Query:    "clicked the ticket and it does not open",
+			Limit:    5,
+			Mode:     mode,
+			Embedder: embedder,
+		})
+		if err != nil {
+			t.Fatalf("%s search failed: %v", mode, err)
+		}
+		if res.Mode != mode || res.Collection != TextCollection {
+			t.Fatalf("%s search wrong mode/collection: %#v", mode, res)
+		}
+		if len(res.Results) == 0 || res.Results[0].Frame != "frames/frame_0002.png" {
+			t.Fatalf("%s search did not rank the matching entry first: %#v", mode, res.Results)
+		}
+	}
+
+	// Keyword still works on the same database after semantic indexing.
+	kw, err := Search(SearchOptions{DBPath: dbPath, Query: "OPG-14010", Mode: ModeKeyword})
+	if err != nil || len(kw.Results) == 0 || kw.Mode != ModeKeyword {
+		t.Fatalf("keyword search regressed after semantic index: %#v err=%v", kw, err)
+	}
+}
+
+func TestSemanticSearchFiltersByBundle(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "evidence.veclite")
+	embedder := newFakeEmbedder("fake-model")
+	bundleA := writeCustomEvidenceBundle(t, "/tmp/a.mp4", 10, []evidenceEntry{
+		{time: 0, ocr: "Checkout", transcript: "the checkout button fails"},
+	})
+	bundleB := writeCustomEvidenceBundle(t, "/tmp/b.mp4", 10, []evidenceEntry{
+		{time: 0, ocr: "Checkout", transcript: "the checkout button fails"},
+	})
+	if _, err := IndexBundles([]string{bundleA, bundleB}, dbPath, embedder); err != nil {
+		t.Fatalf("semantic multi-index failed: %v", err)
+	}
+	absA, _ := filepath.Abs(bundleA)
+
+	res, err := Search(SearchOptions{
+		DBPath:   dbPath,
+		Query:    "checkout button fails",
+		Limit:    10,
+		Mode:     ModeSemantic,
+		Embedder: embedder,
+		Bundle:   bundleA,
+	})
+	if err != nil {
+		t.Fatalf("filtered semantic search failed: %v", err)
+	}
+	if len(res.Results) == 0 {
+		t.Fatal("expected filtered semantic results")
+	}
+	for _, r := range res.Results {
+		if r.Bundle != absA {
+			t.Fatalf("bundle filter leaked %q in semantic mode", r.Bundle)
+		}
+	}
+}
+
+func TestSemanticSearchRequiresEmbedder(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "evidence.veclite")
+	bundleDir := writeCustomEvidenceBundle(t, "/tmp/a.mp4", 10, []evidenceEntry{
+		{time: 0, ocr: "Login", transcript: "open the ticket"},
+	})
+	if _, err := IndexBundle(IndexOptions{BundleDir: bundleDir, DBPath: dbPath, Embedder: newFakeEmbedder("fake-model")}); err != nil {
+		t.Fatalf("index failed: %v", err)
+	}
+	_, err := Search(SearchOptions{DBPath: dbPath, Query: "ticket", Mode: ModeSemantic})
+	if err == nil || !strings.Contains(err.Error(), "requires an embedding provider") {
+		t.Fatalf("Search error = %v, want missing-embedder failure", err)
+	}
+}
+
+func TestSemanticSearchWithoutIndexFails(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "evidence.veclite")
+	bundleDir := writeEvidenceBundle(t)
+	// Keyword-only index: no semantic collection is created.
+	if _, err := IndexBundle(IndexOptions{BundleDir: bundleDir, DBPath: dbPath}); err != nil {
+		t.Fatalf("keyword index failed: %v", err)
+	}
+	_, err := Search(SearchOptions{DBPath: dbPath, Query: "ticket", Mode: ModeSemantic, Embedder: newFakeEmbedder("fake-model")})
+	if err == nil || !strings.Contains(err.Error(), "no semantic index") {
+		t.Fatalf("Search error = %v, want missing-index failure", err)
+	}
+}
+
+func TestKeywordIndexDoesNotCreateSemanticCollection(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "evidence.veclite")
+	bundleDir := writeEvidenceBundle(t)
+	report, err := IndexBundle(IndexOptions{BundleDir: bundleDir, DBPath: dbPath})
+	if err != nil {
+		t.Fatalf("keyword index failed: %v", err)
+	}
+	if report.SemanticEntries != 0 || report.Embedding != nil {
+		t.Fatalf("keyword-only index should not report semantic data: %#v", report)
+	}
+}
+
+func TestSemanticSearchRejectsProfileMismatch(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "evidence.veclite")
+	bundleDir := writeCustomEvidenceBundle(t, "/tmp/a.mp4", 10, []evidenceEntry{
+		{time: 0, ocr: "Login", transcript: "open the ticket"},
+	})
+	if _, err := IndexBundle(IndexOptions{BundleDir: bundleDir, DBPath: dbPath, Embedder: newFakeEmbedder("model-a")}); err != nil {
+		t.Fatalf("index failed: %v", err)
+	}
+	_, err := Search(SearchOptions{DBPath: dbPath, Query: "ticket", Mode: ModeSemantic, Embedder: newFakeEmbedder("model-b")})
+	if err == nil || !strings.Contains(err.Error(), "profile mismatch") {
+		t.Fatalf("Search error = %v, want profile mismatch", err)
+	}
+}
+
+func TestIndexRejectsMixedEmbeddingProfiles(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "evidence.veclite")
+	bundleA := writeCustomEvidenceBundle(t, "/tmp/a.mp4", 10, []evidenceEntry{
+		{time: 0, ocr: "Login", transcript: "open the ticket"},
+	})
+	bundleB := writeCustomEvidenceBundle(t, "/tmp/b.mp4", 10, []evidenceEntry{
+		{time: 0, ocr: "Checkout", transcript: "open the checkout"},
+	})
+	if _, err := IndexBundle(IndexOptions{BundleDir: bundleA, DBPath: dbPath, Embedder: newFakeEmbedder("model-a")}); err != nil {
+		t.Fatalf("first index failed: %v", err)
+	}
+	_, err := IndexBundle(IndexOptions{BundleDir: bundleB, DBPath: dbPath, Embedder: newFakeEmbedder("model-b")})
+	if err == nil || !strings.Contains(err.Error(), "profile mismatch") {
+		t.Fatalf("expected profile mismatch when mixing embedders, got %v", err)
+	}
+}
+
+func TestSearchRejectsUnknownMode(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "evidence.veclite")
+	bundleDir := writeEvidenceBundle(t)
+	if _, err := IndexBundle(IndexOptions{BundleDir: bundleDir, DBPath: dbPath}); err != nil {
+		t.Fatalf("index failed: %v", err)
+	}
+	_, err := Search(SearchOptions{DBPath: dbPath, Query: "ticket", Mode: "fuzzy"})
+	if err == nil || !strings.Contains(err.Error(), "unknown search mode") {
+		t.Fatalf("Search error = %v, want unknown-mode failure", err)
 	}
 }
 

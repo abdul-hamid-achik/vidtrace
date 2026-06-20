@@ -32,6 +32,19 @@ Acceptance criteria:
 - [x] Add unit tests and CLI JSON tests for index/search behavior.
 - [x] Document that vecgrep is the companion codebase search tool after `vidtrace` finds relevant video evidence.
 
+### Semantic and Hybrid Evidence Search
+
+As an agent, I want semantic and hybrid search over video evidence, so that paraphrased bug descriptions find the right timestamp even when the exact words differ.
+
+Acceptance criteria:
+
+- [x] Add explicit embedding provider configuration (`--embed ollama --embed-model`, `--ollama-url`).
+- [x] Store and validate an evidence embedding profile; reject mixing providers/models/dimensions.
+- [x] Add semantic and hybrid search modes (`--mode`) without changing the BM25 JSON contract.
+- [x] Keep keyword search available as the default when no embedding provider is configured.
+- [x] Orchestrate Ollama over HTTP behind an `Embedder` interface; report Ollama as optional in `doctor`.
+- [x] Cover the embed client, semantic/hybrid index and search, profile guard, and CLI wiring with tests.
+
 ### Evidence Search Filters
 
 As an agent, I can search one evidence database that holds many bundles and narrow results to a specific bundle, source video, evidence source, or time window.
@@ -134,17 +147,6 @@ Acceptance criteria:
 - [x] Install, usage, release, site-planning, analysis, and agent docs exist as Markdown.
 
 ## Now
-
-### Semantic and Hybrid Evidence Search
-
-As an agent, I want semantic and hybrid search over video evidence, so that paraphrased bug descriptions find the right timestamp even when the exact words differ.
-
-Acceptance criteria:
-
-- [ ] Add explicit embedding provider configuration.
-- [ ] Store and validate an evidence embedding profile.
-- [ ] Add semantic and hybrid search modes without changing the BM25 JSON contract.
-- [ ] Keep keyword search available when no embedding provider is configured.
 
 ### MCP Server with Go SDK
 

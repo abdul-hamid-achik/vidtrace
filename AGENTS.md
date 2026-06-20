@@ -30,6 +30,7 @@ This file guides coding agents working on `vidtrace`.
   - `ffprobe`
   - `tesseract`
   - `whisper`
+  - `ollama` (optional, for semantic and hybrid evidence search)
 
 ## Architecture Direction
 
@@ -40,7 +41,7 @@ This file guides coding agents working on `vidtrace`.
 - Put bundle loading in `internal/bundle`.
 - Put ticket-vs-video comparison in `internal/analysis`.
 - Put terminal review UI in `internal/studio`.
-- Put future evidence indexing/search in a separate internal package, for example `internal/evidence`.
+- Put evidence indexing/search in `internal/evidence`, and embedding providers behind the `embed.Embedder` interface in `internal/embed`.
 - Put future media-tool wrappers in separate internal packages, for example `internal/ffmpeg`, `internal/tesseract`, and `internal/whisper`.
 - Keep artifact schemas explicit and versionable.
 

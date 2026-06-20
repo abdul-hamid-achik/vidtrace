@@ -75,7 +75,7 @@ See the repository root `BACKLOG.md` for prioritized work beyond the roadmap.
 - Start with BM25 keyword search. Done.
 - Filter search by bundle, source video, evidence source, and time window for multi-bundle databases. Done.
 - Index multiple bundles into one database in a single command. Done.
-- Add semantic and hybrid modes behind explicit embedding config.
+- Add semantic and hybrid modes behind explicit embedding config. Done with an Ollama embedder behind an `Embedder` interface and a stored embedding-profile guard.
 - Keep extraction independent from indexing. Done.
 - Use vecgrep as the codebase search companion after video evidence is found. Done for handoff command suggestions.
 

@@ -47,13 +47,14 @@ Phase 1 uses BM25 only:
 - vector: none; use VecLite text-only records
 - search: `TextSearch` only
 
-Phase 2 adds semantic text and hybrid search behind explicit config:
+Phase 2 adds semantic text and hybrid search behind explicit config (implemented):
 
 - collection: `evidence_entries_text`
-- dimension: configured embedding provider dimension
-- vector: embedding of the same content indexed for BM25
-- search modes: keyword, semantic, hybrid
-- profile guard: reject semantic/hybrid search when provider, model, dimensions, or preprocessor differ from the indexed profile
+- dimension: auto-detected from the configured embedding provider's vectors
+- vector: embedding of the same content indexed for BM25, stored with that content so VecLite `HybridSearch` can combine vector and keyword scores
+- search modes: keyword (default, no provider needed), semantic, hybrid
+- provider: an `Embedder` interface (`internal/embed`) with an Ollama provider that shells out over HTTP, matching how vidtrace orchestrates ffmpeg, ffprobe, tesseract, and whisper
+- profile guard: the embedding profile (provider, model, dimensions) is stored in an `evidence_meta` collection, and indexing or searching with a different provider, model, or dimension is rejected
 
 Future VecLite named vector spaces can merge text and frame embeddings into one logical evidence collection.
 
