@@ -72,7 +72,7 @@ task run -- compare /path/to/bundle --ticket ticket.md --json
 task run -- analyze /path/to/bundle --ticket ticket.md
 ```
 
-Use `vidtrace studio <bundle>` for human inspection. Studio keys include `m` for metadata, `o` to open the selected frame, `r` to reveal it in Finder on macOS, and `c` to copy a concise evidence summary when clipboard tooling is available. Agents should rely on `--json`, `metadata.json`, `timeline.json`, OCR text, transcripts, and selected frame files.
+Use `vidtrace studio <bundle>` for human inspection. Studio keys include `m` for metadata, `o` to open the selected frame, `r` to reveal it in Finder on macOS, and `c` to copy a concise evidence summary when clipboard tooling is available. Studio requires an interactive terminal and exits with guidance if it is run non-interactively, so agents should rely on the `--json` commands (or the `vidtrace mcp` server), `metadata.json`, `timeline.json`, OCR text, transcripts, and selected frame files instead of the TUI.
 
 ## Iteration Strategy
 

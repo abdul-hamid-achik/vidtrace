@@ -11,6 +11,17 @@ import (
 	"github.com/abdul-hamid-achik/vidtrace/internal/timeline"
 )
 
+func TestRunRejectsNonInteractiveTerminal(t *testing.T) {
+	original := interactive
+	t.Cleanup(func() { interactive = original })
+	interactive = func() bool { return false }
+
+	err := Run(t.TempDir())
+	if err == nil || !strings.Contains(err.Error(), "interactive terminal") {
+		t.Fatalf("expected an interactive-terminal error, got %v", err)
+	}
+}
+
 func TestMetadataDetailIncludesReviewFields(t *testing.T) {
 	m := model{bundle: bundle.Bundle{
 		Metadata: bundle.Metadata{

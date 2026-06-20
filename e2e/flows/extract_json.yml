@@ -75,3 +75,8 @@ outcomes:
     verify:
       command:
         run: "test -f .glyphrun/tmp/extract/glyph_artifacts_*/timeline.json && grep -q '\"entries\"' .glyphrun/tmp/extract/glyph_artifacts_*/timeline.json"
+  - id: rejects_unknown_ocr_language
+    description: extraction fails fast when a requested OCR language is not installed
+    verify:
+      command:
+        run: "./bin/vidtrace extract .glyphrun/tmp/input/bug.mp4 --out .glyphrun/tmp/extract-badlang --name bad --ocr-lang zzz --json 2>&1 | grep -q 'language data not installed'"

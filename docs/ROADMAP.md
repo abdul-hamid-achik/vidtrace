@@ -37,7 +37,7 @@ See the repository root `BACKLOG.md` for prioritized work beyond the roadmap.
 - View transcript, OCR, metadata, and frame paths side by side. Done.
 - Jump from timeline entries to frames with open/reveal actions. Done for local platform tools.
 - Copy concise timestamped evidence summaries. Done.
-- Monitor long-running extraction jobs.
+- Monitor long-running extraction jobs. In progress: extraction shows a live `bubbles` progress bar on a TTY and plain step output off a TTY.
 
 ## Iteration 6: Distribution
 

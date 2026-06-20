@@ -71,4 +71,16 @@ vidtrace doctor
 vidtrace docs agent
 ```
 
-If `doctor` reports missing OCR language data, install the requested Tesseract language package before extraction.
+## OCR language data
+
+`vidtrace extract` defaults to English (`--ocr-lang eng`). To OCR other languages, install the matching Tesseract language data and pass them with `+`, for example `--ocr-lang eng+spa`. Extraction fails fast and names any missing packs before doing work, so install them first:
+
+```bash
+# macOS (Homebrew bundles many languages with tesseract; tesseract-lang adds the rest)
+brew install tesseract-lang
+
+# Debian/Ubuntu (one package per language, e.g. Spanish)
+sudo apt-get install tesseract-ocr-spa
+```
+
+List what is installed with `tesseract --list-langs`, or run `vidtrace doctor`, which reports the available Tesseract languages.

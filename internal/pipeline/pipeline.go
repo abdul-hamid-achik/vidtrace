@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"charm.land/bubbles/v2/progress"
 	"github.com/abdul-hamid-achik/vidtrace/internal/artifacts"
 	"github.com/abdul-hamid-achik/vidtrace/internal/ffmpeg"
 	"github.com/abdul-hamid-achik/vidtrace/internal/tesseract"
@@ -26,7 +27,11 @@ type Options struct {
 	OutputParentDir string
 	BundleName      string
 	Progress        io.Writer
-	Now             func() time.Time
+	// Interactive renders a live, in-place progress bar (for a TTY). When false,
+	// progress is emitted as plain one-line-per-step output suitable for logs and
+	// non-interactive callers.
+	Interactive bool
+	Now         func() time.Time
 }
 
 type Summary struct {
@@ -69,6 +74,18 @@ func Run(ctx context.Context, opts Options) (Summary, error) {
 		return Summary{}, fmt.Errorf("whisper model is required")
 	}
 
+	// Fail fast when a requested OCR language is not installed, before extracting
+	// any frames, so the user fixes language data up front instead of after a
+	// long extraction.
+	requestedLanguages := tesseract.SplitLanguages(opts.OCRLanguage)
+	availableLanguages, err := tesseract.AvailableLanguages(ctx)
+	if err != nil {
+		return Summary{}, err
+	}
+	if missing := tesseract.MissingLanguages(requestedLanguages, availableLanguages); len(missing) > 0 {
+		return Summary{}, fmt.Errorf("OCR language data not installed: %s; install the tesseract language pack(s) (see docs/INSTALL.md) or change --ocr-lang", strings.Join(missing, ", "))
+	}
+
 	sourceVideo, err := filepath.Abs(opts.SourceVideo)
 	if err != nil {
 		return Summary{}, fmt.Errorf("resolve source video: %w", err)
@@ -104,9 +121,11 @@ func Run(ctx context.Context, opts Options) (Summary, error) {
 
 	const totalSteps = 7
 
-	progressStep(opts.Progress, 1, totalSteps, "bundle", "created "+bundleDir)
+	reporter := newProgressReporter(opts.Progress, opts.Interactive, totalSteps)
 
-	progressStep(opts.Progress, 2, totalSteps, "metadata", "capturing video metadata")
+	reporter.step(1, "bundle", "created "+bundleDir)
+
+	reporter.step(2, "metadata", "capturing video metadata")
 	mediaMetadata, err := ffmpeg.Probe(ctx, sourceVideo)
 	if err != nil {
 		return Summary{}, err
@@ -132,7 +151,7 @@ func Run(ctx context.Context, opts Options) (Summary, error) {
 		return Summary{}, fmt.Errorf("write metadata.json: %w", err)
 	}
 
-	progressStep(opts.Progress, 3, totalSteps, "frames", "extracting at "+formatFloat(opts.FPS)+" fps")
+	reporter.step(3, "frames", "extracting at "+formatFloat(opts.FPS)+" fps")
 	framesPattern := filepath.Join(bundleDir, "frames", "frame_%04d.png")
 	if err := ffmpeg.ExtractFrames(ctx, sourceVideo, opts.FPS, framesPattern); err != nil {
 		return Summary{}, err
@@ -147,15 +166,17 @@ func Run(ctx context.Context, opts Options) (Summary, error) {
 		return Summary{}, fmt.Errorf("no frames generated")
 	}
 
-	progressStep(opts.Progress, 4, totalSteps, "ocr", fmt.Sprintf("running OCR on %d frames", len(framePaths)))
+	reporter.startItems(4, "ocr", fmt.Sprintf("running OCR on %d frames", len(framePaths)))
 	for i, framePath := range framePaths {
-		progressItem(opts.Progress, 4, totalSteps, "ocr", i+1, len(framePaths), filepath.Base(framePath))
+		reporter.item(4, "ocr", i+1, len(framePaths), filepath.Base(framePath))
 		base := strings.TrimSuffix(filepath.Base(framePath), filepath.Ext(framePath))
 		outputBase := filepath.Join(bundleDir, "ocr", base)
 		if err := tesseract.OCR(ctx, framePath, outputBase, opts.OCRLanguage); err != nil {
+			reporter.finishItems()
 			return Summary{}, err
 		}
 	}
+	reporter.finishItems()
 
 	ocrPaths, err := filepath.Glob(filepath.Join(bundleDir, "ocr", "frame_*.txt"))
 	if err != nil {
@@ -167,7 +188,7 @@ func Run(ctx context.Context, opts Options) (Summary, error) {
 		return Summary{}, err
 	}
 
-	progressStep(opts.Progress, 5, totalSteps, "transcript", "transcribing audio with Whisper "+opts.WhisperModel)
+	reporter.step(5, "transcript", "transcribing audio with Whisper "+opts.WhisperModel)
 	transcriptDir := filepath.Join(bundleDir, "transcript")
 	if err := whisper.Transcribe(ctx, sourceVideo, transcriptDir, opts.WhisperModel, opts.WhisperLanguage); err != nil {
 		return Summary{}, err
@@ -177,7 +198,7 @@ func Run(ctx context.Context, opts Options) (Summary, error) {
 		return Summary{}, err
 	}
 
-	progressStep(opts.Progress, 6, totalSteps, "timeline", "writing timeline.json")
+	reporter.step(6, "timeline", "writing timeline.json")
 	timelineDoc, err := timeline.Build(bundleDir, framePaths, opts.FPS, whisper.JSONPath(transcriptDir, sourceVideo))
 	if err != nil {
 		return Summary{}, err
@@ -204,7 +225,7 @@ func Run(ctx context.Context, opts Options) (Summary, error) {
 		return Summary{}, err
 	}
 
-	progressStep(opts.Progress, 7, totalSteps, "done", bundleDir)
+	reporter.step(7, "done", bundleDir)
 	return summary, nil
 }
 
@@ -316,18 +337,88 @@ func relFiles(bundleDir string, paths []string) []string {
 	return files
 }
 
-func progressStep(w io.Writer, step, total int, label, detail string) {
-	if w == nil {
-		return
-	}
-	writeLine(w, "[%d/%d] %-10s %s %s", step, total, label, progressBar(step, total, 18), detail)
+// progressReporter renders pipeline progress. On a TTY (Interactive) it draws a
+// styled bubbles progress bar and redraws the per-item OCR line in place; off a
+// TTY it emits one plain line per step, which is friendly to logs and agents.
+type progressReporter struct {
+	w           io.Writer
+	interactive bool
+	totalSteps  int
+	bar         progress.Model
+	itemsOpen   bool
 }
 
-func progressItem(w io.Writer, step, total int, label string, done, itemTotal int, detail string) {
-	if w == nil {
+func newProgressReporter(w io.Writer, interactive bool, totalSteps int) *progressReporter {
+	r := &progressReporter{w: w, interactive: interactive, totalSteps: totalSteps}
+	if interactive && w != nil {
+		r.bar = progress.New(progress.WithWidth(24), progress.WithoutPercentage())
+	}
+	return r
+}
+
+func (r *progressReporter) step(step int, label, detail string) {
+	if r == nil || r.w == nil {
 		return
 	}
-	writeLine(w, "[%d/%d] %-10s %s %d/%d %s", step, total, label, progressBar(done, itemTotal, 18), done, itemTotal, detail)
+	r.endItemsLine()
+	writeLine(r.w, "[%d/%d] %-10s %s %s", step, r.totalSteps, label, r.renderBar(step, r.totalSteps), detail)
+}
+
+// startItems begins a per-item phase. Off a TTY it prints a single step line;
+// on a TTY the live item() redraws carry the phase.
+func (r *progressReporter) startItems(step int, label, detail string) {
+	if r == nil || r.w == nil {
+		return
+	}
+	if r.interactive {
+		r.itemsOpen = true
+		return
+	}
+	writeLine(r.w, "[%d/%d] %-10s %s %s", step, r.totalSteps, label, r.renderBar(step, r.totalSteps), detail)
+}
+
+func (r *progressReporter) item(step int, label string, done, itemTotal int, detail string) {
+	if r == nil || r.w == nil || !r.interactive {
+		return
+	}
+	r.itemsOpen = true
+	// \r returns to column 0; \x1b[K clears any leftover from a longer prior line.
+	_, _ = fmt.Fprintf(r.w, "\r[%d/%d] %-10s %s %d/%d %s\x1b[K", step, r.totalSteps, label, r.renderBar(done, itemTotal), done, itemTotal, detail)
+}
+
+func (r *progressReporter) finishItems() {
+	if r == nil || r.w == nil {
+		return
+	}
+	r.endItemsLine()
+}
+
+func (r *progressReporter) endItemsLine() {
+	if r.itemsOpen {
+		_, _ = fmt.Fprint(r.w, "\n")
+		r.itemsOpen = false
+	}
+}
+
+func (r *progressReporter) renderBar(done, total int) string {
+	if r.interactive {
+		return r.bar.ViewAs(fraction(done, total))
+	}
+	return progressBar(done, total, 18)
+}
+
+func fraction(done, total int) float64 {
+	if total <= 0 {
+		return 0
+	}
+	f := float64(done) / float64(total)
+	if f < 0 {
+		return 0
+	}
+	if f > 1 {
+		return 1
+	}
+	return f
 }
 
 func progressBar(done, total, width int) string {

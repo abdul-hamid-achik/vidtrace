@@ -4,9 +4,15 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- `vidtrace extract` fails fast when a requested `--ocr-lang` is not installed, listing the missing tesseract language packs before any frames are extracted, instead of failing partway through OCR.
+
 ### Changed
 
 - Timeline transcript matching now tiles each frame to the next actual frame's time as a half-open interval (the last frame extends to the end of the recording). This handles fractional frame rates and missing frames, captures trailing audio on the last frame, and stops boundary segments from being double-counted. A segment that overlaps no interval falls back to the nearest frame by midpoint so no transcript is dropped. The `timeline.json` schema is unchanged.
+- Human extraction progress now renders a live `bubbles` progress bar that redraws in place on an interactive terminal; piped, captured, or `--json` output stays plain one-line-per-step (no per-frame spam), so logs and agent callers are unaffected.
+- `vidtrace studio` refuses to start when stdin/stdout is not an interactive terminal, returning a clear message that points automated callers to the `--json` commands or `vidtrace docs agent` instead of launching a TUI that would hang or garble their session.
 
 ## [0.6.0] - 2026-06-20
 

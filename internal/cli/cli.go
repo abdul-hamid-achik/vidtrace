@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/charmbracelet/x/term"
+
 	"github.com/abdul-hamid-achik/vidtrace/internal/doctor"
 	"github.com/abdul-hamid-achik/vidtrace/internal/pipeline"
 	"github.com/abdul-hamid-achik/vidtrace/internal/studio"
@@ -128,8 +130,13 @@ func runExtract(args []string, stdout, stderr io.Writer) int {
 	}
 
 	progress := stdout
+	interactive := false
 	if *jsonOutput {
 		progress = nil
+	} else if f, ok := stdout.(*os.File); ok {
+		// Only draw a live progress bar when stdout is a real terminal; piped or
+		// captured output stays plain and parseable.
+		interactive = term.IsTerminal(f.Fd())
 	}
 
 	summary, err := pipeline.Run(context.Background(), pipeline.Options{
@@ -141,6 +148,7 @@ func runExtract(args []string, stdout, stderr io.Writer) int {
 		OutputParentDir: resolvedOutputDir,
 		BundleName:      *bundleName,
 		Progress:        progress,
+		Interactive:     interactive,
 	})
 	if err != nil {
 		return writeExtractFailure(stdout, stderr, *jsonOutput, err)

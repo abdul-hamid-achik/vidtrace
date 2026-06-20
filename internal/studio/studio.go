@@ -11,6 +11,8 @@ import (
 	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/term"
+
 	"github.com/abdul-hamid-achik/vidtrace/internal/bundle"
 	"github.com/abdul-hamid-achik/vidtrace/internal/timeline"
 )
@@ -45,7 +47,16 @@ type externalCommand struct {
 
 type lookPathFunc func(string) (string, error)
 
+// interactive reports whether stdin and stdout are both terminals. It is a
+// variable so tests can force the non-interactive path.
+var interactive = func() bool {
+	return term.IsTerminal(os.Stdin.Fd()) && term.IsTerminal(os.Stdout.Fd())
+}
+
 func Run(bundleDir string) error {
+	if !interactive() {
+		return fmt.Errorf("vidtrace studio needs an interactive terminal; for automation use the JSON commands (validate, search, compare, analyze, investigate) or run 'vidtrace docs agent'")
+	}
 	_, err := tea.NewProgram(initialModel(bundleDir)).Run()
 	return err
 }

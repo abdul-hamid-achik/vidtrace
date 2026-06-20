@@ -30,11 +30,13 @@ func TestProgressBar(t *testing.T) {
 	}
 }
 
-func TestProgressStepAndItem(t *testing.T) {
+func TestProgressReporterPlainMode(t *testing.T) {
 	var b bytes.Buffer
-
-	progressStep(&b, 2, 7, "metadata", "capturing video metadata")
-	progressItem(&b, 4, 7, "ocr", 3, 6, "frame_0003.png")
+	r := newProgressReporter(&b, false, 7)
+	r.step(2, "metadata", "capturing video metadata")
+	r.startItems(4, "ocr", "running OCR on 6 frames")
+	r.item(4, "ocr", 3, 6, "frame_0003.png") // no-op in plain mode
+	r.finishItems()
 
 	output := b.String()
 	for _, want := range []string{
@@ -42,10 +44,37 @@ func TestProgressStepAndItem(t *testing.T) {
 		"[#####.............]",
 		"capturing video metadata",
 		"[4/7] ocr",
-		"[#########.........] 3/6 frame_0003.png",
+		"running OCR on 6 frames",
 	} {
 		if !strings.Contains(output, want) {
-			t.Fatalf("expected progress output to contain %q, got %q", want, output)
+			t.Fatalf("expected plain progress to contain %q, got %q", want, output)
 		}
+	}
+	if strings.Contains(output, "frame_0003.png") {
+		t.Fatalf("plain mode should not print per-frame items, got %q", output)
+	}
+	if strings.Contains(output, "\r") {
+		t.Fatalf("plain mode should not use carriage returns, got %q", output)
+	}
+}
+
+func TestProgressReporterInteractiveRedraws(t *testing.T) {
+	var b bytes.Buffer
+	r := newProgressReporter(&b, true, 7)
+	r.startItems(4, "ocr", "running OCR on 6 frames") // header carried by the live line
+	r.item(4, "ocr", 3, 6, "frame_0003.png")
+	r.finishItems()
+
+	output := b.String()
+	if !strings.Contains(output, "\r") {
+		t.Fatalf("interactive mode should redraw the item line with a carriage return, got %q", output)
+	}
+	for _, want := range []string{"[4/7] ocr", "3/6", "frame_0003.png"} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("expected interactive item line to contain %q, got %q", want, output)
+		}
+	}
+	if !strings.HasSuffix(output, "\n") {
+		t.Fatalf("finishItems should end the live line with a newline, got %q", output)
 	}
 }

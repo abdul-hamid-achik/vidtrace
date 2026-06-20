@@ -4,6 +4,28 @@ This backlog keeps product ideas, engineering work, and integration bets visible
 
 ## Recently Completed
 
+### Multi-Language OCR
+
+As a QA engineer testing localized apps, I want non-English OCR to work, so that UI text in other languages is captured correctly.
+
+Acceptance criteria:
+
+- [x] `--ocr-lang eng+spa` fails early when a requested language pack is not installed, naming the missing packs before any extraction work.
+- [x] `vidtrace doctor` reports the available Tesseract languages.
+- [x] Docs explain how to install Tesseract language data (`docs/INSTALL.md`).
+- [x] Unit tests cover the language parsing and missing-language detection.
+
+### TUI/Progress UX and Agent Safety
+
+As a user, I want a clean live progress bar during extraction; as an agent, I want the TUI never to trap me.
+
+Acceptance criteria:
+
+- [x] Extraction renders a live `bubbles` progress bar that redraws in place on a TTY.
+- [x] Piped/captured/`--json` output stays plain one-line-per-step (no per-frame spam).
+- [x] `vidtrace studio` refuses non-interactive terminals with a message pointing to the JSON commands or `docs agent`.
+- [x] Tests cover the plain/interactive progress reporter and the studio guard.
+
 ### Timeline Matching V2
 
 As a coding agent, I want `timeline.json` to align transcript segments to frames beyond simple fixed windows, so that evidence citations stay useful for fractional and sparse frame rates.
@@ -186,16 +208,6 @@ Acceptance criteria:
 _No active iteration. The next candidates are in **Later**._
 
 ## Later
-
-### Multi-Language OCR
-
-As a QA engineer testing localized apps, I want Spanish OCR support, so that UI text in English and Spanish is captured correctly.
-
-Acceptance criteria:
-
-- [ ] `vidtrace doctor` reports missing requested OCR languages.
-- [ ] `--ocr-lang eng+spa` fails early when `spa` data is not installed.
-- [ ] Docs explain how to install Tesseract language data.
 
 ### Distribution Hardening
 
