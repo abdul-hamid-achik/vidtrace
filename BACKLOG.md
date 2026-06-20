@@ -4,6 +4,17 @@ This backlog keeps product ideas, engineering work, and integration bets visible
 
 ## Recently Completed
 
+### v0.6.0 Release
+
+As a maintainer, I can ship the evidence-search filters, multi-bundle indexing, semantic/hybrid search via Ollama, investigate noise filtering, the e2e spec reorg, and the MCP server as a tagged release.
+
+Acceptance criteria:
+
+- [x] `CHANGELOG.md` has a `0.6.0` section and `README.md` reports `v0.6.0`.
+- [x] Tag `v0.6.0` is pushed and drives the build version (GoReleaser `-X main.version`).
+- [x] The GitHub release workflow publishes checksums and Darwin/Linux tarballs.
+- [x] No source videos, generated bundles, local VecLite databases, or build output are tracked.
+
 ### MCP Server with Go SDK
 
 As a coding agent, I want vidtrace to expose bundle validation, evidence search, and analysis through MCP tools, so that agent clients can call vidtrace without shell parsing.
