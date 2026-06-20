@@ -7,6 +7,7 @@ All notable changes to this project are documented here.
 ### Added
 
 - `vidtrace search` filters: `--bundle`, `--source-video`, `--source`, `--min-time`, and `--max-time` narrow results so a multi-bundle evidence database can be searched by bundle, source video, evidence source, or timestamp window. JSON output echoes active filters under a `filters` object and omits it when no filter is set.
+- `vidtrace index` accepts multiple bundle paths (for example a shell glob) and indexes them into one database, validating every bundle before any write and reporting per-bundle plus aggregate totals. Single-bundle output keeps the existing JSON shape.
 
 ### Changed
 

@@ -130,3 +130,8 @@ outcomes:
     verify:
       command:
         run: "! ./bin/vidtrace search .glyphrun/tmp/evidence/evidence.veclite \"ticket\" --json | grep -q '\"filters\":'"
+  - id: multi_bundle_index
+    description: indexing multiple bundles reports two per-bundle entries whose totals sum to the aggregate
+    verify:
+      command:
+        run: "cp -r .glyphrun/tmp/evidence/sample_artifacts .glyphrun/tmp/evidence/sample_artifacts_b && ./bin/vidtrace index .glyphrun/tmp/evidence/sample_artifacts .glyphrun/tmp/evidence/sample_artifacts_b --db .glyphrun/tmp/evidence/multi.veclite --json | jq -e '(.bundles|length)==2 and (.indexed_entries == ([.bundles[].indexed_entries]|add))' >/dev/null"

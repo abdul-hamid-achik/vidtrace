@@ -318,6 +318,178 @@ func TestSearchCombinedFilters(t *testing.T) {
 	}
 }
 
+func TestIndexBundlesIndexesMultipleBundlesIntoOneDB(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "evidence.veclite")
+	bundleA := writeCustomEvidenceBundle(t, "/tmp/a.mp4", 10, []evidenceEntry{
+		{time: 0, ocr: "Login", transcript: "I open the ticket list"},
+		{time: 1, ocr: "Ticket OPG-1 details", transcript: "I clicked the ticket"},
+	})
+	bundleB := writeCustomEvidenceBundle(t, "/tmp/b.mp4", 10, []evidenceEntry{
+		{time: 0, ocr: "Checkout", transcript: "I open the checkout page"},
+	})
+
+	report, err := IndexBundles([]string{bundleA, bundleB}, dbPath)
+	if err != nil {
+		t.Fatalf("IndexBundles failed: %v", err)
+	}
+	if !report.OK || report.IndexedEntries != 3 || report.InsertedEntries != 3 || report.UpdatedEntries != 0 {
+		t.Fatalf("unexpected aggregate report: %#v", report)
+	}
+	if len(report.Bundles) != 2 || report.Bundles[0].IndexedEntries != 2 || report.Bundles[1].IndexedEntries != 1 {
+		t.Fatalf("unexpected per-bundle results: %#v", report.Bundles)
+	}
+
+	res, err := Search(SearchOptions{DBPath: dbPath, Query: "ticket checkout", Limit: 10})
+	if err != nil {
+		t.Fatalf("search failed: %v", err)
+	}
+	if got := distinctBundles(res.Results); got != 2 {
+		t.Fatalf("expected evidence from both bundles, got %d: %#v", got, res.Results)
+	}
+
+	// Re-indexing the same bundles updates in place rather than duplicating.
+	again, err := IndexBundles([]string{bundleA, bundleB}, dbPath)
+	if err != nil {
+		t.Fatalf("second IndexBundles failed: %v", err)
+	}
+	if again.IndexedEntries != 3 || again.InsertedEntries != 0 || again.UpdatedEntries != 3 {
+		t.Fatalf("expected idempotent re-index, got: %#v", again)
+	}
+}
+
+func TestIndexBundlesDeduplicatesRepeatedPaths(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "evidence.veclite")
+	bundleA := writeCustomEvidenceBundle(t, "/tmp/a.mp4", 10, []evidenceEntry{
+		{time: 0, ocr: "Login", transcript: "open the ticket"},
+		{time: 1, ocr: "Ticket details", transcript: "click the ticket"},
+	})
+
+	report, err := IndexBundles([]string{bundleA, bundleA}, dbPath)
+	if err != nil {
+		t.Fatalf("IndexBundles failed: %v", err)
+	}
+	if len(report.Bundles) != 1 || report.IndexedEntries != 2 || report.InsertedEntries != 2 {
+		t.Fatalf("expected duplicate path to be indexed once, got: %#v", report)
+	}
+}
+
+func TestIndexBundlesFailsFastWithoutWritingDB(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "evidence.veclite")
+	valid := writeCustomEvidenceBundle(t, "/tmp/a.mp4", 10, []evidenceEntry{
+		{time: 0, ocr: "Login", transcript: "open the ticket"},
+	})
+	invalid := t.TempDir() // empty directory is not a valid bundle
+
+	_, err := IndexBundles([]string{valid, invalid}, dbPath)
+	if err == nil || !strings.Contains(err.Error(), "bundle validation failed") {
+		t.Fatalf("IndexBundles error = %v, want validation failure", err)
+	}
+	if _, statErr := os.Stat(dbPath); !os.IsNotExist(statErr) {
+		t.Fatalf("expected no evidence db created on fail-fast, stat err = %v", statErr)
+	}
+}
+
+func TestIndexBundlesRequiresAtLeastOneBundle(t *testing.T) {
+	_, err := IndexBundles(nil, filepath.Join(t.TempDir(), "evidence.veclite"))
+	if err == nil || !strings.Contains(err.Error(), "at least one bundle") {
+		t.Fatalf("IndexBundles error = %v, want empty-input failure", err)
+	}
+}
+
+func TestIndexBundlesMixedInsertAndUpdateCounts(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "evidence.veclite")
+	bundleA := writeCustomEvidenceBundle(t, "/tmp/a.mp4", 10, []evidenceEntry{
+		{time: 0, ocr: "Login", transcript: "open the ticket"},
+		{time: 1, ocr: "Ticket details", transcript: "click the ticket"},
+	})
+	bundleB := writeCustomEvidenceBundle(t, "/tmp/b.mp4", 10, []evidenceEntry{
+		{time: 0, ocr: "Checkout", transcript: "open the checkout"},
+	})
+
+	// Pre-index A so the combined call sees A as updates and B as inserts.
+	if _, err := IndexBundle(IndexOptions{BundleDir: bundleA, DBPath: dbPath}); err != nil {
+		t.Fatalf("pre-index failed: %v", err)
+	}
+
+	report, err := IndexBundles([]string{bundleA, bundleB}, dbPath)
+	if err != nil {
+		t.Fatalf("IndexBundles failed: %v", err)
+	}
+	if report.IndexedEntries != 3 || report.InsertedEntries != 1 || report.UpdatedEntries != 2 {
+		t.Fatalf("unexpected mixed aggregate counts: %#v", report)
+	}
+	if report.Bundles[0].UpdatedEntries != 2 || report.Bundles[0].InsertedEntries != 0 {
+		t.Fatalf("expected bundle A counted as updates: %#v", report.Bundles[0])
+	}
+	if report.Bundles[1].InsertedEntries != 1 || report.Bundles[1].UpdatedEntries != 0 {
+		t.Fatalf("expected bundle B counted as inserts: %#v", report.Bundles[1])
+	}
+	// Aggregate totals must equal the sum of per-bundle results.
+	var sumIndexed, sumInserted, sumUpdated int
+	for _, b := range report.Bundles {
+		sumIndexed += b.IndexedEntries
+		sumInserted += b.InsertedEntries
+		sumUpdated += b.UpdatedEntries
+	}
+	if sumIndexed != report.IndexedEntries || sumInserted != report.InsertedEntries || sumUpdated != report.UpdatedEntries {
+		t.Fatalf("aggregate totals do not match per-bundle sum: %#v", report)
+	}
+}
+
+func TestIndexBundlesDeduplicatesSymlinkAlias(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "evidence.veclite")
+	bundleA := writeCustomEvidenceBundle(t, "/tmp/a.mp4", 10, []evidenceEntry{
+		{time: 0, ocr: "Login", transcript: "open the ticket"},
+	})
+	link := filepath.Join(t.TempDir(), "link-to-bundle")
+	if err := os.Symlink(bundleA, link); err != nil {
+		t.Skipf("symlink not supported: %v", err)
+	}
+
+	report, err := IndexBundles([]string{bundleA, link}, dbPath)
+	if err != nil {
+		t.Fatalf("IndexBundles failed: %v", err)
+	}
+	if len(report.Bundles) != 1 || report.IndexedEntries != 1 {
+		t.Fatalf("expected symlink alias to be indexed once, got: %#v", report)
+	}
+}
+
+func TestIndexBundlesPersistsProcessedBundlesOnLaterFailure(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "evidence.veclite")
+	good := writeCustomEvidenceBundle(t, "/tmp/a.mp4", 10, []evidenceEntry{
+		{time: 0, ocr: "Login", transcript: "open the ticket"},
+	})
+	// The second bundle passes validation (the combined OCR path exists) but fails
+	// to load because that path is a directory rather than a readable file.
+	bad := writeCustomEvidenceBundle(t, "/tmp/b.mp4", 10, []evidenceEntry{
+		{time: 0, ocr: "Checkout", transcript: "open the checkout"},
+	})
+	combined := filepath.Join(bad, "ocr", "ocr_all_frames.txt")
+	if err := os.Remove(combined); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(combined, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := IndexBundles([]string{good, bad}, dbPath); err == nil {
+		t.Fatal("expected a load failure for the second bundle")
+	}
+
+	// The first bundle was indexed before the failure, so re-indexing it alone
+	// reports updates rather than inserts. This documents that a phase-2 failure
+	// leaves already-processed bundles indexed (idempotent to re-run), it does not
+	// roll the whole batch back.
+	report, err := IndexBundle(IndexOptions{BundleDir: good, DBPath: dbPath})
+	if err != nil {
+		t.Fatalf("re-index of good bundle failed: %v", err)
+	}
+	if report.InsertedEntries != 0 || report.UpdatedEntries != 1 {
+		t.Fatalf("expected good bundle already persisted before failure, got: %#v", report)
+	}
+}
+
 func distinctBundles(results []SearchResult) int {
 	seen := map[string]struct{}{}
 	for _, r := range results {

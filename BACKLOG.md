@@ -55,6 +55,18 @@ Acceptance criteria:
 - [x] When a codebase path is provided, recommend vecgrep commands rather than indexing code inside `vidtrace`.
 - [x] Keep the output useful as Markdown and JSON.
 
+### Multi-Bundle Evidence Indexing
+
+As an agent, I can index many bundles into one database in a single command, so that cross-bundle search and filters work over a whole set of recordings.
+
+Acceptance criteria:
+
+- [x] `vidtrace index` accepts multiple bundle paths (including shell globs).
+- [x] Validate every bundle before any write so an invalid path fails fast.
+- [x] De-duplicate repeated paths and re-index idempotently by `evidence_id`.
+- [x] Report per-bundle and aggregate totals; keep single-bundle JSON unchanged.
+- [x] Cover multi-bundle indexing, dedup, and fail-fast with tests.
+
 ### Investigate Suggestion Noise Reduction
 
 As a coding agent, I want suggested code searches to skip browser chrome and dates, so that suggestions point at bug-relevant terms instead of address-bar and clock text.

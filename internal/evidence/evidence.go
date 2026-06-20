@@ -33,6 +33,29 @@ type IndexReport struct {
 	Summary         string `json:"summary"`
 }
 
+// BundleIndexResult is the per-bundle tally inside a MultiIndexReport.
+type BundleIndexResult struct {
+	BundleDir       string `json:"bundle_dir"`
+	IndexedEntries  int    `json:"indexed_entries"`
+	InsertedEntries int    `json:"inserted_entries"`
+	UpdatedEntries  int    `json:"updated_entries"`
+}
+
+// MultiIndexReport aggregates indexing several bundles into one database. It is
+// the additive shape returned only when more than one bundle is indexed at once;
+// single-bundle indexing keeps the IndexReport contract unchanged.
+type MultiIndexReport struct {
+	OK              bool                `json:"ok"`
+	DBPath          string              `json:"db_path"`
+	Collection      string              `json:"collection"`
+	Mode            string              `json:"mode"`
+	IndexedEntries  int                 `json:"indexed_entries"`
+	InsertedEntries int                 `json:"inserted_entries"`
+	UpdatedEntries  int                 `json:"updated_entries"`
+	Bundles         []BundleIndexResult `json:"bundles"`
+	Summary         string              `json:"summary"`
+}
+
 type SearchOptions struct {
 	DBPath string
 	Query  string
@@ -123,31 +146,143 @@ func IndexBundle(opts IndexOptions) (IndexReport, error) {
 		return IndexReport{}, err
 	}
 
-	report := IndexReport{
-		OK:         true,
-		BundleDir:  loaded.Dir,
-		DBPath:     dbPath,
-		Collection: KeywordCollection,
-		Mode:       "keyword",
-	}
-	for _, item := range recordsForBundle(loaded) {
-		_, inserted, err := coll.UpsertTextDocumentByKey("evidence_id", item.id, item.content, item.payload)
-		if err != nil {
-			return IndexReport{}, fmt.Errorf("index evidence %s: %w", item.id, err)
-		}
-		report.IndexedEntries++
-		if inserted {
-			report.InsertedEntries++
-		} else {
-			report.UpdatedEntries++
-		}
+	counts, err := indexLoadedInto(coll, loaded)
+	if err != nil {
+		return IndexReport{}, err
 	}
 	if err := db.Sync(); err != nil {
 		return IndexReport{}, fmt.Errorf("sync evidence db: %w", err)
 	}
 
-	report.Summary = fmt.Sprintf("Indexed %d evidence entries into %s.", report.IndexedEntries, KeywordCollection)
+	report := IndexReport{
+		OK:              true,
+		BundleDir:       loaded.Dir,
+		DBPath:          dbPath,
+		Collection:      KeywordCollection,
+		Mode:            "keyword",
+		IndexedEntries:  counts.Indexed,
+		InsertedEntries: counts.Inserted,
+		UpdatedEntries:  counts.Updated,
+		Summary:         fmt.Sprintf("Indexed %d evidence entries into %s.", counts.Indexed, KeywordCollection),
+	}
 	return report, nil
+}
+
+// IndexBundles indexes several bundles into one evidence database. Every bundle
+// path is resolved, de-duplicated (by real path, resolving symlinks), and
+// validated before any database write, so an invalid path is rejected without
+// creating or modifying the database. Indexing is idempotent by evidence_id, so
+// if a later bundle fails to load or index, the bundles already processed remain
+// indexed and re-running the command is safe.
+func IndexBundles(bundleDirs []string, dbPath string) (MultiIndexReport, error) {
+	if len(bundleDirs) == 0 {
+		return MultiIndexReport{}, fmt.Errorf("at least one bundle is required")
+	}
+	resolvedDBPath, err := resolveRequiredPath(dbPath, "db")
+	if err != nil {
+		return MultiIndexReport{}, err
+	}
+
+	// Phase 1: resolve, de-duplicate, and validate every bundle before writing.
+	resolvedDirs := make([]string, 0, len(bundleDirs))
+	seen := map[string]struct{}{}
+	for _, dir := range bundleDirs {
+		resolvedDir, err := resolveRequiredPath(dir, "bundle")
+		if err != nil {
+			return MultiIndexReport{}, err
+		}
+		// De-duplicate by real path so different spellings or symlinks pointing at
+		// the same bundle are indexed once. Fall back to the absolute path when the
+		// target cannot be resolved (it will then fail validation below).
+		dedupKey := resolvedDir
+		if real, err := filepath.EvalSymlinks(resolvedDir); err == nil {
+			dedupKey = real
+		}
+		if _, dup := seen[dedupKey]; dup {
+			continue
+		}
+		seen[dedupKey] = struct{}{}
+		validation := bundle.Validate(resolvedDir)
+		if !validation.OK {
+			return MultiIndexReport{}, fmt.Errorf("bundle validation failed for %s: %s", resolvedDir, validation.Summary)
+		}
+		resolvedDirs = append(resolvedDirs, resolvedDir)
+	}
+
+	if err := os.MkdirAll(filepath.Dir(resolvedDBPath), 0o755); err != nil {
+		return MultiIndexReport{}, fmt.Errorf("create evidence db directory: %w", err)
+	}
+
+	db, err := veclite.Open(resolvedDBPath)
+	if err != nil {
+		return MultiIndexReport{}, fmt.Errorf("open evidence db: %w", err)
+	}
+	defer func() {
+		_ = db.Close()
+	}()
+
+	coll, err := keywordCollection(db)
+	if err != nil {
+		return MultiIndexReport{}, err
+	}
+
+	// Phase 2: load and index each bundle one at a time to bound memory.
+	report := MultiIndexReport{
+		OK:         true,
+		DBPath:     resolvedDBPath,
+		Collection: KeywordCollection,
+		Mode:       "keyword",
+		Bundles:    make([]BundleIndexResult, 0, len(resolvedDirs)),
+	}
+	for _, dir := range resolvedDirs {
+		loaded, err := bundle.Load(dir)
+		if err != nil {
+			return MultiIndexReport{}, err
+		}
+		counts, err := indexLoadedInto(coll, loaded)
+		if err != nil {
+			return MultiIndexReport{}, err
+		}
+		report.Bundles = append(report.Bundles, BundleIndexResult{
+			BundleDir:       loaded.Dir,
+			IndexedEntries:  counts.Indexed,
+			InsertedEntries: counts.Inserted,
+			UpdatedEntries:  counts.Updated,
+		})
+		report.IndexedEntries += counts.Indexed
+		report.InsertedEntries += counts.Inserted
+		report.UpdatedEntries += counts.Updated
+	}
+	if err := db.Sync(); err != nil {
+		return MultiIndexReport{}, fmt.Errorf("sync evidence db: %w", err)
+	}
+
+	report.Summary = fmt.Sprintf("Indexed %d evidence entries from %d bundle(s) into %s.", report.IndexedEntries, len(report.Bundles), KeywordCollection)
+	return report, nil
+}
+
+// indexCounts holds the per-bundle upsert tally.
+type indexCounts struct {
+	Indexed  int
+	Inserted int
+	Updated  int
+}
+
+func indexLoadedInto(coll *veclite.Collection, loaded bundle.Bundle) (indexCounts, error) {
+	var counts indexCounts
+	for _, item := range recordsForBundle(loaded) {
+		_, inserted, err := coll.UpsertTextDocumentByKey("evidence_id", item.id, item.content, item.payload)
+		if err != nil {
+			return indexCounts{}, fmt.Errorf("index evidence %s: %w", item.id, err)
+		}
+		counts.Indexed++
+		if inserted {
+			counts.Inserted++
+		} else {
+			counts.Updated++
+		}
+	}
+	return counts, nil
 }
 
 func Search(opts SearchOptions) (SearchReport, error) {

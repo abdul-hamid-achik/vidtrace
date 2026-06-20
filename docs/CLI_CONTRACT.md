@@ -99,16 +99,19 @@ The command exits `0` when all checks pass and `1` when any check fails. With `-
 
 ### `vidtrace index`
 
-Indexes an existing artifact bundle into an optional VecLite evidence database.
+Indexes one or more existing artifact bundles into an optional VecLite evidence database.
 
 ```bash
 vidtrace index /path/to/bug_artifacts_YYYYMMDD_HHMMSS --db /path/to/evidence.veclite
 vidtrace index /path/to/bug_artifacts_YYYYMMDD_HHMMSS --db /path/to/evidence.veclite --json
+vidtrace index /path/to/bug_artifacts_* --db /path/to/evidence.veclite --json
 ```
 
-The command validates the bundle, reads `metadata.json` and `timeline.json`, and writes one BM25 text document per timeline entry into the `evidence_entries_keyword` collection. Re-running the command for the same bundle updates existing records by `evidence_id` instead of duplicating them.
+The command validates each bundle, reads `metadata.json` and `timeline.json`, and writes one BM25 text document per timeline entry into the `evidence_entries_keyword` collection. Re-running the command for the same bundle updates existing records by `evidence_id` instead of duplicating them.
 
-Example success JSON:
+Pass multiple bundle paths (for example a shell glob) to build one searchable database that spans many bundles; combine with the `vidtrace search` filters to narrow back to a single bundle, source video, or time window. All bundle paths are validated before any database write, so an invalid path is rejected before the database is created or modified, and duplicate paths (including symlink aliases) are indexed once. Indexing is idempotent by `evidence_id`, so re-running after an interruption is safe.
+
+Example single-bundle success JSON:
 
 ```json
 {
@@ -121,6 +124,35 @@ Example success JSON:
   "inserted_entries": 120,
   "updated_entries": 0,
   "summary": "Indexed 120 evidence entries into evidence_entries_keyword."
+}
+```
+
+When more than one bundle is indexed at once, the JSON instead reports aggregate totals plus a per-bundle `bundles` array:
+
+```json
+{
+  "ok": true,
+  "db_path": "/path/to/evidence.veclite",
+  "collection": "evidence_entries_keyword",
+  "mode": "keyword",
+  "indexed_entries": 214,
+  "inserted_entries": 214,
+  "updated_entries": 0,
+  "bundles": [
+    {
+      "bundle_dir": "/path/to/bug_artifacts_A",
+      "indexed_entries": 120,
+      "inserted_entries": 120,
+      "updated_entries": 0
+    },
+    {
+      "bundle_dir": "/path/to/bug_artifacts_B",
+      "indexed_entries": 94,
+      "inserted_entries": 94,
+      "updated_entries": 0
+    }
+  ],
+  "summary": "Indexed 214 evidence entries from 2 bundle(s) into evidence_entries_keyword."
 }
 ```
 

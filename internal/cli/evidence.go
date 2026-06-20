@@ -23,8 +23,8 @@ func runIndex(args []string, stdout, stderr io.Writer) int {
 	if err := fs.Parse(normalizedArgs); err != nil {
 		return 2
 	}
-	if fs.NArg() != 1 {
-		_, _ = fmt.Fprintln(stderr, "usage: vidtrace index /path/to/bundle --db /path/to/evidence.veclite [--json]")
+	if fs.NArg() < 1 {
+		_, _ = fmt.Fprintln(stderr, "usage: vidtrace index /path/to/bundle [/path/to/bundle ...] --db /path/to/evidence.veclite [--json]")
 		return 2
 	}
 	if strings.TrimSpace(*dbPath) == "" {
@@ -36,19 +36,48 @@ func runIndex(args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		return writeEvidenceFailure(stdout, stderr, *jsonOutput, fmt.Errorf("resolve db path: %w", err), "index")
 	}
-	resolvedBundlePath, err := expandHome(fs.Arg(0))
-	if err != nil {
-		return writeEvidenceFailure(stdout, stderr, *jsonOutput, fmt.Errorf("resolve bundle path: %w", err), "index")
+
+	// Single bundle keeps the original IndexReport contract unchanged.
+	if fs.NArg() == 1 {
+		resolvedBundlePath, err := expandHome(fs.Arg(0))
+		if err != nil {
+			return writeEvidenceFailure(stdout, stderr, *jsonOutput, fmt.Errorf("resolve bundle path: %w", err), "index")
+		}
+		report, err := evidence.IndexBundle(evidence.IndexOptions{
+			BundleDir: resolvedBundlePath,
+			DBPath:    resolvedDBPath,
+		})
+		if err != nil {
+			return writeEvidenceFailure(stdout, stderr, *jsonOutput, err, "index")
+		}
+		if *jsonOutput {
+			if err := writeJSON(stdout, report); err != nil {
+				_, _ = fmt.Fprintf(stderr, "index json failed: %v\n", err)
+				return 1
+			}
+			return 0
+		}
+		_, _ = fmt.Fprintln(stdout, "vidtrace index: ok")
+		_, _ = fmt.Fprintf(stdout, "Bundle: %s\n", report.BundleDir)
+		_, _ = fmt.Fprintf(stdout, "DB: %s\n", report.DBPath)
+		_, _ = fmt.Fprintf(stdout, "Collection: %s\n", report.Collection)
+		_, _ = fmt.Fprintf(stdout, "Entries: %d indexed, %d inserted, %d updated\n", report.IndexedEntries, report.InsertedEntries, report.UpdatedEntries)
+		return 0
 	}
 
-	report, err := evidence.IndexBundle(evidence.IndexOptions{
-		BundleDir: resolvedBundlePath,
-		DBPath:    resolvedDBPath,
-	})
+	// Multiple bundles index into one database and report per-bundle totals.
+	bundlePaths := make([]string, 0, fs.NArg())
+	for _, arg := range fs.Args() {
+		resolved, err := expandHome(arg)
+		if err != nil {
+			return writeEvidenceFailure(stdout, stderr, *jsonOutput, fmt.Errorf("resolve bundle path: %w", err), "index")
+		}
+		bundlePaths = append(bundlePaths, resolved)
+	}
+	report, err := evidence.IndexBundles(bundlePaths, resolvedDBPath)
 	if err != nil {
 		return writeEvidenceFailure(stdout, stderr, *jsonOutput, err, "index")
 	}
-
 	if *jsonOutput {
 		if err := writeJSON(stdout, report); err != nil {
 			_, _ = fmt.Fprintf(stderr, "index json failed: %v\n", err)
@@ -56,12 +85,14 @@ func runIndex(args []string, stdout, stderr io.Writer) int {
 		}
 		return 0
 	}
-
 	_, _ = fmt.Fprintln(stdout, "vidtrace index: ok")
-	_, _ = fmt.Fprintf(stdout, "Bundle: %s\n", report.BundleDir)
 	_, _ = fmt.Fprintf(stdout, "DB: %s\n", report.DBPath)
 	_, _ = fmt.Fprintf(stdout, "Collection: %s\n", report.Collection)
-	_, _ = fmt.Fprintf(stdout, "Entries: %d indexed, %d inserted, %d updated\n", report.IndexedEntries, report.InsertedEntries, report.UpdatedEntries)
+	_, _ = fmt.Fprintf(stdout, "Bundles: %d\n", len(report.Bundles))
+	for _, b := range report.Bundles {
+		_, _ = fmt.Fprintf(stdout, "  - %s: %d indexed, %d inserted, %d updated\n", b.BundleDir, b.IndexedEntries, b.InsertedEntries, b.UpdatedEntries)
+	}
+	_, _ = fmt.Fprintf(stdout, "Total: %d indexed, %d inserted, %d updated\n", report.IndexedEntries, report.InsertedEntries, report.UpdatedEntries)
 	return 0
 }
 

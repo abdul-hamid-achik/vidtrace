@@ -451,6 +451,98 @@ func TestSearchFiltersJSON(t *testing.T) {
 	}
 }
 
+func TestIndexMultipleBundlesJSON(t *testing.T) {
+	mkBundle := func() string {
+		d := writeCLIBundle(t)
+		mustWrite(t, filepath.Join(d, "frames", "frame_0001.png"), "fake frame")
+		mustWrite(t, filepath.Join(d, "ocr", "frame_0001.txt"), "Login failed after submit")
+		return d
+	}
+	bundleA := mkBundle()
+	bundleB := mkBundle()
+	dbPath := filepath.Join(t.TempDir(), "evidence.veclite")
+
+	var out, errBuf bytes.Buffer
+	code := Run([]string{"index", bundleA, bundleB, "--db", dbPath, "--json"}, &out, &errBuf, "test")
+	if code != 0 {
+		t.Fatalf("expected exit 0, got %d stderr=%q stdout=%q", code, errBuf.String(), out.String())
+	}
+	if errBuf.Len() != 0 {
+		t.Fatalf("expected empty stderr, got %q", errBuf.String())
+	}
+
+	var report struct {
+		OK             bool `json:"ok"`
+		IndexedEntries int  `json:"indexed_entries"`
+		Bundles        []struct {
+			BundleDir      string `json:"bundle_dir"`
+			IndexedEntries int    `json:"indexed_entries"`
+		} `json:"bundles"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &report); err != nil {
+		t.Fatalf("expected multi-index JSON, got %q: %v", out.String(), err)
+	}
+	if !report.OK || report.IndexedEntries != 2 || len(report.Bundles) != 2 {
+		t.Fatalf("unexpected multi-index report: %#v", report)
+	}
+	for _, b := range report.Bundles {
+		if b.IndexedEntries != 1 || b.BundleDir == "" {
+			t.Fatalf("unexpected per-bundle entry: %#v", b)
+		}
+	}
+}
+
+func TestIndexSingleBundleJSONKeepsLegacyShape(t *testing.T) {
+	bundleDir := writeCLIBundle(t)
+	mustWrite(t, filepath.Join(bundleDir, "frames", "frame_0001.png"), "fake frame")
+	mustWrite(t, filepath.Join(bundleDir, "ocr", "frame_0001.txt"), "Login failed after submit")
+	dbPath := filepath.Join(t.TempDir(), "evidence.veclite")
+
+	var out, errBuf bytes.Buffer
+	if code := Run([]string{"index", bundleDir, "--db", dbPath, "--json"}, &out, &errBuf, "test"); code != 0 {
+		t.Fatalf("index failed: code=%d stderr=%q", code, errBuf.String())
+	}
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(out.Bytes(), &raw); err != nil {
+		t.Fatalf("expected JSON, got %q: %v", out.String(), err)
+	}
+	if _, ok := raw["bundle_dir"]; !ok {
+		t.Fatalf("single-bundle JSON must keep bundle_dir, got keys: %v", out.String())
+	}
+	if _, ok := raw["bundles"]; ok {
+		t.Fatalf("single-bundle JSON must not include a bundles array: %v", out.String())
+	}
+}
+
+func TestIndexHumanOutput(t *testing.T) {
+	mkBundle := func() string {
+		d := writeCLIBundle(t)
+		mustWrite(t, filepath.Join(d, "frames", "frame_0001.png"), "fake frame")
+		mustWrite(t, filepath.Join(d, "ocr", "frame_0001.txt"), "Login failed after submit")
+		return d
+	}
+
+	var singleOut, singleErr bytes.Buffer
+	if code := Run([]string{"index", mkBundle(), "--db", filepath.Join(t.TempDir(), "s.veclite")}, &singleOut, &singleErr, "test"); code != 0 {
+		t.Fatalf("single index failed: code=%d stderr=%q", code, singleErr.String())
+	}
+	for _, want := range []string{"vidtrace index: ok", "Bundle:", "Entries:"} {
+		if !strings.Contains(singleOut.String(), want) {
+			t.Fatalf("single human output missing %q, got:\n%s", want, singleOut.String())
+		}
+	}
+
+	var multiOut, multiErr bytes.Buffer
+	if code := Run([]string{"index", mkBundle(), mkBundle(), "--db", filepath.Join(t.TempDir(), "m.veclite")}, &multiOut, &multiErr, "test"); code != 0 {
+		t.Fatalf("multi index failed: code=%d stderr=%q", code, multiErr.String())
+	}
+	for _, want := range []string{"vidtrace index: ok", "Bundles: 2", "Total:"} {
+		if !strings.Contains(multiOut.String(), want) {
+			t.Fatalf("multi human output missing %q, got:\n%s", want, multiOut.String())
+		}
+	}
+}
+
 func TestSearchBundleAndSourceFiltersJSON(t *testing.T) {
 	bundleDir := writeCLIBundle(t)
 	mustWrite(t, filepath.Join(bundleDir, "frames", "frame_0001.png"), "fake frame")
