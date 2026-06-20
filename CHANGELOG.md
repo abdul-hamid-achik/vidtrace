@@ -6,6 +6,16 @@ All notable changes to this project are documented here.
 
 No unreleased changes yet.
 
+## [0.9.0] - 2026-06-20
+
+### Added
+
+- macOS release binaries are now signed with a Developer ID certificate and notarized by Apple (via GoReleaser's bundled quill), removing the Gatekeeper warning on first run. Signing is gated on the signing secrets, so builds without them still succeed unsigned.
+
+### Removed
+
+- The Homebrew cask no longer strips the macOS quarantine attribute or warns about an unsigned binary, since the binary is now signed and notarized.
+
 ## [0.8.0] - 2026-06-20
 
 ### Added

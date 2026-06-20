@@ -43,7 +43,7 @@ git push origin vX.Y.Z
 
 GoReleaser creates:
 
-- darwin and linux archives for amd64 and arm64
+- darwin and linux archives for amd64 and arm64 (macOS binaries signed + notarized)
 - Linux `.deb` and `.rpm` packages for amd64 and arm64
 - `checksums.txt`
 - GitHub release notes
@@ -51,32 +51,28 @@ GoReleaser creates:
 
 ## Distribution decisions
 
-- **Homebrew: cask, not formula.** `vidtrace` ships a prebuilt binary, so the cask installs it directly without a build step. A formula would only duplicate that for a CLI, so it is intentionally not added. The cask currently strips the macOS quarantine attribute as a workaround for the unsigned binary; once signing and notarization are in place (below), that workaround and the security caveat can be removed.
+- **Homebrew: cask, not formula.** `vidtrace` ships a prebuilt binary, so the cask installs it directly without a build step. A formula would only duplicate that for a CLI, so it is intentionally not added. Now that the binary is signed and notarized, the cask no longer needs the old quarantine workaround.
 - **Linux: `.deb` + `.rpm` via nfpms**, attached to each release. No system dependencies are declared (see `docs/INSTALL.md`); `vidtrace doctor` reports the runtime tools.
 
-## macOS signing and notarization (playbook)
+## macOS signing and notarization
 
-The binary is currently unsigned, so macOS Gatekeeper quarantines it (the cask works around this with `xattr`). Proper Developer ID signing + notarization removes the warning. This requires credentials that must be provided before it can be wired up:
+macOS release binaries are signed with a Developer ID certificate and notarized by Apple via GoReleaser's `notarize.macos` block, which uses the bundled `quill` (no external tool is installed on the Linux runner). Signing is gated on `isEnvSet "MACOS_SIGN_P12"`, so a build without the secrets still succeeds unsigned.
 
-Prerequisites (maintainer):
+Required repository secrets:
 
-1. Enroll in the **Apple Developer Program** (paid; an Apple ID alone is not enough). Enrollment can take a few days.
-2. Create a **Developer ID Application** certificate and export it as a password-protected `.p12`.
-3. Create an **App Store Connect API key** (Issuer ID, Key ID, and the `.p8` private key) for `notarytool`.
-
-GitHub repository secrets to add once obtained:
-
-- `MACOS_SIGN_P12` — base64-encoded `.p12` certificate
+- `MACOS_SIGN_P12` — base64-encoded Developer ID Application `.p12` certificate
 - `MACOS_SIGN_PASSWORD` — the `.p12` export password
-- `APPLE_API_ISSUER_ID`, `APPLE_API_KEY_ID`, `APPLE_API_KEY` — App Store Connect API key fields
+- `APPLE_API_ISSUER_ID`, `APPLE_API_KEY_ID` — App Store Connect API key Issuer and Key IDs
+- `APPLE_API_KEY` — the raw `.p8` private key (the workflow base64-encodes it into `NOTARY_KEY_B64` for GoReleaser)
 
-When those exist, the release will sign and notarize the macOS binaries (using `rcodesign` so it runs on the existing Linux runner), gated so a release without the secrets still succeeds unsigned, and the cask's quarantine workaround and caveat will be dropped. Until then, releases ship unsigned and the cask keeps the workaround.
+To create the credentials: make a Developer ID Application certificate (via a Keychain CSR or Xcode → Manage Certificates), export it as a `.p12`, and generate an App Store Connect API key under Users and Access → Integrations → Keys. Verify the signing identity locally with `security find-identity -v -p codesigning`.
 
 ## One-Time Setup
 
-The public repository is `https://github.com/abdul-hamid-achik/vidtrace`. The release workflow needs this repository secret before publishing tags:
+The public repository is `https://github.com/abdul-hamid-achik/vidtrace`. The release workflow uses these repository secrets:
 
-- `HOMEBREW_TAP_TOKEN`: a token with write access to `abdul-hamid-achik/homebrew-tap`
+- `HOMEBREW_TAP_TOKEN`: a token with write access to `abdul-hamid-achik/homebrew-tap` (required)
+- `MACOS_SIGN_P12`, `MACOS_SIGN_PASSWORD`, `APPLE_API_ISSUER_ID`, `APPLE_API_KEY_ID`, `APPLE_API_KEY`: macOS signing + notarization (see above). If absent, the release still succeeds with unsigned macOS binaries.
 
 ## Homebrew Install
 

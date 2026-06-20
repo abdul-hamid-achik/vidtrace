@@ -4,6 +4,17 @@ This backlog keeps product ideas, engineering work, and integration bets visible
 
 ## Recently Completed
 
+### v0.9.0 Release
+
+As a maintainer, I can ship signed and notarized macOS binaries so users install without a Gatekeeper warning.
+
+Acceptance criteria:
+
+- [x] `CHANGELOG.md` has a `0.9.0` section and `README.md` reports `v0.9.0`.
+- [x] macOS release binaries are signed (Developer ID) and notarized; the cask quarantine workaround is removed.
+- [x] Signing is gated on secrets so secret-less builds still succeed (verified via `goreleaser` snapshot).
+- [x] Tag `v0.9.0` is pushed and the release workflow passes.
+
 ### v0.8.0 Release
 
 As a maintainer, I can ship Linux `.deb`/`.rpm` packages and the documented distribution decisions as a tagged release.
@@ -240,4 +251,4 @@ Acceptance criteria:
 - [x] Installation docs cover source builds and Homebrew cask installs.
 - [x] Decide whether a Homebrew formula is useful in addition to the cask (decided: keep the cask, no formula; see `docs/RELEASE.md`).
 - [x] Publish Linux `.deb` and `.rpm` packages (amd64 + arm64) via nfpms, documented in `docs/INSTALL.md`.
-- [ ] Apple Developer signing and notarization: playbook written in `docs/RELEASE.md`; blocked on Apple Developer Program enrollment and the signing/notarization credentials. Wire up and test once provided.
+- [x] Apple Developer signing and notarization: macOS binaries are signed (Developer ID) and notarized via GoReleaser's `notarize.macos`/quill, gated on the signing secrets; the cask's quarantine workaround was removed.

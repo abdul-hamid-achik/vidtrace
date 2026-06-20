@@ -38,6 +38,11 @@ jobs:
           HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
         run: test -n "$HOMEBREW_TAP_TOKEN"
 
+      - name: Encode notarization key
+        env:
+          NOTARY_KEY_RAW: ${{ secrets.APPLE_API_KEY }}
+        run: echo "NOTARY_KEY_B64=$(printf '%s' "$NOTARY_KEY_RAW" | base64 -w0)" >> "$GITHUB_ENV"
+
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v7
         with:
@@ -47,3 +52,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          MACOS_SIGN_P12: ${{ secrets.MACOS_SIGN_P12 }}
+          MACOS_SIGN_PASSWORD: ${{ secrets.MACOS_SIGN_PASSWORD }}
+          APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}

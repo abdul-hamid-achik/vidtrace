@@ -29,11 +29,7 @@ brew update
 brew upgrade --cask abdul-hamid-achik/tap/vidtrace
 ```
 
-`vidtrace` is not signed with an Apple Developer certificate yet. If macOS blocks the first run, clear quarantine on the installed binary:
-
-```bash
-xattr -dr com.apple.quarantine /opt/homebrew/Caskroom/vidtrace/*/vidtrace
-```
+The macOS binary is signed with a Developer ID certificate and notarized by Apple, so it runs without a Gatekeeper warning.
 
 Install common runtime dependencies on macOS:
 
