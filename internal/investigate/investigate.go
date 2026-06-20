@@ -233,7 +233,7 @@ func meaningfulWords(text string) []string {
 		if len(word) < 3 {
 			continue
 		}
-		if _, ok := stopWords[word]; ok {
+		if isNoiseWord(word) {
 			continue
 		}
 		if _, ok := seen[word]; ok {
@@ -243,6 +243,45 @@ func meaningfulWords(text string) []string {
 		words = append(words, word)
 	}
 	return words
+}
+
+// isNoiseWord reports whether a lowercased OCR/transcript word is dense-UI noise
+// that should not become a code-search suggestion: stop words, browser/OS chrome,
+// calendar words (month and day names), four-digit years, and URLs or domains.
+// Code-like tokens (letters and digits, for example ticket IDs) bypass this path.
+func isNoiseWord(word string) bool {
+	if _, ok := stopWords[word]; ok {
+		return true
+	}
+	if _, ok := chromeWords[word]; ok {
+		return true
+	}
+	if _, ok := dateWords[word]; ok {
+		return true
+	}
+	if isYearLike(word) {
+		return true
+	}
+	return isURLLike(word)
+}
+
+func isYearLike(word string) bool {
+	if len(word) != 4 {
+		return false
+	}
+	for _, r := range word {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return strings.HasPrefix(word, "19") || strings.HasPrefix(word, "20")
+}
+
+func isURLLike(word string) bool {
+	if strings.Contains(word, "://") {
+		return true
+	}
+	return domainPattern.MatchString(word)
 }
 
 func codeLikeTokens(text string) []string {
@@ -322,9 +361,33 @@ func writef(b *strings.Builder, format string, args ...any) {
 
 var wordPattern = regexp.MustCompile(`[A-Za-z0-9][A-Za-z0-9._/-]*`)
 
+// domainPattern matches host/domain tokens such as "example.com" or
+// "app.example.com/path" so browser address-bar noise is dropped from
+// suggestions while route-like path words are still allowed through other tokens.
+var domainPattern = regexp.MustCompile(`^([a-z0-9-]+\.)+(com|org|net|io|dev|app|co|gov|edu|info|xyz)(/.*)?$`)
+
 var stopWords = map[string]struct{}{
 	"about": {}, "after": {}, "also": {}, "and": {}, "are": {}, "but": {}, "can": {}, "cannot": {},
 	"click": {}, "clicked": {}, "does": {}, "for": {}, "from": {}, "has": {}, "have": {}, "here": {},
 	"into": {}, "not": {}, "now": {}, "one": {}, "the": {}, "then": {}, "this": {}, "that": {},
 	"when": {}, "with": {}, "without": {}, "work": {}, "works": {}, "you": {},
+}
+
+// chromeWords are browser and OS chrome tokens that frequently appear in dense UI
+// captures but rarely describe the application bug being investigated.
+var chromeWords = map[string]struct{}{
+	"http": {}, "https": {}, "www": {}, "localhost": {}, "chrome": {}, "firefox": {},
+	"safari": {}, "mozilla": {}, "webkit": {}, "bookmarks": {}, "bookmark": {}, "reload": {},
+	"refresh": {}, "newtab": {}, "untitled": {}, "devtools": {}, "incognito": {}, "favicon": {},
+}
+
+// dateWords are month and day names (full and common abbreviations) that show up
+// in clocks, calendars, and timestamps rather than in bug-relevant UI text.
+var dateWords = map[string]struct{}{
+	"january": {}, "february": {}, "march": {}, "april": {}, "may": {}, "june": {},
+	"july": {}, "august": {}, "september": {}, "october": {}, "november": {}, "december": {},
+	"jan": {}, "feb": {}, "mar": {}, "apr": {}, "jun": {}, "jul": {}, "aug": {},
+	"sep": {}, "sept": {}, "oct": {}, "nov": {}, "dec": {},
+	"monday": {}, "tuesday": {}, "wednesday": {}, "thursday": {}, "friday": {}, "saturday": {}, "sunday": {},
+	"mon": {}, "tue": {}, "tues": {}, "wed": {}, "thu": {}, "thur": {}, "thurs": {}, "fri": {}, "sat": {}, "sun": {},
 }

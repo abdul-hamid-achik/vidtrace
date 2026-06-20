@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/abdul-hamid-achik/vidtrace/internal/evidence"
 )
 
 func TestRunReturnsEvidenceAndVecgrepCommands(t *testing.T) {
@@ -93,6 +95,44 @@ func TestRunRejectsMissingQuery(t *testing.T) {
 	_, err := Run(Options{BundleDir: writeInvestigateBundle(t)})
 	if err == nil || !strings.Contains(err.Error(), "query is required") {
 		t.Fatalf("Run error = %v, want query error", err)
+	}
+}
+
+func TestSuggestedCodeQueriesFiltersOCRNoise(t *testing.T) {
+	results := []evidence.SearchResult{
+		{
+			OCR:        "https localhost Jun 2026 Monday example.com Checkout failed",
+			Transcript: "the assessment page did not open",
+		},
+	}
+	suggestions := SuggestedCodeQueries("bug report", results)
+	joined := strings.ToLower(strings.Join(suggestions, " | "))
+
+	for _, noise := range []string{"https", "localhost", "jun", "2026", "monday", "example.com"} {
+		if strings.Contains(joined, noise) {
+			t.Fatalf("expected %q to be filtered from suggestions, got: %#v", noise, suggestions)
+		}
+	}
+	for _, signal := range []string{"checkout", "failed", "assessment"} {
+		if !strings.Contains(joined, signal) {
+			t.Fatalf("expected signal word %q to remain in suggestions, got: %#v", signal, suggestions)
+		}
+	}
+}
+
+func TestSuggestedCodeQueriesKeepsCodeLikeTokens(t *testing.T) {
+	results := []evidence.SearchResult{
+		{OCR: "Ticket OPG-14010 details 2026", Transcript: "the ticket fails"},
+	}
+	suggestions := SuggestedCodeQueries("ticket", results)
+
+	if !containsString(suggestions, "OPG-14010") {
+		t.Fatalf("expected code-like token OPG-14010 to be preserved: %#v", suggestions)
+	}
+	for _, s := range suggestions {
+		if s == "2026" {
+			t.Fatalf("four-digit year leaked as a suggestion: %#v", suggestions)
+		}
 	}
 }
 

@@ -62,7 +62,7 @@ preconditions:
             {
               "time_seconds": 1,
               "frame": "frames/frame_0002.png",
-              "ocr": {"path": "ocr/frame_0002.txt", "text": "Ticket OPG-14010 details"},
+              "ocr": {"path": "ocr/frame_0002.txt", "text": "Ticket OPG-14010 details https localhost example.com 2026 Monday"},
               "transcript": [{"start_seconds": 1, "end_seconds": 2, "text": "I clicked the ticket and it does not work"}]
             }
           ]
@@ -71,9 +71,9 @@ preconditions:
       timeoutMs: 5000
     - run: "touch .glyphrun/tmp/investigate/sample_artifacts/frames/frame_0001.png .glyphrun/tmp/investigate/sample_artifacts/frames/frame_0002.png"
       timeoutMs: 5000
-    - run: "printf 'Ticket list\\n' > .glyphrun/tmp/investigate/sample_artifacts/ocr/frame_0001.txt && printf 'Ticket OPG-14010 details\\n' > .glyphrun/tmp/investigate/sample_artifacts/ocr/frame_0002.txt"
+    - run: "printf 'Ticket list\\n' > .glyphrun/tmp/investigate/sample_artifacts/ocr/frame_0001.txt && printf 'Ticket OPG-14010 details https localhost example.com 2026 Monday\\n' > .glyphrun/tmp/investigate/sample_artifacts/ocr/frame_0002.txt"
       timeoutMs: 5000
-    - run: "printf 'Ticket list\\nTicket OPG-14010 details\\n' > .glyphrun/tmp/investigate/sample_artifacts/ocr/ocr_all_frames.txt"
+    - run: "printf 'Ticket list\\nTicket OPG-14010 details https localhost example.com 2026 Monday\\n' > .glyphrun/tmp/investigate/sample_artifacts/ocr/ocr_all_frames.txt"
       timeoutMs: 5000
 
 steps:
@@ -109,6 +109,16 @@ outcomes:
     verify:
       screen:
         contains: 'vecgrep search'
+  - id: suggestions_keep_ticket_id
+    description: code-like ticket IDs survive suggestion filtering
+    verify:
+      screen:
+        contains: 'OPG-14010'
+  - id: suggestions_drop_ocr_noise
+    description: suggested searches omit browser chrome and dates even when present in OCR evidence
+    verify:
+      command:
+        run: "! ./bin/vidtrace investigate .glyphrun/tmp/investigate/sample_artifacts --query \"ticket does not work\" --codebase . --json | jq -r '.suggested_queries[]' | grep -iE 'localhost|example[.]com|monday|2026'"
   - id: markdown_output
     description: human output renders a Markdown handoff
     verify:

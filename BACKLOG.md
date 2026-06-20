@@ -55,6 +55,17 @@ Acceptance criteria:
 - [x] When a codebase path is provided, recommend vecgrep commands rather than indexing code inside `vidtrace`.
 - [x] Keep the output useful as Markdown and JSON.
 
+### Investigate Suggestion Noise Reduction
+
+As a coding agent, I want suggested code searches to skip browser chrome and dates, so that suggestions point at bug-relevant terms instead of address-bar and clock text.
+
+Acceptance criteria:
+
+- [x] Drop host/domain tokens, `http`/`https`/`www`/`localhost`, and browser chrome from suggestions.
+- [x] Drop month and day names and four-digit years from suggestions.
+- [x] Preserve code-like tokens (for example ticket IDs) and the verbatim user query.
+- [x] Cover noise filtering and code-token preservation with tests.
+
 ### v0.5.0 Studio Dogfood and Review Workflow
 
 As a human reviewer, I can inspect bundle metadata, open or reveal selected frame paths, and copy timestamped evidence from Studio.

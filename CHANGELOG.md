@@ -8,6 +8,10 @@ All notable changes to this project are documented here.
 
 - `vidtrace search` filters: `--bundle`, `--source-video`, `--source`, `--min-time`, and `--max-time` narrow results so a multi-bundle evidence database can be searched by bundle, source video, evidence source, or timestamp window. JSON output echoes active filters under a `filters` object and omits it when no filter is set.
 
+### Changed
+
+- `vidtrace investigate` suggested code searches now drop browser/OS chrome, host and domain tokens, month and day names, and four-digit years from OCR text, so suggestions surface bug-relevant terms instead of address-bar and clock noise. Code-like tokens such as ticket IDs and the verbatim user query are preserved.
+
 ### Removed
 
 - `PLAN.md` and `docs/HANDOFF.md` after the `v0.5.0` release; the release record lives in this changelog and `BACKLOG.md`, and durable extractor gotchas moved into `AGENTS.md`.
