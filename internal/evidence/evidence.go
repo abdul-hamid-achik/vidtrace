@@ -37,6 +37,24 @@ type SearchOptions struct {
 	DBPath string
 	Query  string
 	Limit  int
+	// Filters narrow results by payload metadata. Empty string fields and nil
+	// time bounds are ignored, so the zero value keeps the unfiltered behavior.
+	Bundle      string
+	SourceVideo string
+	Source      string
+	MinTime     *float64
+	MaxTime     *float64
+}
+
+// SearchFilters echoes the applied metadata filters in the search report. It is
+// only populated when at least one filter is active, keeping the BM25 JSON
+// contract additive.
+type SearchFilters struct {
+	Bundle      string   `json:"bundle,omitempty"`
+	SourceVideo string   `json:"source_video,omitempty"`
+	Source      string   `json:"source,omitempty"`
+	MinTime     *float64 `json:"min_time,omitempty"`
+	MaxTime     *float64 `json:"max_time,omitempty"`
 }
 
 type SearchReport struct {
@@ -45,6 +63,7 @@ type SearchReport struct {
 	DBPath     string         `json:"db_path"`
 	Collection string         `json:"collection"`
 	Mode       string         `json:"mode"`
+	Filters    *SearchFilters `json:"filters,omitempty"`
 	Results    []SearchResult `json:"results"`
 }
 
@@ -144,6 +163,12 @@ func Search(opts SearchOptions) (SearchReport, error) {
 	if limit <= 0 {
 		limit = 10
 	}
+	// Validate and build filters before touching the database so invalid filter
+	// arguments fail fast regardless of database state.
+	activeFilters, filterEcho, err := buildFilters(opts)
+	if err != nil {
+		return SearchReport{}, err
+	}
 	if _, err := os.Stat(dbPath); err != nil {
 		return SearchReport{}, fmt.Errorf("evidence db not found: %s", dbPath)
 	}
@@ -161,7 +186,22 @@ func Search(opts SearchOptions) (SearchReport, error) {
 		return SearchReport{}, fmt.Errorf("evidence collection not found: %s", KeywordCollection)
 	}
 
-	results, err := coll.TextSearch(query, veclite.TopK(limit))
+	// VecLite TextSearch ranks BM25 matches and truncates to TopK BEFORE applying
+	// payload filters, so requesting only `limit` results can silently drop
+	// filter-matching evidence that ranks below higher-scoring records from other
+	// bundles. When filters are active, over-fetch the full candidate set (capped
+	// by the collection size) and trim to `limit` after VecLite filters.
+	fetchK := limit
+	var searchOpts []veclite.SearchOption
+	if len(activeFilters) > 0 {
+		if count := coll.Count(); count > fetchK {
+			fetchK = count
+		}
+		searchOpts = append(searchOpts, veclite.WithFilter(veclite.And(activeFilters...)))
+	}
+	searchOpts = append(searchOpts, veclite.TopK(fetchK))
+
+	results, err := coll.TextSearch(query, searchOpts...)
 	if err != nil {
 		return SearchReport{}, fmt.Errorf("search evidence: %w", err)
 	}
@@ -172,9 +212,13 @@ func Search(opts SearchOptions) (SearchReport, error) {
 		DBPath:     dbPath,
 		Collection: KeywordCollection,
 		Mode:       "keyword",
-		Results:    make([]SearchResult, 0, len(results)),
+		Filters:    filterEcho,
+		Results:    make([]SearchResult, 0, min(limit, len(results))),
 	}
 	for _, result := range results {
+		if len(report.Results) >= limit {
+			break
+		}
 		report.Results = append(report.Results, searchResultFromPayload(result))
 	}
 	return report, nil
@@ -187,6 +231,55 @@ func keywordCollection(db *veclite.DB) (*veclite.Collection, error) {
 	return db.CreateCollection(KeywordCollection,
 		veclite.WithTextIndex("evidence_id", "bundle", "source_video", "frame", "ocr_path", "source"),
 	)
+}
+
+// buildFilters converts SearchOptions metadata constraints into VecLite payload
+// filters. It returns the filters to AND together for the search and a
+// SearchFilters echo (nil when no filter is active) for the report.
+func buildFilters(opts SearchOptions) ([]veclite.Filter, *SearchFilters, error) {
+	var filters []veclite.Filter
+	echo := &SearchFilters{}
+	active := false
+
+	if bundle := strings.TrimSpace(opts.Bundle); bundle != "" {
+		resolved, err := filepath.Abs(bundle)
+		if err != nil {
+			return nil, nil, fmt.Errorf("resolve bundle filter: %w", err)
+		}
+		filters = append(filters, veclite.Equal("bundle", resolved))
+		echo.Bundle = resolved
+		active = true
+	}
+	if sourceVideo := strings.TrimSpace(opts.SourceVideo); sourceVideo != "" {
+		filters = append(filters, veclite.Equal("source_video", sourceVideo))
+		echo.SourceVideo = sourceVideo
+		active = true
+	}
+	if source := strings.TrimSpace(opts.Source); source != "" {
+		filters = append(filters, veclite.Equal("source", source))
+		echo.Source = source
+		active = true
+	}
+	if opts.MinTime != nil && opts.MaxTime != nil && *opts.MinTime > *opts.MaxTime {
+		return nil, nil, fmt.Errorf("min-time %.3f is greater than max-time %.3f", *opts.MinTime, *opts.MaxTime)
+	}
+	if opts.MinTime != nil {
+		filters = append(filters, veclite.GreaterThanOrEqual("time_seconds", *opts.MinTime))
+		minBound := *opts.MinTime
+		echo.MinTime = &minBound
+		active = true
+	}
+	if opts.MaxTime != nil {
+		filters = append(filters, veclite.LessThanOrEqual("time_seconds", *opts.MaxTime))
+		maxBound := *opts.MaxTime
+		echo.MaxTime = &maxBound
+		active = true
+	}
+
+	if !active {
+		return nil, nil, nil
+	}
+	return filters, echo, nil
 }
 
 func recordsForBundle(b bundle.Bundle) []record {

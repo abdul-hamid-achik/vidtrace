@@ -73,6 +73,7 @@ See the repository root `BACKLOG.md` for prioritized work beyond the roadmap.
 - Add `vidtrace index <bundle> --db <path>` for VecLite evidence records. Done.
 - Add `vidtrace search <db> <query> --json` for timestamped bundle search. Done.
 - Start with BM25 keyword search. Done.
+- Filter search by bundle, source video, evidence source, and time window for multi-bundle databases. Done.
 - Add semantic and hybrid modes behind explicit embedding config.
 - Keep extraction independent from indexing. Done.
 - Use vecgrep as the codebase search companion after video evidence is found. Done for handoff command suggestions.

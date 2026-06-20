@@ -4,6 +4,10 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- `vidtrace search` filters: `--bundle`, `--source-video`, `--source`, `--min-time`, and `--max-time` narrow results so a multi-bundle evidence database can be searched by bundle, source video, evidence source, or timestamp window. JSON output echoes active filters under a `filters` object and omits it when no filter is set.
+
 ### Removed
 
 - `PLAN.md` and `docs/HANDOFF.md` after the `v0.5.0` release; the release record lives in this changelog and `BACKLOG.md`, and durable extractor gotchas moved into `AGENTS.md`.

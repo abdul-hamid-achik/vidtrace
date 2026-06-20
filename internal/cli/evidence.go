@@ -70,8 +70,20 @@ func runSearch(args []string, stdout, stderr io.Writer) int {
 	fs.SetOutput(stderr)
 	jsonOutput := fs.Bool("json", false, "print machine-readable JSON")
 	limit := fs.Int("limit", 10, "maximum results")
+	bundle := fs.String("bundle", "", "filter results to a single bundle directory")
+	sourceVideo := fs.String("source-video", "", "filter results by source video path")
+	source := fs.String("source", "", "filter results by evidence source (e.g. timeline)")
+	minTime := fs.Float64("min-time", 0, "filter results at or after this time in seconds")
+	maxTime := fs.Float64("max-time", 0, "filter results at or before this time in seconds")
 
-	normalizedArgs, err := normalizeBundleArgs(args, map[string]struct{}{"json": {}}, map[string]struct{}{"limit": {}})
+	normalizedArgs, err := normalizeBundleArgs(args, map[string]struct{}{"json": {}}, map[string]struct{}{
+		"limit":        {},
+		"bundle":       {},
+		"source-video": {},
+		"source":       {},
+		"min-time":     {},
+		"max-time":     {},
+	})
 	if err != nil {
 		_, _ = fmt.Fprintln(stderr, err)
 		return 2
@@ -80,7 +92,7 @@ func runSearch(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	if fs.NArg() < 2 {
-		_, _ = fmt.Fprintln(stderr, "usage: vidtrace search /path/to/evidence.veclite QUERY [--limit N] [--json]")
+		_, _ = fmt.Fprintln(stderr, "usage: vidtrace search /path/to/evidence.veclite QUERY [--limit N] [--bundle DIR] [--source-video PATH] [--source SOURCE] [--min-time SECONDS] [--max-time SECONDS] [--json]")
 		return 2
 	}
 
@@ -88,11 +100,31 @@ func runSearch(args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		return writeEvidenceFailure(stdout, stderr, *jsonOutput, fmt.Errorf("resolve db path: %w", err), "search")
 	}
-	report, err := evidence.Search(evidence.SearchOptions{
-		DBPath: resolvedDBPath,
-		Query:  strings.Join(fs.Args()[1:], " "),
-		Limit:  *limit,
-	})
+	searchOpts := evidence.SearchOptions{
+		DBPath:      resolvedDBPath,
+		Query:       strings.Join(fs.Args()[1:], " "),
+		Limit:       *limit,
+		SourceVideo: strings.TrimSpace(*sourceVideo),
+		Source:      strings.TrimSpace(*source),
+	}
+	if trimmed := strings.TrimSpace(*bundle); trimmed != "" {
+		resolvedBundle, err := expandHome(trimmed)
+		if err != nil {
+			return writeEvidenceFailure(stdout, stderr, *jsonOutput, fmt.Errorf("resolve bundle filter: %w", err), "search")
+		}
+		searchOpts.Bundle = resolvedBundle
+	}
+	setFlags := map[string]bool{}
+	fs.Visit(func(f *flag.Flag) { setFlags[f.Name] = true })
+	if setFlags["min-time"] {
+		v := *minTime
+		searchOpts.MinTime = &v
+	}
+	if setFlags["max-time"] {
+		v := *maxTime
+		searchOpts.MaxTime = &v
+	}
+	report, err := evidence.Search(searchOpts)
 	if err != nil {
 		return writeEvidenceFailure(stdout, stderr, *jsonOutput, err, "search")
 	}

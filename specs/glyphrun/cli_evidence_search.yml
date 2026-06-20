@@ -115,3 +115,18 @@ outcomes:
     verify:
       command:
         run: "./bin/vidtrace index .glyphrun/tmp/evidence/sample_artifacts --db .glyphrun/tmp/evidence/evidence.veclite --json | grep -q '\"indexed_entries\": 2'"
+  - id: time_filter_excludes_earlier_evidence
+    description: a min-time filter drops evidence before the window
+    verify:
+      command:
+        run: "! ./bin/vidtrace search .glyphrun/tmp/evidence/evidence.veclite \"ticket\" --min-time 1 --json | grep -q 'frame_0001.png'"
+  - id: filters_echoed_when_active
+    description: active filters are echoed in JSON
+    verify:
+      command:
+        run: "./bin/vidtrace search .glyphrun/tmp/evidence/evidence.veclite \"ticket\" --min-time 1 --json | grep -q '\"min_time\": 1'"
+  - id: no_filters_key_when_unfiltered
+    description: the filters object is omitted when no filter is set
+    verify:
+      command:
+        run: "! ./bin/vidtrace search .glyphrun/tmp/evidence/evidence.veclite \"ticket\" --json | grep -q '\"filters\":'"

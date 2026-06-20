@@ -131,9 +131,26 @@ Searches an evidence database and returns timestamped bundle evidence.
 ```bash
 vidtrace search /path/to/evidence.veclite "checkout button error"
 vidtrace search /path/to/evidence.veclite "checkout button error" --limit 5 --json
+vidtrace search /path/to/evidence.veclite "checkout button error" --bundle /path/to/bundle --min-time 60 --max-time 90 --json
 ```
 
 The first implementation uses VecLite BM25 keyword search. Semantic and hybrid search are future additive modes and require explicit embedding-provider configuration.
+
+One database can hold many bundles. The filter flags narrow results so a multi-bundle database can be searched for a single bundle, source video, evidence source, or timestamp window.
+
+Flags:
+
+| Flag | Default | Meaning |
+|---|---|---|
+| `--limit` | `10` | Maximum results |
+| `--bundle` | none | Restrict to one bundle directory (resolved to an absolute path) |
+| `--source-video` | none | Restrict to records whose `source_video` matches exactly |
+| `--source` | none | Restrict to an evidence source, for example `timeline` |
+| `--min-time` | none | Keep results at or after this time in seconds |
+| `--max-time` | none | Keep results at or before this time in seconds |
+| `--json` | `false` | Emit machine-readable JSON |
+
+When any filter is active, JSON output adds a `filters` object that echoes the applied filters. It is omitted when no filter is set, so the unfiltered BM25 contract is unchanged. A `--min-time` greater than `--max-time` fails before opening the database.
 
 Example success JSON:
 
@@ -159,6 +176,24 @@ Example success JSON:
       "has_transcript": true
     }
   ]
+}
+```
+
+Example filtered JSON (the `filters` object only appears when a filter is active):
+
+```json
+{
+  "ok": true,
+  "query": "checkout button error",
+  "db_path": "/path/to/evidence.veclite",
+  "collection": "evidence_entries_keyword",
+  "mode": "keyword",
+  "filters": {
+    "bundle": "/path/to/bundle",
+    "min_time": 60,
+    "max_time": 90
+  },
+  "results": []
 }
 ```
 

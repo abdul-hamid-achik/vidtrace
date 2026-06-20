@@ -382,6 +382,155 @@ func TestIndexAndSearchJSON(t *testing.T) {
 	}
 }
 
+func TestSearchFiltersJSON(t *testing.T) {
+	bundleDir := writeCLIBundle(t)
+	mustWrite(t, filepath.Join(bundleDir, "frames", "frame_0001.png"), "fake frame")
+	mustWrite(t, filepath.Join(bundleDir, "ocr", "frame_0001.txt"), "Login failed after submit")
+	dbPath := filepath.Join(t.TempDir(), "evidence.veclite")
+
+	var idxOut, idxErr bytes.Buffer
+	if code := Run([]string{"index", bundleDir, "--db", dbPath, "--json"}, &idxOut, &idxErr, "test"); code != 0 {
+		t.Fatalf("index failed: code=%d stderr=%q", code, idxErr.String())
+	}
+
+	type searchReport struct {
+		OK      bool `json:"ok"`
+		Filters *struct {
+			SourceVideo string   `json:"source_video"`
+			MaxTime     *float64 `json:"max_time"`
+		} `json:"filters"`
+		Results []struct {
+			TimeSeconds float64 `json:"time_seconds"`
+		} `json:"results"`
+	}
+
+	runSearchJSON := func(t *testing.T, extra ...string) searchReport {
+		t.Helper()
+		args := append([]string{"search", dbPath, "Login failed"}, extra...)
+		args = append(args, "--json")
+		var out, errBuf bytes.Buffer
+		if code := Run(args, &out, &errBuf, "test"); code != 0 {
+			t.Fatalf("search %v failed: code=%d stderr=%q", extra, code, errBuf.String())
+		}
+		if errBuf.Len() != 0 {
+			t.Fatalf("expected empty stderr, got %q", errBuf.String())
+		}
+		var rep searchReport
+		if err := json.Unmarshal(out.Bytes(), &rep); err != nil {
+			t.Fatalf("expected search JSON, got %q: %v", out.String(), err)
+		}
+		return rep
+	}
+
+	match := runSearchJSON(t, "--source-video", "/tmp/login-bug.mp4")
+	if !match.OK || len(match.Results) != 1 {
+		t.Fatalf("expected one result for matching source video, got %#v", match)
+	}
+	if match.Filters == nil || match.Filters.SourceVideo != "/tmp/login-bug.mp4" {
+		t.Fatalf("expected echoed source-video filter, got %#v", match.Filters)
+	}
+
+	none := runSearchJSON(t, "--source-video", "/tmp/other.mp4")
+	if !none.OK || len(none.Results) != 0 {
+		t.Fatalf("expected zero results for non-matching source video, got %#v", none)
+	}
+
+	withinTime := runSearchJSON(t, "--max-time", "0")
+	if len(withinTime.Results) != 1 || withinTime.Filters == nil || withinTime.Filters.MaxTime == nil {
+		t.Fatalf("expected one result within max-time window with echoed filter, got %#v", withinTime)
+	}
+
+	afterTime := runSearchJSON(t, "--min-time", "5")
+	if len(afterTime.Results) != 0 {
+		t.Fatalf("expected zero results after time window, got %#v", afterTime)
+	}
+
+	plain := runSearchJSON(t)
+	if plain.Filters != nil {
+		t.Fatalf("expected nil filters echo for unfiltered search, got %#v", plain.Filters)
+	}
+}
+
+func TestSearchBundleAndSourceFiltersJSON(t *testing.T) {
+	bundleDir := writeCLIBundle(t)
+	mustWrite(t, filepath.Join(bundleDir, "frames", "frame_0001.png"), "fake frame")
+	mustWrite(t, filepath.Join(bundleDir, "ocr", "frame_0001.txt"), "Login failed after submit")
+	dbPath := filepath.Join(t.TempDir(), "evidence.veclite")
+
+	var idxOut, idxErr bytes.Buffer
+	if code := Run([]string{"index", bundleDir, "--db", dbPath, "--json"}, &idxOut, &idxErr, "test"); code != 0 {
+		t.Fatalf("index failed: code=%d stderr=%q", code, idxErr.String())
+	}
+	absBundle, err := filepath.Abs(bundleDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	type report struct {
+		OK      bool `json:"ok"`
+		Filters *struct {
+			Bundle  string   `json:"bundle"`
+			Source  string   `json:"source"`
+			MinTime *float64 `json:"min_time"`
+		} `json:"filters"`
+		Results []struct {
+			TimeSeconds float64 `json:"time_seconds"`
+		} `json:"results"`
+	}
+	run := func(t *testing.T, extra ...string) report {
+		t.Helper()
+		args := append([]string{"search", dbPath, "Login failed"}, extra...)
+		args = append(args, "--json")
+		var out, errBuf bytes.Buffer
+		if code := Run(args, &out, &errBuf, "test"); code != 0 {
+			t.Fatalf("search %v failed: code=%d stderr=%q", extra, code, errBuf.String())
+		}
+		var rep report
+		if err := json.Unmarshal(out.Bytes(), &rep); err != nil {
+			t.Fatalf("expected search JSON, got %q: %v", out.String(), err)
+		}
+		return rep
+	}
+
+	// --bundle round-trips through expandHome + filepath.Abs and matches the indexed absolute path.
+	matched := run(t, "--bundle", bundleDir)
+	if len(matched.Results) != 1 || matched.Filters == nil || matched.Filters.Bundle != absBundle {
+		t.Fatalf("expected one result with echoed bundle %q, got %#v", absBundle, matched)
+	}
+
+	unmatched := run(t, "--bundle", filepath.Join(t.TempDir(), "other-bundle"))
+	if len(unmatched.Results) != 0 {
+		t.Fatalf("expected zero results for non-matching bundle, got %#v", unmatched.Results)
+	}
+
+	// --source is otherwise entirely untested.
+	sourceMatch := run(t, "--source", "timeline")
+	if len(sourceMatch.Results) != 1 || sourceMatch.Filters == nil || sourceMatch.Filters.Source != "timeline" {
+		t.Fatalf("expected one result with echoed source filter, got %#v", sourceMatch)
+	}
+	sourceNone := run(t, "--source", "bogus")
+	if len(sourceNone.Results) != 0 {
+		t.Fatalf("expected zero results for unknown source, got %#v", sourceNone.Results)
+	}
+
+	// --min-time 0 must be treated as explicitly set and echoed (no -1 sentinel).
+	minZero := run(t, "--min-time", "0")
+	if minZero.Filters == nil || minZero.Filters.MinTime == nil || *minZero.Filters.MinTime != 0 {
+		t.Fatalf("expected echoed min_time=0, got %#v", minZero.Filters)
+	}
+}
+
+func TestSearchInvertedTimeRangeJSONFailure(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"search", "/tmp/whatever.veclite", "ticket", "--min-time", "10", "--max-time", "5", "--json"}, &stdout, &stderr, "test")
+	if code != 1 {
+		t.Fatalf("expected exit code 1, got %d", code)
+	}
+	if !strings.Contains(stdout.String(), `"ok": false`) || !strings.Contains(stdout.String(), "greater than max-time") {
+		t.Fatalf("expected inverted time-range json failure, got %q", stdout.String())
+	}
+}
+
 func TestSearchJSONFailure(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 

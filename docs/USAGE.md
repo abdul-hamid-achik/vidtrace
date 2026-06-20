@@ -43,6 +43,15 @@ vidtrace index "$output_dir" --db /tmp/vidtrace-evidence.veclite --json
 vidtrace search /tmp/vidtrace-evidence.veclite "clicking a ticket does not work" --json
 ```
 
+One database can index many bundles. Narrow a search to a single bundle, source video, evidence source, or time window:
+
+```bash
+vidtrace search /tmp/vidtrace-evidence.veclite "clicking a ticket does not work" \
+  --bundle "$output_dir" \
+  --min-time 60 --max-time 90 \
+  --json
+```
+
 Create a handoff from video evidence to code search:
 
 ```bash

@@ -32,6 +32,18 @@ Acceptance criteria:
 - [x] Add unit tests and CLI JSON tests for index/search behavior.
 - [x] Document that vecgrep is the companion codebase search tool after `vidtrace` finds relevant video evidence.
 
+### Evidence Search Filters
+
+As an agent, I can search one evidence database that holds many bundles and narrow results to a specific bundle, source video, evidence source, or time window.
+
+Acceptance criteria:
+
+- [x] Add `--bundle`, `--source-video`, `--source`, `--min-time`, and `--max-time` flags to `vidtrace search`.
+- [x] Apply filters with VecLite payload filters without changing the BM25 ranking contract.
+- [x] Echo active filters in JSON under a `filters` object and omit it when no filter is set.
+- [x] Reject a `--min-time` greater than `--max-time` before opening the database.
+- [x] Cover cross-bundle filtering and CLI flag behavior with tests.
+
 ### Agent Investigation Handoff
 
 As a coding agent, I can generate a compact handoff from video evidence to code search, so that I can move from "the user clicked a ticket and it failed" to likely files, routes, handlers, tests, and documentation.
