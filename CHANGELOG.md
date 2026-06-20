@@ -13,6 +13,7 @@ All notable changes to this project are documented here.
 ### Changed
 
 - `vidtrace investigate` suggested code searches now drop browser/OS chrome, host and domain tokens, month and day names, and four-digit years from OCR text, so suggestions surface bug-relevant terms instead of address-bar and clock noise. Code-like tokens such as ticket IDs and the verbatim user query are preserved.
+- Reorganized end-to-end specs from `specs/glyphrun/` into `e2e/` (`flows/` for specs, `fixtures/` for shared sample-bundle scripts, `actions/` for reusable step snippets). The duplicated inline bundle setup is replaced by `e2e/fixtures/sample_bundle.sh`, non-interactive flows share a `wait_clean_exit` action, and `task e2e` now globs `e2e/flows/*.yml`.
 
 ### Removed
 

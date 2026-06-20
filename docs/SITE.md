@@ -91,6 +91,6 @@ The site root is `docs/`, so the VitePress build does not publish repository-loc
 
 ```bash
 bun run docs:build
-glyph spec verify specs/glyphrun/docs_site.yml --format md
-glyph run specs/glyphrun/docs_site.yml --format md
+glyph spec verify e2e/flows/docs_site.yml --format md
+glyph run e2e/flows/docs_site.yml --format md
 ```

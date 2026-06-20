@@ -118,7 +118,7 @@ task run -- studio /tmp/vidtrace-real/bug_artifacts_*
 - For extractor work, verify generated folders and files, not only stdout.
 - Run `vidtrace validate <bundle> --json` before trusting a generated or fixture bundle.
 - Prefer stable JSON output for tests over parsing human-readable text.
-- Use glyphrun specs in `specs/glyphrun/` for real terminal behavior.
+- Use glyphrun specs in `e2e/flows/` for real terminal behavior, with shared `e2e/fixtures/` bundle scripts and reusable `e2e/actions/` step snippets.
 
 ## Git Safety
 

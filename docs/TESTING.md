@@ -29,13 +29,15 @@ task all
 
 ## Glyphrun
 
-Glyphrun specs live in `specs/glyphrun/`.
+End-to-end specs live under `e2e/`: one flow per file in `e2e/flows/`, shared
+bundle builders in `e2e/fixtures/`, and reusable step snippets in `e2e/actions/`.
+See `e2e/README.md`.
 
 ```bash
 task e2e
 ```
 
-Current specs cover:
+Current flows cover:
 
 - `cli_doctor.yml`: version and doctor output.
 - `cli_docs.yml`: built-in docs for humans and agents.

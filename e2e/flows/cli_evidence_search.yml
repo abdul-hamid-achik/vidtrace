@@ -32,57 +32,18 @@ preconditions:
   commands:
     - run: "go build -o ./bin/vidtrace ./cmd/vidtrace"
       timeoutMs: 120000
-    - run: "rm -rf .glyphrun/tmp/evidence && mkdir -p .glyphrun/tmp/evidence/sample_artifacts/frames .glyphrun/tmp/evidence/sample_artifacts/ocr .glyphrun/tmp/evidence/sample_artifacts/transcript"
+    - run: "rm -rf .glyphrun/tmp/evidence && mkdir -p .glyphrun/tmp/evidence"
       timeoutMs: 5000
-    - run: |
-        cat > .glyphrun/tmp/evidence/sample_artifacts/metadata.json <<'JSON'
-        {
-          "schema_version": "1",
-          "source_video": "/tmp/ticket-bug.mp4",
-          "duration_seconds": 2,
-          "extract_fps": 1,
-          "ocr_languages": ["eng"],
-          "whisper_language": "en",
-          "whisper_model": "small"
-        }
-        JSON
-      timeoutMs: 5000
-    - run: |
-        cat > .glyphrun/tmp/evidence/sample_artifacts/timeline.json <<'JSON'
-        {
-          "schema_version": "1",
-          "entries": [
-            {
-              "time_seconds": 0,
-              "frame": "frames/frame_0001.png",
-              "ocr": {"path": "ocr/frame_0001.txt", "text": "Ticket list"},
-              "transcript": [{"start_seconds": 0, "end_seconds": 1, "text": "I am opening the ticket"}]
-            },
-            {
-              "time_seconds": 1,
-              "frame": "frames/frame_0002.png",
-              "ocr": {"path": "ocr/frame_0002.txt", "text": "Ticket OPG-14010 details"},
-              "transcript": [{"start_seconds": 1, "end_seconds": 2, "text": "I clicked the ticket and it does not work"}]
-            }
-          ]
-        }
-        JSON
-      timeoutMs: 5000
-    - run: "touch .glyphrun/tmp/evidence/sample_artifacts/frames/frame_0001.png .glyphrun/tmp/evidence/sample_artifacts/frames/frame_0002.png"
-      timeoutMs: 5000
-    - run: "printf 'Ticket list\\n' > .glyphrun/tmp/evidence/sample_artifacts/ocr/frame_0001.txt && printf 'Ticket OPG-14010 details\\n' > .glyphrun/tmp/evidence/sample_artifacts/ocr/frame_0002.txt"
-      timeoutMs: 5000
-    - run: "printf 'Ticket list\\nTicket OPG-14010 details\\n' > .glyphrun/tmp/evidence/sample_artifacts/ocr/ocr_all_frames.txt"
+    - run: "sh e2e/fixtures/sample_bundle.sh .glyphrun/tmp/evidence/sample_artifacts"
       timeoutMs: 5000
     - run: "./bin/vidtrace index .glyphrun/tmp/evidence/sample_artifacts --db .glyphrun/tmp/evidence/evidence.veclite --json"
       timeoutMs: 20000
 
+imports:
+  - ../actions/wait_clean_exit.yml
+
 steps:
-  - wait:
-      process:
-        exitCode: 0
-      timeoutMs: 20000
-  - snapshot: result
+  - use: wait_clean_exit
 
 outcomes:
   - id: clean_exit

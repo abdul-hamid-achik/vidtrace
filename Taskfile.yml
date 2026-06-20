@@ -56,24 +56,10 @@ tasks:
       - bun run docs:dev
 
   e2e:
-    desc: Verify and run glyphrun end-to-end CLI specs.
+    desc: Verify and run glyphrun end-to-end CLI flows under e2e/flows.
     cmds:
-      - glyph spec verify specs/glyphrun/cli_doctor.yml --format md
-      - glyph spec verify specs/glyphrun/cli_docs.yml --format md
-      - glyph spec verify specs/glyphrun/cli_compare.yml --format md
-      - glyph spec verify specs/glyphrun/cli_evidence_search.yml --format md
-      - glyph spec verify specs/glyphrun/cli_investigate.yml --format md
-      - glyph spec verify specs/glyphrun/docs_site.yml --format md
-      - glyph spec verify specs/glyphrun/cli_studio.yml --format md
-      - glyph spec verify specs/glyphrun/extract_json.yml --format md
-      - glyph run specs/glyphrun/cli_doctor.yml --format md
-      - glyph run specs/glyphrun/cli_docs.yml --format md
-      - glyph run specs/glyphrun/cli_compare.yml --format md
-      - glyph run specs/glyphrun/cli_evidence_search.yml --format md
-      - glyph run specs/glyphrun/cli_investigate.yml --format md
-      - glyph run specs/glyphrun/docs_site.yml --format md
-      - glyph run specs/glyphrun/cli_studio.yml --format md
-      - glyph run specs/glyphrun/extract_json.yml --format md
+      - for f in e2e/flows/*.yml; do glyph spec verify "$f" --format md || exit 1; done
+      - for f in e2e/flows/*.yml; do glyph run "$f" --format md || exit 1; done
 
   test:
     desc: Run unit tests.
