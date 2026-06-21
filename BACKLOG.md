@@ -4,6 +4,35 @@ This backlog keeps product ideas, engineering work, and integration bets visible
 
 ## Recently Completed
 
+### VecLite v0.17.0 Single-Collection Migration
+
+As a maintainer, I can collapse the pre-v0.17.0 three-collection evidence layout into a single `evidence_entries` collection with a named `text` vector space, so that keyword, semantic, and hybrid search run against one collection without content duplication.
+
+Acceptance criteria:
+
+- [x] Bump `go.mod` to `github.com/abdul-hamid-achik/veclite v0.17.0`.
+- [x] `vidtrace index` writes one record per timeline entry into `evidence_entries`, with a named `text` vector space added when `--embed` is configured.
+- [x] All three search modes (`keyword`, `semantic`, `hybrid`) run against the single collection using `TextSearch` / `SearchSpace` / `HybridSearchSpace`.
+- [x] Re-indexing is idempotent by `evidence_id` via `UpsertRecordByKey`.
+- [x] `vidtrace migrate-evidence <db>` converts pre-v0.17.0 databases in place (no-op on modern DBs).
+- [x] ADR-0003, CLI_CONTRACT, USAGE, and CHANGELOG updated.
+- [x] `task all` green; real-video dogfood passes.
+
+### Artifact Polish and Bash Extractor Removal
+
+As a maintainer, I can remove the legacy Bash extractor and polish artifact consistency, so that `internal/pipeline` is the sole extractor and the schema version, timestamps, and validation warnings are consistent across packages.
+
+Acceptance criteria:
+
+- [x] Go pipeline parity verified on synthetic and real video; decision recorded in `CHANGELOG.md`.
+- [x] `scripts/extract.sh` removed; `AGENTS.md` and `docs/ROADMAP.md` updated to reflect `internal/pipeline` as the sole extractor.
+- [x] Schema version centralized in `internal/artifacts` and referenced by pipeline, timeline, and validate.
+- [x] Combined OCR timestamp uses the same UTC injected timestamp as `metadata.json`.
+- [x] `vidtrace validate` emits soft `warnings` for empty transcript with a declared whisper model and for frame/OCR count drift.
+- [x] Bundle path collision handling appends `_2`, `_3`, ... suffixes.
+- [x] `vidtrace extract` supports SIGINT/SIGTERM cancellation.
+- [x] Unit tests cover the glob safety, timestamp consistency, empty-OCR combined file, collision handling, and validation warnings.
+
 ### v0.8.0 Release
 
 As a maintainer, I can ship Linux `.deb`/`.rpm` packages and the documented distribution decisions as a tagged release.

@@ -81,3 +81,69 @@ jobs:
 
       - name: Check GoReleaser config
         run: goreleaser check
+
+  # Media smoke: generates a tiny synthetic video and runs an end-to-end Go
+  # extraction (ffmpeg -> tesseract -> whisper -> metadata/timeline). This is
+  # the CI analogue of `task smoke`. It runs on `main` pushes and on manual
+  # workflow_dispatch only, so pull requests stay fast; contributors can opt in
+  # by running the workflow manually against their branch. Whisper is the
+  # slowest step; the tiny 2s clip keeps the job under a few minutes.
+  mediasmoke:
+    name: mediasmoke
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Install tesseract
+        run: sudo apt-get install -y tesseract-ocr
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.x"
+
+      - name: Cache Whisper model
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/whisper
+          key: whisper-model-small-en
+
+      - name: Install Whisper
+        run: pip install --no-cache-dir openai-whisper
+
+      - name: Build vidtrace
+        run: go build -o /tmp/vidtrace ./cmd/vidtrace
+
+      - name: Run media smoke
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/vidtrace-smoke
+          mkdir -p /tmp/vidtrace-smoke
+          ffmpeg -hide_banner -loglevel error -y \
+            -f lavfi -i testsrc2=size=640x360:rate=1:duration=2 \
+            -f lavfi -i sine=frequency=1000:duration=2 \
+            -c:v libx264 -pix_fmt yuv420p -c:a aac \
+            /tmp/vidtrace_smoke.mp4
+          /tmp/vidtrace extract /tmp/vidtrace_smoke.mp4 \
+            --out /tmp/vidtrace-smoke --name smoke --json \
+            > /tmp/mediasmoke-summary.json
+          /tmp/vidtrace validate /tmp/vidtrace-smoke/smoke_artifacts_* --json
+
+      - name: Upload smoke summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mediasmoke-summary
+          path: /tmp/mediasmoke-summary.json
+          if-no-files-found: warn

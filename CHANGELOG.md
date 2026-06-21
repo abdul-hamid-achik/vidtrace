@@ -4,7 +4,27 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
-No unreleased changes yet.
+## [0.9.0] - 2026-06-21
+
+### Removed
+
+- `scripts/extract.sh` after Go pipeline parity was verified on synthetic and real video (same frames, OCR, and transcript outputs, plus Go-only `metadata.json` and `timeline.json`). `internal/pipeline` is the sole extractor. The parity check ran on a 3-frame synthetic clip (3 frames, 3 OCR files, 5 transcript formats, `validate` 9/9 checks passed) and on `~/Downloads/bug.mp4` (94 frames, 94 OCR files, 5 transcript formats, `validate` 9/9 checks passed).
+
+### Added
+
+- Artifact schema version is now a single source of truth (`artifacts.SchemaVersion`), referenced by the pipeline, timeline builder, and validator so the expected version can never drift across packages.
+- `vidtrace validate --json` now emits a `warnings` array for soft issues that do not fail validation: an empty `transcript/` directory when metadata declares a whisper model (silent video or transcription failure), and a frame count that differs from the OCR frame txt count (partial extraction or manual edit).
+- Bundle path collision handling: two extractions in the same second now produce distinct directories (`_2`, `_3`, ...) instead of silently overwriting each other.
+- `vidtrace extract` now derives its context from SIGINT/SIGTERM so long ffmpeg/whisper runs can be interrupted cleanly; `--json` failure output stays stable.
+- Pipeline concurrency: OCR frames now run in parallel with a bounded worker pool, and Whisper transcription runs concurrently with OCR. New `--concurrency` flag caps OCR workers (0 = auto, capped to 8). On a 94-frame real video this cut wall-clock time by ~40%. The `progressReporter` is now mutex-protected and safe for concurrent use.
+- CI media smoke job: a new GitHub Actions `mediasmoke` job generates a tiny synthetic video and runs an end-to-end Go extraction (ffmpeg → tesseract → whisper) on `main` pushes and `workflow_dispatch`, catching regressions in the media-tool wrappers that unit tests cannot reach. Pull requests stay fast (the job is skipped on PRs).
+- `vidtrace migrate-evidence <db>` converts pre-v0.17.0 evidence databases (the three-collection layout: `evidence_entries_keyword`, `evidence_entries_text`, `evidence_meta`) into the single `evidence_entries` collection with a named `text` vector space. Running it on a modern database is a no-op (`already_migrated: true`), so it is safe to run unconditionally.
+
+### Changed
+
+- Combined OCR file (`ocr_all_frames.txt`) header timestamp now uses the same injected UTC RFC3339 timestamp as `metadata.json`'s `generated_at`, instead of local time, for consistency and deterministic tests.
+- Evidence layout collapsed to a single `evidence_entries` collection with a named `text` vector space (was three collections: `evidence_entries_keyword` + `evidence_entries_text` + `evidence_meta`). All three search modes (keyword, semantic, hybrid) now run against the one collection, eliminating content duplication and unifying the filter path. `vidtrace index --json` now reports `collection: "evidence_entries"` regardless of mode.
+- Bumped `veclite` to `v0.17.0` (was `v0.16.0`) to adopt `UpsertRecordByKey` and `HybridSearchSpace`, which make the single-collection layout possible.
 
 ## [0.8.0] - 2026-06-20
 

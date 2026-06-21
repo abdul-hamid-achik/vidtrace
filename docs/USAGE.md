@@ -67,6 +67,12 @@ vidtrace search /tmp/vidtrace-evidence.veclite "clicking a ticket does not work"
   --json
 ```
 
+If you have a pre-v0.17.0 evidence database (created by an older `vidtrace index`), migrate it to the single-collection layout. Running it on a modern database is a no-op, so it is safe to run unconditionally:
+
+```bash
+vidtrace migrate-evidence /tmp/vidtrace-evidence.veclite --json
+```
+
 Create a handoff from video evidence to code search:
 
 ```bash

@@ -8,8 +8,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"charm.land/bubbles/v2/progress"
@@ -18,6 +20,7 @@ import (
 	"github.com/abdul-hamid-achik/vidtrace/internal/tesseract"
 	"github.com/abdul-hamid-achik/vidtrace/internal/timeline"
 	"github.com/abdul-hamid-achik/vidtrace/internal/whisper"
+	"golang.org/x/sync/errgroup"
 )
 
 type Options struct {
@@ -34,6 +37,10 @@ type Options struct {
 	// non-interactive callers.
 	Interactive bool
 	Now         func() time.Time
+	// Concurrency caps the number of parallel OCR workers. When zero or negative,
+	// it defaults to the number of available CPUs (capped to 8). OCR frames are
+	// independent of each other and of Whisper, so they can run concurrently.
+	Concurrency int
 }
 
 type Summary struct {
@@ -120,7 +127,7 @@ func Run(ctx context.Context, opts Options) (Summary, error) {
 	}
 
 	bundleName := artifacts.SafeBundleName(sourceVideo, opts.BundleName)
-	bundleDir := artifacts.BundlePath(outputParentDir, bundleName, now())
+	bundleDir := artifacts.BundlePathUnique(outputParentDir, bundleName, now())
 	if err := artifacts.EnsureBundleDirs(bundleDir); err != nil {
 		return Summary{}, fmt.Errorf("create artifact bundle: %w", err)
 	}
@@ -138,7 +145,7 @@ func Run(ctx context.Context, opts Options) (Summary, error) {
 	}
 
 	metadataDoc := MetadataDocument{
-		SchemaVersion:   "1",
+		SchemaVersion:   artifacts.SchemaVersion,
 		SourceVideo:     sourceVideo,
 		GeneratedAt:     now().UTC().Format(time.RFC3339),
 		DurationSeconds: mediaMetadata.DurationSeconds,
@@ -172,35 +179,108 @@ func Run(ctx context.Context, opts Options) (Summary, error) {
 		return Summary{}, fmt.Errorf("no frames generated")
 	}
 
-	reporter.startItems(4, "ocr", fmt.Sprintf("running OCR on %d frames", len(framePaths)))
-	for i, framePath := range framePaths {
-		reporter.item(4, "ocr", i+1, len(framePaths), filepath.Base(framePath))
-		base := strings.TrimSuffix(filepath.Base(framePath), filepath.Ext(framePath))
-		outputBase := filepath.Join(bundleDir, "ocr", base)
-		if err := tesseract.OCR(ctx, framePath, outputBase, opts.OCRLanguage); err != nil {
-			reporter.finishItems()
-			return Summary{}, err
+	// OCR (step 4) and Whisper transcription (step 5) are independent: OCR only
+	// needs the extracted frames and Whisper only needs the source video. Run
+	// them concurrently to cut wall-clock time on long videos. OCR is further
+	// parallelized across frames with a bounded worker pool, while Whisper runs
+	// as a single external process (its model is already CPU/GPU-bound).
+	workers := opts.Concurrency
+	if workers <= 0 {
+		workers = runtime.NumCPU()
+		if workers > 8 {
+			workers = 8
 		}
 	}
-	reporter.finishItems()
+	if workers > len(framePaths) {
+		workers = len(framePaths)
+	}
 
-	ocrPaths, err := filepath.Glob(filepath.Join(bundleDir, "ocr", "frame_*.txt"))
+	transcriptDir := filepath.Join(bundleDir, "transcript")
+	var (
+		ocrPaths        []string
+		transcriptFiles []string
+	)
+
+	group, groupCtx := errgroup.WithContext(ctx)
+
+	reporter.startItems(4, "ocr", fmt.Sprintf("running OCR on %d frames (%d workers)", len(framePaths), workers))
+	group.Go(func() error {
+		defer reporter.finishItems()
+
+		sem := make(chan struct{}, workers)
+		var perFrame sync.WaitGroup
+		// errCh captures the first per-frame error; it is buffered so a single
+		// writer never blocks, even if other workers are still in flight.
+		errCh := make(chan error, 1)
+		done := uint64(0)
+		var doneMu sync.Mutex
+
+		for _, framePath := range framePaths {
+			if err := groupCtx.Err(); err != nil {
+				break
+			}
+			sem <- struct{}{}
+			perFrame.Add(1)
+			go func(framePath string) {
+				defer perFrame.Done()
+				defer func() { <-sem }()
+
+				base := strings.TrimSuffix(filepath.Base(framePath), filepath.Ext(framePath))
+				outputBase := filepath.Join(bundleDir, "ocr", base)
+				if err := tesseract.OCR(groupCtx, framePath, outputBase, opts.OCRLanguage); err != nil {
+					select {
+					case errCh <- err:
+					default:
+					}
+					return
+				}
+
+				doneMu.Lock()
+				done++
+				reporter.item(4, "ocr", int(done), len(framePaths), filepath.Base(framePath))
+				doneMu.Unlock()
+			}(framePath)
+		}
+		perFrame.Wait()
+
+		select {
+		case err := <-errCh:
+			return err
+		default:
+			return groupCtx.Err()
+		}
+	})
+
+	reporter.step(5, "transcript", "transcribing audio with Whisper "+opts.WhisperModel)
+	group.Go(func() error {
+		if err := whisper.Transcribe(groupCtx, sourceVideo, transcriptDir, opts.WhisperModel, opts.WhisperLanguage); err != nil {
+			return err
+		}
+		files, err := whisper.TranscriptFiles(transcriptDir)
+		if err != nil {
+			return err
+		}
+		transcriptFiles = files
+		return nil
+	})
+
+	if err := group.Wait(); err != nil {
+		// errgroup returns the first non-nil error. If it is context.Canceled it
+		// may mask a real tesseract/whisper failure, so prefer the original error
+		// when available by re-checking ctx.
+		if ctx.Err() != nil && err == context.Canceled {
+			return Summary{}, ctx.Err()
+		}
+		return Summary{}, err
+	}
+
+	ocrPaths, err = filepath.Glob(filepath.Join(bundleDir, "ocr", "frame_*.txt"))
 	if err != nil {
 		return Summary{}, err
 	}
 	sort.Strings(ocrPaths)
 	combinedOCRPath := filepath.Join(bundleDir, "ocr", "ocr_all_frames.txt")
-	if err := writeCombinedOCR(combinedOCRPath, sourceVideo, ocrPaths); err != nil {
-		return Summary{}, err
-	}
-
-	reporter.step(5, "transcript", "transcribing audio with Whisper "+opts.WhisperModel)
-	transcriptDir := filepath.Join(bundleDir, "transcript")
-	if err := whisper.Transcribe(ctx, sourceVideo, transcriptDir, opts.WhisperModel, opts.WhisperLanguage); err != nil {
-		return Summary{}, err
-	}
-	transcriptFiles, err := whisper.TranscriptFiles(transcriptDir)
-	if err != nil {
+	if err := writeCombinedOCR(combinedOCRPath, sourceVideo, ocrPaths, now().UTC()); err != nil {
 		return Summary{}, err
 	}
 
@@ -251,7 +331,7 @@ func PrintHuman(w io.Writer, summary Summary) {
 	}
 }
 
-func writeCombinedOCR(path, sourceVideo string, ocrPaths []string) (err error) {
+func writeCombinedOCR(path, sourceVideo string, ocrPaths []string, generatedAt time.Time) (err error) {
 	file, err := os.Create(path)
 	if err != nil {
 		return fmt.Errorf("create combined OCR: %w", err)
@@ -265,7 +345,7 @@ func writeCombinedOCR(path, sourceVideo string, ocrPaths []string) (err error) {
 	if _, err := fmt.Fprintf(file, "Video: %s\n", sourceVideo); err != nil {
 		return err
 	}
-	if _, err := fmt.Fprintf(file, "Generated: %s\n\n", time.Now().Format(time.RFC3339)); err != nil {
+	if _, err := fmt.Fprintf(file, "Generated: %s\n\n", generatedAt.Format(time.RFC3339)); err != nil {
 		return err
 	}
 	for _, ocrPath := range ocrPaths {
@@ -346,12 +426,14 @@ func relFiles(bundleDir string, paths []string) []string {
 // progressReporter renders pipeline progress. On a TTY (Interactive) it draws a
 // styled bubbles progress bar and redraws the per-item OCR line in place; off a
 // TTY it emits one plain line per step, which is friendly to logs and agents.
+// All methods are safe for concurrent use because OCR frames run in parallel.
 type progressReporter struct {
 	w           io.Writer
 	interactive bool
 	totalSteps  int
 	bar         progress.Model
 	itemsOpen   bool
+	mu          sync.Mutex
 }
 
 func newProgressReporter(w io.Writer, interactive bool, totalSteps int) *progressReporter {
@@ -366,6 +448,8 @@ func (r *progressReporter) step(step int, label, detail string) {
 	if r == nil || r.w == nil {
 		return
 	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.endItemsLine()
 	writeLine(r.w, "[%d/%d] %-10s %s %s", step, r.totalSteps, label, r.renderBar(step, r.totalSteps), detail)
 }
@@ -376,6 +460,8 @@ func (r *progressReporter) startItems(step int, label, detail string) {
 	if r == nil || r.w == nil {
 		return
 	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	if r.interactive {
 		r.itemsOpen = true
 		return
@@ -387,6 +473,8 @@ func (r *progressReporter) item(step int, label string, done, itemTotal int, det
 	if r == nil || r.w == nil || !r.interactive {
 		return
 	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.itemsOpen = true
 	// \r returns to column 0; \x1b[K clears any leftover from a longer prior line.
 	_, _ = fmt.Fprintf(r.w, "\r[%d/%d] %-10s %s %d/%d %s\x1b[K", step, r.totalSteps, label, r.renderBar(done, itemTotal), done, itemTotal, detail)
@@ -396,6 +484,8 @@ func (r *progressReporter) finishItems() {
 	if r == nil || r.w == nil {
 		return
 	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.endItemsLine()
 }
 

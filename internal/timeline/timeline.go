@@ -98,7 +98,7 @@ func Build(bundleDir string, framePaths []string, fps float64, transcriptJSONPat
 	assignSegments(entries, frameTimes, segments)
 
 	return Document{
-		SchemaVersion: "1",
+		SchemaVersion: artifacts.SchemaVersion,
 		Entries:       entries,
 	}, nil
 }

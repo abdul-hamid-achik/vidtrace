@@ -753,6 +753,50 @@ func TestSearchJSONFailure(t *testing.T) {
 	}
 }
 
+func TestMigrateEvidenceJSONAlreadyMigrated(t *testing.T) {
+	bundleDir := writeCLIBundle(t)
+	mustWrite(t, filepath.Join(bundleDir, "frames", "frame_0001.png"), "fake frame")
+	mustWrite(t, filepath.Join(bundleDir, "ocr", "frame_0001.txt"), "Login failed after submit")
+	dbPath := filepath.Join(t.TempDir(), "evidence.veclite")
+
+	var idxOut, idxErr bytes.Buffer
+	if code := Run([]string{"index", bundleDir, "--db", dbPath, "--json"}, &idxOut, &idxErr, "test"); code != 0 {
+		t.Fatalf("index failed: code=%d stderr=%q", code, idxErr.String())
+	}
+
+	var out, errBuf bytes.Buffer
+	code := Run([]string{"migrate-evidence", dbPath, "--json"}, &out, &errBuf, "test")
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d stderr=%q stdout=%q", code, errBuf.String(), out.String())
+	}
+	var report struct {
+		OK              bool   `json:"ok"`
+		Collection      string `json:"collection"`
+		AlreadyMigrated bool   `json:"already_migrated"`
+		MigratedRecords int    `json:"migrated_records"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &report); err != nil {
+		t.Fatalf("expected migrate JSON, got %q: %v", out.String(), err)
+	}
+	if !report.OK || !report.AlreadyMigrated || report.MigratedRecords != 0 || report.Collection != "evidence_entries" {
+		t.Fatalf("unexpected migrate report: %#v", report)
+	}
+}
+
+func TestMigrateEvidenceMissingDBJSONFailure(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"migrate-evidence", "/missing/evidence.veclite", "--json"}, &stdout, &stderr, "test")
+	if code != 1 {
+		t.Fatalf("expected exit code 1, got %d", code)
+	}
+	if !strings.Contains(stdout.String(), `"ok": false`) || !strings.Contains(stdout.String(), "evidence db not found") {
+		t.Fatalf("expected json failure with not-found, got %q", stdout.String())
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("expected empty stderr for json failure, got %q", stderr.String())
+	}
+}
+
 func TestConciseEvidenceTextTruncatesHumanSearchText(t *testing.T) {
 	result := evidence.SearchResult{
 		Frame: "frames/frame_0001.png",

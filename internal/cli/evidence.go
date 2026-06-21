@@ -238,3 +238,52 @@ func writeEvidenceFailure(stdout, stderr io.Writer, jsonOutput bool, err error, 
 	}
 	return 1
 }
+
+func runMigrateEvidence(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("migrate-evidence", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	jsonOutput := fs.Bool("json", false, "print machine-readable JSON")
+
+	normalizedArgs, err := normalizeBundleArgs(args, map[string]struct{}{"json": {}}, map[string]struct{}{})
+	if err != nil {
+		_, _ = fmt.Fprintln(stderr, err)
+		return 2
+	}
+	if err := fs.Parse(normalizedArgs); err != nil {
+		return 2
+	}
+	if fs.NArg() != 1 {
+		_, _ = fmt.Fprintln(stderr, "usage: vidtrace migrate-evidence /path/to/evidence.veclite [--json]")
+		return 2
+	}
+
+	resolvedDBPath, err := expandHome(fs.Arg(0))
+	if err != nil {
+		return writeEvidenceFailure(stdout, stderr, *jsonOutput, fmt.Errorf("resolve db path: %w", err), "migrate-evidence")
+	}
+	report, err := evidence.Migrate(resolvedDBPath)
+	if err != nil {
+		return writeEvidenceFailure(stdout, stderr, *jsonOutput, err, "migrate-evidence")
+	}
+	if *jsonOutput {
+		if err := writeJSON(stdout, report); err != nil {
+			_, _ = fmt.Fprintf(stderr, "migrate-evidence json failed: %v\n", err)
+			return 1
+		}
+		return 0
+	}
+	if report.AlreadyMigrated {
+		_, _ = fmt.Fprintln(stdout, "vidtrace migrate-evidence: already migrated")
+		_, _ = fmt.Fprintln(stdout, report.Summary)
+		return 0
+	}
+	_, _ = fmt.Fprintln(stdout, "vidtrace migrate-evidence: ok")
+	_, _ = fmt.Fprintf(stdout, "DB: %s\n", report.DBPath)
+	_, _ = fmt.Fprintf(stdout, "Collection: %s\n", report.Collection)
+	_, _ = fmt.Fprintf(stdout, "Migrated: %d records (%d semantic)\n", report.MigratedRecords, report.SemanticRecords)
+	if report.DroppedLegacy {
+		_, _ = fmt.Fprintln(stdout, "Legacy collections: dropped")
+	}
+	_, _ = fmt.Fprintln(stdout, report.Summary)
+	return 0
+}

@@ -7,8 +7,10 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 
 	"github.com/charmbracelet/x/term"
 
@@ -36,6 +38,8 @@ func Run(args []string, stdout, stderr io.Writer, version string) int {
 		return runExtract(args[1:], stdout, stderr)
 	case "index":
 		return runIndex(args[1:], stdout, stderr)
+	case "migrate-evidence":
+		return runMigrateEvidence(args[1:], stdout, stderr)
 	case "search":
 		return runSearch(args[1:], stdout, stderr)
 	case "investigate":
@@ -108,6 +112,7 @@ func runExtract(args []string, stdout, stderr io.Writer) int {
 	whisperModel := fs.String("model", "small", "Whisper model")
 	outputDir := fs.String("out", defaultOutputDir(), "parent output directory")
 	bundleName := fs.String("name", "", "artifact bundle name prefix")
+	concurrency := fs.Int("concurrency", 0, "parallel OCR workers (0 = auto, capped to 8)")
 	jsonOutput := fs.Bool("json", false, "print machine-readable JSON")
 
 	normalizedArgs, err := normalizeExtractArgs(args)
@@ -139,7 +144,7 @@ func runExtract(args []string, stdout, stderr io.Writer) int {
 		interactive = term.IsTerminal(f.Fd())
 	}
 
-	summary, err := pipeline.Run(context.Background(), pipeline.Options{
+	summary, err := runExtractWithCancellation(fs.Arg(0), pipeline.Options{
 		SourceVideo:     fs.Arg(0),
 		FPS:             *fps,
 		OCRLanguage:     *ocrLanguage,
@@ -149,6 +154,7 @@ func runExtract(args []string, stdout, stderr io.Writer) int {
 		BundleName:      *bundleName,
 		Progress:        progress,
 		Interactive:     interactive,
+		Concurrency:     *concurrency,
 	})
 	if err != nil {
 		return writeExtractFailure(stdout, stderr, *jsonOutput, err)
@@ -227,6 +233,16 @@ func writeExtractFailure(stdout, stderr io.Writer, jsonOutput bool, err error) i
 	return 1
 }
 
+// runExtractWithCancellation runs the pipeline with a context that cancels on
+// SIGINT/SIGTERM so long ffmpeg/whisper runs can be interrupted cleanly. The
+// first returned error from the pipeline wins; a cancellation error is reported
+// as a normal extract failure so --json output stays stable.
+func runExtractWithCancellation(videoPath string, opts pipeline.Options) (pipeline.Summary, error) {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	return pipeline.Run(ctx, opts)
+}
+
 func writeJSON(w io.Writer, value any) error {
 	encoder := json.NewEncoder(w)
 	encoder.SetIndent("", "  ")
@@ -273,6 +289,7 @@ Commands:
   index        Index bundle evidence into a local VecLite database
   investigate  Create a video-evidence to code-search handoff
   mcp          Run the MCP server (read-only evidence tools over stdio)
+  migrate-evidence  Convert a pre-v0.17.0 evidence DB to the single-collection layout
   search       Search an evidence database for timestamped video evidence
   studio       Open the artifact inspection studio
   validate     Validate an artifact bundle, optionally as JSON

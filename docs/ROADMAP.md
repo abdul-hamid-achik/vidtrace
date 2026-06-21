@@ -14,7 +14,7 @@
 - Implement `vidtrace extract`. Done.
 - Match the legacy Bash output layout. Done, plus `metadata.json` and `timeline.json`.
 - Add configurable `--fps`, `--ocr-lang`, `--whisper-lang`, `--model`, and `--out`. Done.
-- Preserve `scripts/extract.sh` until parity is verified.
+- Legacy Bash extractor removed after Go parity was verified on synthetic and real video; `internal/pipeline` is the sole extractor.
 
 ## Iteration 3: Structured Artifacts
 

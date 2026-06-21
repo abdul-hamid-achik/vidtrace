@@ -76,11 +76,10 @@ Use `vidtrace studio <bundle>` for human inspection. Studio keys include `m` for
 
 ## Iteration Strategy
 
-1. Preserve `scripts/extract.sh` as the working baseline until the Go pipeline reaches parity.
+1. The Go pipeline in `internal/pipeline` is the only extractor. The legacy `scripts/extract.sh` was removed after parity was verified on synthetic and real video (see `CHANGELOG.md`).
 2. Add small, testable Go commands.
 3. Add unit tests for command behavior and data shaping.
 4. Add or update glyphrun E2E specs for real CLI behavior.
-5. Remove the Bash extractor only after Go extraction is verified end-to-end and the decision is documented.
 
 ## Development Commands
 
@@ -127,3 +126,18 @@ task run -- studio /tmp/vidtrace-real/bug_artifacts_*
 - Never commit `~/Downloads/bug.mp4` or any copied video fixture.
 - Do not delete user videos or artifact folders unless explicitly asked.
 - Do not rewrite history or run destructive Git commands without explicit approval.
+
+## Notes and Documentation Boundary
+
+The `docs/` folder is the VitePress documentation website source. It is published to Vercel and consumed by the public. Keep it strictly to public product docs: CLI contracts, schemas, architecture, testing, install, release, usage, and ADRs. Never drop strategy notes, implementation checkpoints, bug analysis, or one-off planning files into `docs/`.
+
+Project notes, strategy, checkpoints, implementation notes, and bug analysis belong in the Obsidian vault at `~/notes/projects/<project>/`. Use the `obsidian` CLI (`/usr/local/bin/obsidian`) to create, read, and update notes there. Each project has its own folder:
+
+- `~/notes/projects/vidtrace/` — this project's notes and index
+- `~/notes/projects/veclite/` — VecLite library notes
+- `~/notes/projects/vecgrep/` — Vecgrep codebase search tool notes
+- `~/notes/projects/graphite/` — Graphite application notes (e.g., ticket-specific bug analysis)
+
+When working across projects (for example a vidtrace feature that touches the VecLite API, or a bug analysis that points at the graphite codebase), put the note in the relevant project's folder and link it from that project's `index.md` using Obsidian wikilinks. Each project folder has an `index.md` that tracks current state, release checkpoints, and missing work — keep it updated when a note is added.
+
+`BACKLOG.md` and `CHANGELOG.md` stay in the repo because they are standard project artifacts; everything else that is longer-lived than a PR should live in the vault.

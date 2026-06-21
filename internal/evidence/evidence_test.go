@@ -570,7 +570,7 @@ func TestIndexAndSearchSemanticAndHybrid(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s search failed: %v", mode, err)
 		}
-		if res.Mode != mode || res.Collection != TextCollection {
+		if res.Mode != mode || res.Collection != Collection {
 			t.Fatalf("%s search wrong mode/collection: %#v", mode, res)
 		}
 		if len(res.Results) == 0 || res.Results[0].Frame != "frames/frame_0002.png" {
@@ -708,7 +708,7 @@ func TestSemanticReindexDoesNotDuplicateVectors(t *testing.T) {
 		t.Fatalf("open db: %v", err)
 	}
 	defer func() { _ = db.Close() }()
-	coll, err := db.GetCollection(TextCollection)
+	coll, err := db.GetCollection(Collection)
 	if err != nil {
 		t.Fatalf("get text collection: %v", err)
 	}
@@ -828,6 +828,65 @@ func TestSearchRejectsUnknownMode(t *testing.T) {
 	_, err := Search(SearchOptions{DBPath: dbPath, Query: "ticket", Mode: "fuzzy"})
 	if err == nil || !strings.Contains(err.Error(), "unknown search mode") {
 		t.Fatalf("Search error = %v, want unknown-mode failure", err)
+	}
+}
+
+func TestMigrateEvidenceIsIdempotentOnModernDB(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "evidence.veclite")
+	bundleDir := writeEvidenceBundle(t)
+	if _, err := IndexBundle(IndexOptions{BundleDir: bundleDir, DBPath: dbPath}); err != nil {
+		t.Fatalf("index failed: %v", err)
+	}
+
+	report, err := Migrate(dbPath)
+	if err != nil {
+		t.Fatalf("migrate on modern DB failed: %v", err)
+	}
+	if !report.OK || !report.AlreadyMigrated || report.MigratedRecords != 0 {
+		t.Fatalf("expected already-migrated report, got %#v", report)
+	}
+
+	// A modern DB still has exactly one collection after migrate.
+	res, err := Search(SearchOptions{DBPath: dbPath, Query: "ticket"})
+	if err != nil {
+		t.Fatalf("search after migrate failed: %v", err)
+	}
+	if len(res.Results) == 0 {
+		t.Fatal("expected search results preserved after migrate")
+	}
+	if res.Collection != Collection {
+		t.Fatalf("collection = %q, want %q", res.Collection, Collection)
+	}
+}
+
+func TestMigrateEvidenceRejectsMissingDB(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "does-not-exist.veclite")
+	_, err := Migrate(dbPath)
+	if err == nil || !strings.Contains(err.Error(), "evidence db not found") {
+		t.Fatalf("Migrate error = %v, want not-found failure", err)
+	}
+}
+
+func TestMigrateEvidenceRejectsEmptyDB(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "empty.veclite")
+	if _, err := IndexBundle(IndexOptions{BundleDir: writeEvidenceBundle(t), DBPath: dbPath}); err != nil {
+		t.Fatalf("index failed: %v", err)
+	}
+	// Create an unrelated DB with no evidence collections and confirm migrate
+	// refuses to treat it as a legacy evidence database.
+	otherPath := filepath.Join(t.TempDir(), "other.veclite")
+	db, err := veclite.Open(otherPath)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	if _, err := db.CreateCollection("unrelated"); err != nil {
+		t.Fatalf("create unrelated: %v", err)
+	}
+	_ = db.Close()
+
+	_, err = Migrate(otherPath)
+	if err == nil || !strings.Contains(err.Error(), "no legacy evidence collections") {
+		t.Fatalf("Migrate error = %v, want no-legacy failure", err)
 	}
 }
 

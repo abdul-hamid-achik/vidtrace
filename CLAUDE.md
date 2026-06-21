@@ -53,3 +53,11 @@ bin/vidtrace studio /tmp/vidtrace-real/bug_artifacts_*
 When `--json` is used, stdout must remain parseable JSON. Progress logs and human summaries must not be mixed into JSON output.
 
 Use `vidtrace docs agent` for the fastest in-CLI product guide. For ticket/video work, inspect `metadata.json`, `timeline.json`, OCR text, transcript files, and selected frame images before deciding whether the ticket matches the video. In Studio, use `m` for metadata, `o` to open the selected frame, `r` to reveal it in Finder on macOS, and `c` to copy a concise evidence summary when clipboard tooling is available.
+
+## Notes and Documentation Boundary
+
+The `docs/` folder is the VitePress website source (published to Vercel). Keep it to public product docs only: CLI contracts, schemas, architecture, testing, install, release, usage, and ADRs. Do not drop strategy notes, implementation checkpoints, bug analysis, or planning files into `docs/`.
+
+Project notes, strategy, checkpoints, implementation notes, and bug analysis belong in the Obsidian vault at `~/notes/projects/<project>/`. Use the `obsidian` CLI (`/usr/local/bin/obsidian`) to read and update notes there. Each project has its own folder (`vidtrace`, `veclite`, `vecgrep`, `graphite`, etc.) with an `index.md` that tracks current state — keep it updated when a note is added, and link notes with Obsidian wikilinks.
+
+`BACKLOG.md` and `CHANGELOG.md` stay in the repo; everything longer-lived than a PR lives in the vault. See `AGENTS.md` "Notes and Documentation Boundary" for the full rule.

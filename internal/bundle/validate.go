@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/abdul-hamid-achik/vidtrace/internal/artifacts"
 	"github.com/abdul-hamid-achik/vidtrace/internal/timeline"
 )
 
@@ -15,6 +16,7 @@ type ValidationReport struct {
 	TimelineEntries int               `json:"timeline_entries"`
 	EmptyOCREntries int               `json:"empty_ocr_entries"`
 	Checks          []ValidationCheck `json:"checks"`
+	Warnings        []string          `json:"warnings,omitempty"`
 	Summary         string            `json:"summary"`
 }
 
@@ -56,7 +58,7 @@ func Validate(dir string) ValidationReport {
 		report.addCheck("metadata_json", false, "metadata.json", err.Error())
 	} else {
 		report.addCheck("metadata_json", true, "metadata.json", "metadata.json parses")
-		report.addCheck("metadata_schema", metadata.SchemaVersion == "1", "metadata.json", "schema_version is 1")
+		report.addCheck("metadata_schema", metadata.SchemaVersion == artifacts.SchemaVersion, "metadata.json", "schema_version is "+artifacts.SchemaVersion)
 	}
 
 	var timelineDoc timeline.Document
@@ -69,7 +71,7 @@ func Validate(dir string) ValidationReport {
 		report.TimelineEntries = len(timelineDoc.Entries)
 		report.EmptyOCREntries = countEmptyOCR(timelineDoc)
 		report.addCheck("timeline_json", true, "timeline.json", "timeline.json parses")
-		report.addCheck("timeline_schema", timelineDoc.SchemaVersion == "1", "timeline.json", "schema_version is 1")
+		report.addCheck("timeline_schema", timelineDoc.SchemaVersion == artifacts.SchemaVersion, "timeline.json", "schema_version is "+artifacts.SchemaVersion)
 		report.addCheck("timeline_entries", len(timelineDoc.Entries) > 0, "timeline.json", fmt.Sprintf("%d timeline entries", len(timelineDoc.Entries)))
 	}
 
@@ -84,6 +86,25 @@ func Validate(dir string) ValidationReport {
 		missingFrames, missingOCR := missingTimelinePaths(resolvedDir, timelineDoc)
 		report.addCheck("timeline_frames", len(missingFrames) == 0, "timeline.json", missingPathMessage("frame paths exist", missingFrames))
 		report.addCheck("timeline_ocr_paths", len(missingOCR) == 0, "timeline.json", missingPathMessage("OCR paths exist", missingOCR))
+	}
+
+	// Soft warning: when metadata declares a whisper model, expect at least one
+	// transcript file. Silent videos are still valid bundles, so this is a
+	// warning, not a hard check.
+	if metadata.WhisperModel != "" {
+		transcriptDir := filepath.Join(resolvedDir, "transcript")
+		if entries, err := os.ReadDir(transcriptDir); err != nil || countFiles(entries) == 0 {
+			report.Warnings = append(report.Warnings, "metadata declares a whisper model but transcript/ is empty or missing; silent video or transcription failure")
+		}
+	}
+
+	// Soft warning: frame and OCR file counts should match. A drift suggests a
+	// partial extraction or manual editing. This does not fail validation because
+	// timeline-referenced paths are already checked above.
+	frameCount := countFilesInDir(filepath.Join(resolvedDir, "frames"))
+	ocrFrameCount := countFrameTXTFiles(filepath.Join(resolvedDir, "ocr"))
+	if frameCount > 0 && ocrFrameCount > 0 && frameCount != ocrFrameCount {
+		report.Warnings = append(report.Warnings, fmt.Sprintf("frame count (%d) differs from OCR frame txt count (%d); partial extraction or manual edit", frameCount, ocrFrameCount))
 	}
 
 	return report.finalize()
@@ -160,4 +181,43 @@ func missingPathMessage(success string, missing []string) string {
 		return fmt.Sprintf("missing %s", missing[0])
 	}
 	return fmt.Sprintf("missing %d paths; first missing path is %s", len(missing), missing[0])
+}
+
+func countFiles(entries []os.DirEntry) int {
+	count := 0
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			count++
+		}
+	}
+	return count
+}
+
+func countFilesInDir(dir string) int {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return 0
+	}
+	return countFiles(entries)
+}
+
+// countFrameTXTFiles counts only files matching the frame_*.txt pattern, so the
+// combined ocr_all_frames.txt is excluded from the OCR frame count. This mirrors
+// the pipeline's frame_*.txt glob and the AGENTS.md gotcha.
+func countFrameTXTFiles(dir string) int {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return 0
+	}
+	count := 0
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		if strings.HasPrefix(name, "frame_") && strings.HasSuffix(name, ".txt") {
+			count++
+		}
+	}
+	return count
 }

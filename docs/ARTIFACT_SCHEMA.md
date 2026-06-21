@@ -92,5 +92,9 @@ Limits: matching is purely temporal; it does not align spoken words to the speci
 
 - `vidtrace studio` reads `metadata.json`, `timeline.json`, OCR text, transcript text, and frame paths.
 - `vidtrace analyze` and `vidtrace compare` read bundle text evidence and a ticket file.
-- `vidtrace validate` checks required files, parseable JSON, timeline entries, and referenced frame/OCR paths.
+- `vidtrace validate` checks required files, parseable JSON, timeline entries, and referenced frame/OCR paths. It also emits soft `warnings` (without failing validation) when `transcript/` is empty despite a declared whisper model, or when the frame count differs from the OCR frame txt count.
 - Agents should treat `timeline.json` as the primary map from timestamp to visual and spoken evidence.
+
+## Bundle Directory Uniqueness
+
+The pipeline names bundles `<name>_artifacts_<YYYYMMDD_HHMMSS>`. If a directory with that name already exists (for example two runs in the same second), a numeric suffix is appended (`_2`, `_3`, ...) so runs never silently overwrite each other.

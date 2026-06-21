@@ -14,14 +14,21 @@ import (
 )
 
 const (
-	SchemaVersion     = "1"
-	KeywordCollection = "evidence_entries_keyword"
-	// TextCollection holds vector + content records for semantic and hybrid
-	// search; MetaCollection records the embedding profile used to build it.
-	TextCollection = "evidence_entries_text"
-	MetaCollection = "evidence_meta"
+	SchemaVersion = "1"
+	// Collection is the single evidence collection. It holds one record per
+	// timeline entry, indexed by evidence_id, with BM25 over the content and a
+	// named "text" vector space for semantic/hybrid search (when an embedder
+	// is provided). Pre-v0.17.0 databases used three collections
+	// (evidence_entries_keyword, evidence_entries_text, evidence_meta);
+	// vidtrace migrate-evidence converts them to this single collection.
+	Collection      = "evidence_entries"
+	TextVectorSpace = "text"
 
-	embeddingProfileKey = "embedding_profile"
+	// Legacy collection names used before the v0.17.0 single-collection
+	// migration. Kept here so migrate-evidence can read and convert them.
+	legacyKeywordCollection = "evidence_entries_keyword"
+	legacyTextCollection    = "evidence_entries_text"
+	legacyMetaCollection    = "evidence_meta"
 )
 
 // Search modes.
@@ -169,12 +176,12 @@ func IndexBundle(opts IndexOptions) (IndexReport, error) {
 		_ = db.Close()
 	}()
 
-	coll, err := keywordCollection(db)
+	coll, err := ensureEvidenceCollection(db, opts.Embedder)
 	if err != nil {
 		return IndexReport{}, err
 	}
 
-	counts, err := indexLoadedInto(coll, loaded)
+	counts, err := indexLoadedInto(coll, loaded, opts.Embedder)
 	if err != nil {
 		return IndexReport{}, err
 	}
@@ -182,10 +189,8 @@ func IndexBundle(opts IndexOptions) (IndexReport, error) {
 	var semanticCount int
 	var profile *embed.Profile
 	if opts.Embedder != nil {
-		semanticCount, profile, err = indexSemanticBundle(context.Background(), db, opts.Embedder, loaded)
-		if err != nil {
-			return IndexReport{}, err
-		}
+		semanticCount = counts.Semantic
+		profile = profileOrNil(coll, opts.Embedder)
 	}
 
 	if err := db.Sync(); err != nil {
@@ -196,7 +201,7 @@ func IndexBundle(opts IndexOptions) (IndexReport, error) {
 		OK:              true,
 		BundleDir:       loaded.Dir,
 		DBPath:          dbPath,
-		Collection:      KeywordCollection,
+		Collection:      Collection,
 		Mode:            ModeKeyword,
 		IndexedEntries:  counts.Indexed,
 		InsertedEntries: counts.Inserted,
@@ -261,7 +266,7 @@ func IndexBundles(bundleDirs []string, dbPath string, embedder embed.Embedder) (
 		_ = db.Close()
 	}()
 
-	coll, err := keywordCollection(db)
+	coll, err := ensureEvidenceCollection(db, embedder)
 	if err != nil {
 		return MultiIndexReport{}, err
 	}
@@ -270,7 +275,7 @@ func IndexBundles(bundleDirs []string, dbPath string, embedder embed.Embedder) (
 	report := MultiIndexReport{
 		OK:         true,
 		DBPath:     resolvedDBPath,
-		Collection: KeywordCollection,
+		Collection: Collection,
 		Mode:       ModeKeyword,
 		Bundles:    make([]BundleIndexResult, 0, len(resolvedDirs)),
 	}
@@ -279,7 +284,7 @@ func IndexBundles(bundleDirs []string, dbPath string, embedder embed.Embedder) (
 		if err != nil {
 			return MultiIndexReport{}, err
 		}
-		counts, err := indexLoadedInto(coll, loaded)
+		counts, err := indexLoadedInto(coll, loaded, embedder)
 		if err != nil {
 			return MultiIndexReport{}, err
 		}
@@ -288,33 +293,24 @@ func IndexBundles(bundleDirs []string, dbPath string, embedder embed.Embedder) (
 			IndexedEntries:  counts.Indexed,
 			InsertedEntries: counts.Inserted,
 			UpdatedEntries:  counts.Updated,
-		}
-		if embedder != nil {
-			semanticCount, profile, err := indexSemanticBundle(context.Background(), db, embedder, loaded)
-			if err != nil {
-				return MultiIndexReport{}, err
-			}
-			bundleResult.SemanticEntries = semanticCount
-			report.SemanticEntries += semanticCount
-			// A bundle with no timeline entries returns a nil profile; do not let
-			// it clear a profile already set by an earlier bundle, so the
-			// "SemanticEntries > 0 implies Embedding != nil" invariant holds.
-			if profile != nil {
-				report.Embedding = profile
-			}
+			SemanticEntries: counts.Semantic,
 		}
 		report.Bundles = append(report.Bundles, bundleResult)
 		report.IndexedEntries += counts.Indexed
 		report.InsertedEntries += counts.Inserted
 		report.UpdatedEntries += counts.Updated
+		report.SemanticEntries += counts.Semantic
+	}
+	if embedder != nil {
+		report.Embedding = profileOrNil(coll, embedder)
 	}
 	if err := db.Sync(); err != nil {
 		return MultiIndexReport{}, fmt.Errorf("sync evidence db: %w", err)
 	}
 
-	report.Summary = fmt.Sprintf("Indexed %d evidence entries from %d bundle(s) into %s.", report.IndexedEntries, len(report.Bundles), KeywordCollection)
+	report.Summary = fmt.Sprintf("Indexed %d evidence entries from %d bundle(s) into %s.", report.IndexedEntries, len(report.Bundles), Collection)
 	if report.SemanticEntries > 0 {
-		report.Summary += fmt.Sprintf(" Indexed %d semantic entries into %s.", report.SemanticEntries, TextCollection)
+		report.Summary += fmt.Sprintf(" Indexed %d semantic entries into the %s vector space.", report.SemanticEntries, TextVectorSpace)
 	}
 	return report, nil
 }
@@ -324,12 +320,56 @@ type indexCounts struct {
 	Indexed  int
 	Inserted int
 	Updated  int
+	Semantic int
 }
 
-func indexLoadedInto(coll *veclite.Collection, loaded bundle.Bundle) (indexCounts, error) {
+// indexLoadedInto upserts each timeline entry as one record into the single
+// evidence collection, keyed by evidence_id. When an embedder is provided it
+// also embeds the content and stores the vector in the named "text" space on
+// the same record, so keyword, semantic, and hybrid search all run against one
+// collection. Upserting by key is idempotent across re-indexes and preserves
+// CreatedAt/bookkeeping on replace.
+func indexLoadedInto(coll *veclite.Collection, loaded bundle.Bundle, embedder embed.Embedder) (indexCounts, error) {
 	var counts indexCounts
-	for _, item := range recordsForBundle(loaded) {
-		_, inserted, err := coll.UpsertTextDocumentByKey("evidence_id", item.id, item.content, item.payload)
+	items := recordsForBundle(loaded)
+	if len(items) == 0 {
+		return counts, nil
+	}
+
+	var vectors [][]float32
+	if embedder != nil {
+		texts := make([]string, len(items))
+		for i, item := range items {
+			texts[i] = item.content
+		}
+		var err error
+		vectors, err = embedder.Embed(context.Background(), texts)
+		if err != nil {
+			return indexCounts{}, fmt.Errorf("embed bundle %s: %w", loaded.Dir, err)
+		}
+		if len(vectors) != len(items) {
+			return indexCounts{}, fmt.Errorf("embedder returned %d vectors for %d records", len(vectors), len(items))
+		}
+		if dim := len(vectors[0]); dim == 0 {
+			return indexCounts{}, fmt.Errorf("embedder returned empty vectors")
+		} else {
+			for i, vec := range vectors {
+				if len(vec) != dim {
+					return indexCounts{}, fmt.Errorf("embedder returned inconsistent vector length at index %d: got %d, want %d", i, len(vec), dim)
+				}
+			}
+		}
+	}
+
+	for i, item := range items {
+		in := veclite.RecordInput{
+			Content: item.content,
+			Payload: item.payload,
+		}
+		if embedder != nil {
+			in.Vectors = map[string][]float32{TextVectorSpace: vectors[i]}
+		}
+		_, inserted, err := coll.UpsertRecordByKey("evidence_id", item.id, in)
 		if err != nil {
 			return indexCounts{}, fmt.Errorf("index evidence %s: %w", item.id, err)
 		}
@@ -340,138 +380,106 @@ func indexLoadedInto(coll *veclite.Collection, loaded bundle.Bundle) (indexCount
 			counts.Updated++
 		}
 	}
+	counts.Semantic = len(vectors)
 	return counts, nil
 }
 
 func indexSummary(keywordEntries, semanticEntries int) string {
-	summary := fmt.Sprintf("Indexed %d evidence entries into %s.", keywordEntries, KeywordCollection)
+	summary := fmt.Sprintf("Indexed %d evidence entries into %s.", keywordEntries, Collection)
 	if semanticEntries > 0 {
-		summary += fmt.Sprintf(" Indexed %d semantic entries into %s.", semanticEntries, TextCollection)
+		summary += fmt.Sprintf(" Indexed %d semantic entries into the %s vector space.", semanticEntries, TextVectorSpace)
 	}
 	return summary
 }
 
-// indexSemanticBundle embeds each timeline entry's content and stores a vector +
-// content document in the semantic collection, idempotently by evidence_id. It
-// records the embedding profile so search can detect a mismatched embedder, and
-// rejects mixing embedders by failing when the stored profile differs.
-func indexSemanticBundle(ctx context.Context, db *veclite.DB, embedder embed.Embedder, loaded bundle.Bundle) (int, *embed.Profile, error) {
-	records := recordsForBundle(loaded)
-	if len(records) == 0 {
-		return 0, nil, nil
-	}
-
-	texts := make([]string, len(records))
-	for i, item := range records {
-		texts[i] = item.content
-	}
-	vectors, err := embedder.Embed(ctx, texts)
-	if err != nil {
-		return 0, nil, fmt.Errorf("embed bundle %s: %w", loaded.Dir, err)
-	}
-	if len(vectors) != len(records) {
-		return 0, nil, fmt.Errorf("embedder returned %d vectors for %d records", len(vectors), len(records))
-	}
-	// Validate the whole batch before any destructive write below. The replace
-	// loop deletes the prior vector before inserting the new one, and veclite
-	// always persists on Close, so a mid-loop InsertDocument failure (for example
-	// a ragged-dimension vector) would otherwise leave a record deleted with no
-	// replacement. Rejecting a bad batch up front keeps re-indexing safe.
-	dim := len(vectors[0])
-	if dim == 0 {
-		return 0, nil, fmt.Errorf("embedder returned empty vectors")
-	}
-	for i, vec := range vectors {
-		if len(vec) != dim {
-			return 0, nil, fmt.Errorf("embedder returned inconsistent vector length at index %d: got %d, want %d", i, len(vec), dim)
+// ensureEvidenceCollection opens (or creates) the single evidence collection
+// with a BM25 text index over the content and the payload fields used for
+// filtering. When an embedder is provided it also declares the named "text"
+// vector space and attaches an EmbeddingProfile, so vector inserts are
+// validated and search can detect a mismatched embedder. The profile is read
+// back and compared against the requested one to reject mixing embedders.
+func ensureEvidenceCollection(db *veclite.DB, embedder embed.Embedder) (*veclite.Collection, error) {
+	if db.HasCollection(Collection) {
+		coll, err := db.GetCollection(Collection)
+		if err != nil {
+			return nil, err
 		}
-	}
-
-	profile := embedder.Profile()
-	profile.Dimensions = dim
-	if err := ensureEmbeddingProfile(db, profile); err != nil {
-		return 0, nil, err
-	}
-
-	coll, err := textCollection(db)
-	if err != nil {
-		return 0, nil, err
-	}
-	for i, item := range records {
-		// Replace any existing vector for this evidence_id so re-indexing is
-		// idempotent (veclite has no upsert that carries both vector and content).
-		if _, err := coll.DeleteWhere(veclite.Equal("evidence_id", item.id)); err != nil {
-			return 0, nil, fmt.Errorf("replace semantic evidence %s: %w", item.id, err)
+		if embedder != nil {
+			want := embedder.Profile()
+			if existing, ok := coll.EmbeddingProfile(); ok {
+				if existing.Provider != want.Provider || existing.Model != want.Model {
+					return nil, fmt.Errorf("embedding profile mismatch: index uses %s/%s, requested %s/%s",
+						existing.Provider, existing.Model, want.Provider, want.Model)
+				}
+				if existing.Dimension > 0 && want.Dimensions > 0 && existing.Dimension != want.Dimensions {
+					return nil, fmt.Errorf("embedding profile mismatch: index has dim %d, requested %d",
+						existing.Dimension, want.Dimensions)
+				}
+			} else {
+				// Pre-v0.17.0 DB: the collection exists but has no first-class
+				// profile and no text space. Declare the space and attach the
+				// profile so semantic search works. This also migrates legacy
+				// keyword-only DBs on first semantic index.
+				if err := setupTextSpace(coll, want); err != nil {
+					return nil, err
+				}
+			}
 		}
-		if _, err := coll.InsertDocument(vectors[i], item.content, item.payload); err != nil {
-			return 0, nil, fmt.Errorf("index semantic evidence %s: %w", item.id, err)
-		}
+		return coll, nil
 	}
-	return len(records), &profile, nil
-}
 
-func textCollection(db *veclite.DB) (*veclite.Collection, error) {
-	if db.HasCollection(TextCollection) {
-		return db.GetCollection(TextCollection)
-	}
-	// Dimension 0 lets veclite auto-detect from the first inserted vector; a
-	// text index over the same content enables hybrid (vector + BM25) search.
-	return db.CreateCollection(TextCollection,
+	coll, err := db.CreateCollection(Collection,
 		veclite.WithTextIndex("evidence_id", "bundle", "source_video", "frame", "ocr_path", "source"),
 	)
-}
-
-func metaCollection(db *veclite.DB) (*veclite.Collection, error) {
-	if db.HasCollection(MetaCollection) {
-		return db.GetCollection(MetaCollection)
-	}
-	return db.CreateCollection(MetaCollection, veclite.WithTextIndex("key"))
-}
-
-// ensureEmbeddingProfile writes the embedding profile on first use and rejects a
-// later embedder whose provider, model, or dimensions differ from it.
-func ensureEmbeddingProfile(db *veclite.DB, profile embed.Profile) error {
-	coll, err := metaCollection(db)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	existing, err := readEmbeddingProfile(coll)
-	if err != nil {
-		return err
-	}
-	if existing != nil {
-		if existing.Provider != profile.Provider || existing.Model != profile.Model || existing.Dimensions != profile.Dimensions {
-			return fmt.Errorf("embedding profile mismatch: index uses %s/%s (dim %d), requested %s/%s (dim %d)",
-				existing.Provider, existing.Model, existing.Dimensions, profile.Provider, profile.Model, profile.Dimensions)
+	if embedder != nil {
+		if err := setupTextSpace(coll, embedder.Profile()); err != nil {
+			return nil, err
 		}
-		return nil
 	}
-	payload := map[string]any{
-		"key":        embeddingProfileKey,
-		"provider":   profile.Provider,
-		"model":      profile.Model,
-		"dimensions": profile.Dimensions,
-	}
-	if _, _, err := coll.UpsertTextDocumentByKey("key", embeddingProfileKey, "", payload); err != nil {
-		return fmt.Errorf("write embedding profile: %w", err)
+	return coll, nil
+}
+
+// setupTextSpace declares the named "text" vector space and attaches the
+// embedding profile to it (and to the collection default space for visibility
+// via EmbeddingProfile()). Dimension auto-detects from the first vector when 0.
+func setupTextSpace(coll *veclite.Collection, profile embed.Profile) error {
+	if !coll.HasVectorSpace(TextVectorSpace) {
+		vp := veclite.EmbeddingProfile{
+			Provider: profile.Provider,
+			Model:    profile.Model,
+		}
+		if profile.Dimensions > 0 {
+			vp.Dimension = profile.Dimensions
+		}
+		if err := coll.AddVectorSpace(veclite.VectorSpaceConfig{
+			Name:     TextVectorSpace,
+			Modality: "text",
+			Provider: profile.Provider,
+			Model:    profile.Model,
+			Profile:  &vp,
+		}); err != nil {
+			return err
+		}
+		// Also set the collection-level default-space profile so
+		// coll.EmbeddingProfile() reports the embedder for compatibility checks.
+		if err := coll.SetEmbeddingProfile(vp); err != nil {
+			return err
+		}
 	}
 	return nil
 }
 
-func readEmbeddingProfile(coll *veclite.Collection) (*embed.Profile, error) {
-	records, err := coll.Find(veclite.Equal("key", embeddingProfileKey))
-	if err != nil {
-		return nil, fmt.Errorf("read embedding profile: %w", err)
+// profileOrNil returns the embedding profile from the collection when the text
+// space is present, so the index report echoes it. Returns nil for keyword-only.
+func profileOrNil(coll *veclite.Collection, embedder embed.Embedder) *embed.Profile {
+	if !coll.HasVectorSpace(TextVectorSpace) {
+		return nil
 	}
-	if len(records) == 0 {
-		return nil, nil
-	}
-	payload := records[0].Payload
-	return &embed.Profile{
-		Provider:   stringPayload(payload, "provider"),
-		Model:      stringPayload(payload, "model"),
-		Dimensions: int(floatPayload(payload, "dimensions")),
-	}, nil
+	p := embedder.Profile()
+	return &p
 }
 
 func normalizeMode(mode string) (string, error) {
@@ -523,22 +531,30 @@ func Search(opts SearchOptions) (SearchReport, error) {
 	}()
 
 	if mode == ModeKeyword {
-		coll, err := db.GetCollection(KeywordCollection)
+		coll, err := db.GetCollection(Collection)
 		if err != nil {
-			return SearchReport{}, fmt.Errorf("evidence collection not found: %s", KeywordCollection)
+			return SearchReport{}, fmt.Errorf("evidence collection not found: %s", Collection)
 		}
 		results, err := coll.TextSearch(query, searchOptionsFor(coll, limit, activeFilters)...)
 		if err != nil {
 			return SearchReport{}, fmt.Errorf("search evidence: %w", err)
 		}
-		return buildSearchReport(dbPath, query, mode, KeywordCollection, filterEcho, limit, results), nil
+		return buildSearchReport(dbPath, query, mode, Collection, filterEcho, limit, results), nil
 	}
 
-	// Semantic and hybrid modes embed the query and search the vector collection.
+	// Semantic and hybrid modes embed the query and search the named "text"
+	// vector space on the single evidence collection.
 	if opts.Embedder == nil {
 		return SearchReport{}, fmt.Errorf("%s search requires an embedding provider (configure --embed)", mode)
 	}
-	if !db.HasCollection(TextCollection) {
+	if !db.HasCollection(Collection) {
+		return SearchReport{}, fmt.Errorf("no evidence index found in %s; run vidtrace index first", dbPath)
+	}
+	coll, err := db.GetCollection(Collection)
+	if err != nil {
+		return SearchReport{}, fmt.Errorf("evidence collection not found: %s", Collection)
+	}
+	if !coll.HasVectorSpace(TextVectorSpace) {
 		return SearchReport{}, fmt.Errorf("no semantic index found in %s; run vidtrace index with --embed first", dbPath)
 	}
 	indexedProfile, err := loadEmbeddingProfile(db)
@@ -563,22 +579,18 @@ func Search(opts SearchOptions) (SearchReport, error) {
 		return SearchReport{}, fmt.Errorf("embedding dimension mismatch: index has %d, query has %d", indexedProfile.Dimensions, len(queryVec))
 	}
 
-	coll, err := db.GetCollection(TextCollection)
-	if err != nil {
-		return SearchReport{}, fmt.Errorf("semantic collection not found: %s", TextCollection)
-	}
 	searchOpts := searchOptionsFor(coll, limit, activeFilters)
 	var results []veclite.Result
 	switch mode {
 	case ModeSemantic:
-		results, err = coll.Search(queryVec, searchOpts...)
+		results, err = coll.SearchSpace(TextVectorSpace, queryVec, searchOpts...)
 	case ModeHybrid:
-		results, err = coll.HybridSearch(queryVec, query, searchOpts...)
+		results, err = coll.HybridSearchSpace(TextVectorSpace, queryVec, query, searchOpts...)
 	}
 	if err != nil {
 		return SearchReport{}, fmt.Errorf("%s search: %w", mode, err)
 	}
-	return buildSearchReport(dbPath, query, mode, TextCollection, filterEcho, limit, results), nil
+	return buildSearchReport(dbPath, query, mode, Collection, filterEcho, limit, results), nil
 }
 
 // searchOptionsFor builds the TopK + filter options. VecLite truncates matches
@@ -618,23 +630,17 @@ func buildSearchReport(dbPath, query, mode, collection string, filterEcho *Searc
 }
 
 func loadEmbeddingProfile(db *veclite.DB) (*embed.Profile, error) {
-	if !db.HasCollection(MetaCollection) {
+	if !db.HasCollection(Collection) {
 		return nil, nil
 	}
-	coll, err := db.GetCollection(MetaCollection)
+	coll, err := db.GetCollection(Collection)
 	if err != nil {
 		return nil, nil
 	}
-	return readEmbeddingProfile(coll)
-}
-
-func keywordCollection(db *veclite.DB) (*veclite.Collection, error) {
-	if db.HasCollection(KeywordCollection) {
-		return db.GetCollection(KeywordCollection)
+	if p, ok := coll.EmbeddingProfile(); ok {
+		return &embed.Profile{Provider: p.Provider, Model: p.Model, Dimensions: p.Dimension}, nil
 	}
-	return db.CreateCollection(KeywordCollection,
-		veclite.WithTextIndex("evidence_id", "bundle", "source_video", "frame", "ocr_path", "source"),
-	)
+	return nil, nil
 }
 
 // buildFilters converts SearchOptions metadata constraints into VecLite payload
@@ -807,4 +813,160 @@ func floatPayload(payload map[string]any, key string) float64 {
 	default:
 		return 0
 	}
+}
+
+// MigrateReport summarizes a migrate-evidence run. It records how many records
+// were copied from each legacy collection, whether the old collections were
+// dropped, and the resulting single-collection state.
+type MigrateReport struct {
+	OK              bool   `json:"ok"`
+	DBPath          string `json:"db_path"`
+	Collection      string `json:"collection"`
+	KeywordRecords  int    `json:"keyword_records"`
+	SemanticRecords int    `json:"semantic_records"`
+	MigratedRecords int    `json:"migrated_records"`
+	DroppedLegacy   bool   `json:"dropped_legacy"`
+	AlreadyMigrated bool   `json:"already_migrated,omitempty"`
+	Summary         string `json:"summary"`
+}
+
+// Migrate converts a pre-v0.17.0 evidence database (which used three
+// collections: evidence_entries_keyword, evidence_entries_text, and
+// evidence_meta) into the single-collection layout used by v0.17.0+. It is
+// idempotent: a database that already has the single collection and no legacy
+// collections reports AlreadyMigrated and is left untouched. Legacy
+// collections are read-only here, so a read-only database is rejected.
+func Migrate(dbPath string) (MigrateReport, error) {
+	resolved, err := resolveRequiredPath(dbPath, "db")
+	if err != nil {
+		return MigrateReport{}, err
+	}
+	if _, err := os.Stat(resolved); err != nil {
+		return MigrateReport{}, fmt.Errorf("evidence db not found: %s", resolved)
+	}
+
+	db, err := veclite.Open(resolved)
+	if err != nil {
+		return MigrateReport{}, fmt.Errorf("open evidence db: %w", err)
+	}
+	defer func() { _ = db.Close() }()
+
+	report := MigrateReport{DBPath: resolved, Collection: Collection}
+
+	hasLegacy := db.HasCollection(legacyKeywordCollection) || db.HasCollection(legacyTextCollection)
+	hasNew := db.HasCollection(Collection)
+	if !hasLegacy && (!hasNew || !db.HasCollection(legacyMetaCollection)) {
+		// Nothing to do: either already migrated, or not an evidence DB.
+		if hasNew && !hasLegacy {
+			report.OK = true
+			report.AlreadyMigrated = true
+			report.Summary = fmt.Sprintf("Database %s already uses the single %s collection; nothing to migrate.", resolved, Collection)
+			return report, nil
+		}
+		return MigrateReport{}, fmt.Errorf("no legacy evidence collections found in %s; not a pre-v0.17.0 evidence database", resolved)
+	}
+
+	// Ensure the destination collection exists with BM25 over the filter
+	// fields. Vectors are attached per-record via InsertRecord, so we only add
+	// the named text space if the legacy text collection had vectors.
+	var coll *veclite.Collection
+	if hasNew {
+		coll, err = db.GetCollection(Collection)
+		if err != nil {
+			return MigrateReport{}, fmt.Errorf("get %s: %w", Collection, err)
+		}
+	} else {
+		coll, err = db.CreateCollection(Collection,
+			veclite.WithTextIndex("evidence_id", "bundle", "source_video", "frame", "ocr_path", "source"),
+		)
+		if err != nil {
+			return MigrateReport{}, fmt.Errorf("create %s: %w", Collection, err)
+		}
+	}
+
+	// Index keyword records by evidence_id, carrying over the matching vector
+	// from the legacy text collection when one exists.
+	keywordByID := map[string]veclite.Record{}
+	if db.HasCollection(legacyKeywordCollection) {
+		kcoll, err := db.GetCollection(legacyKeywordCollection)
+		if err != nil {
+			return MigrateReport{}, fmt.Errorf("get %s: %w", legacyKeywordCollection, err)
+		}
+		records := kcoll.All()
+		for _, r := range records {
+			id, _ := r.Payload["evidence_id"].(string)
+			if id == "" {
+				continue
+			}
+			keywordByID[id] = *r
+			report.KeywordRecords++
+		}
+	}
+
+	vectorByID := map[string][]float32{}
+	if db.HasCollection(legacyTextCollection) {
+		tcoll, err := db.GetCollection(legacyTextCollection)
+		if err != nil {
+			return MigrateReport{}, fmt.Errorf("get %s: %w", legacyTextCollection, err)
+		}
+		records := tcoll.All()
+		for _, r := range records {
+			id, _ := r.Payload["evidence_id"].(string)
+			if id == "" {
+				continue
+			}
+			if len(r.Vector) > 0 {
+				vectorByID[id] = r.Vector
+				report.SemanticRecords++
+			}
+		}
+		// Declare the named text space now that we know we have vectors.
+		if len(vectorByID) > 0 && !coll.HasVectorSpace(TextVectorSpace) {
+			var dim int
+			for _, v := range vectorByID {
+				dim = len(v)
+				break
+			}
+			if err := coll.AddVectorSpace(veclite.VectorSpaceConfig{
+				Name:     TextVectorSpace,
+				Modality: "text",
+			}); err != nil {
+				return MigrateReport{}, fmt.Errorf("declare text space: %w", err)
+			}
+			_ = dim // dimension inferred by InsertRecord
+		}
+	}
+
+	for id, kr := range keywordByID {
+		in := veclite.RecordInput{
+			Content: kr.Content,
+			Payload: kr.Payload,
+		}
+		if vec, ok := vectorByID[id]; ok {
+			in.Vectors = map[string][]float32{TextVectorSpace: vec}
+		}
+		_, _, err := coll.UpsertRecordByKey("evidence_id", id, in)
+		if err != nil {
+			return MigrateReport{}, fmt.Errorf("migrate evidence %s: %w", id, err)
+		}
+		report.MigratedRecords++
+	}
+
+	// Drop the legacy collections now that the data is consolidated.
+	for _, name := range []string{legacyKeywordCollection, legacyTextCollection, legacyMetaCollection} {
+		if db.HasCollection(name) {
+			if err := db.DropCollection(name); err != nil {
+				return MigrateReport{}, fmt.Errorf("drop legacy %s: %w", name, err)
+			}
+			report.DroppedLegacy = true
+		}
+	}
+
+	if err := db.Sync(); err != nil {
+		return MigrateReport{}, fmt.Errorf("sync evidence db: %w", err)
+	}
+
+	report.OK = true
+	report.Summary = fmt.Sprintf("Migrated %d records (%d semantic) into the single %s collection and dropped legacy collections.", report.MigratedRecords, report.SemanticRecords, Collection)
+	return report, nil
 }

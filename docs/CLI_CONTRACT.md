@@ -107,7 +107,7 @@ vidtrace index /path/to/bug_artifacts_YYYYMMDD_HHMMSS --db /path/to/evidence.vec
 vidtrace index /path/to/bug_artifacts_* --db /path/to/evidence.veclite --json
 ```
 
-The command validates each bundle, reads `metadata.json` and `timeline.json`, and writes one BM25 text document per timeline entry into the `evidence_entries_keyword` collection. Re-running the command for the same bundle updates existing records by `evidence_id` instead of duplicating them.
+The command validates each bundle, reads `metadata.json` and `timeline.json`, and writes one record per timeline entry into the single `evidence_entries` collection (BM25 over the content; a named `text` vector space is added when `--embed` is configured). Re-running the command for the same bundle updates existing records by `evidence_id` instead of duplicating them. Pre-v0.17.0 databases used separate `evidence_entries_keyword` and `evidence_entries_text` collections; run `vidtrace migrate-evidence` to convert them in place.
 
 Pass multiple bundle paths (for example a shell glob) to build one searchable database that spans many bundles; combine with the `vidtrace search` filters to narrow back to a single bundle, source video, or time window. All bundle paths are validated before any database write, so an invalid path is rejected before the database is created or modified, and duplicate paths (including symlink aliases) are indexed once. Indexing is idempotent by `evidence_id`, so re-running after an interruption is safe.
 
@@ -136,12 +136,12 @@ Example single-bundle success JSON:
   "ok": true,
   "bundle_dir": "/path/to/bug_artifacts_YYYYMMDD_HHMMSS",
   "db_path": "/path/to/evidence.veclite",
-  "collection": "evidence_entries_keyword",
+  "collection": "evidence_entries",
   "mode": "keyword",
   "indexed_entries": 120,
   "inserted_entries": 120,
   "updated_entries": 0,
-  "summary": "Indexed 120 evidence entries into evidence_entries_keyword."
+  "summary": "Indexed 120 evidence entries into evidence_entries."
 }
 ```
 
@@ -151,7 +151,7 @@ When more than one bundle is indexed at once, the JSON instead reports aggregate
 {
   "ok": true,
   "db_path": "/path/to/evidence.veclite",
-  "collection": "evidence_entries_keyword",
+  "collection": "evidence_entries",
   "mode": "keyword",
   "indexed_entries": 214,
   "inserted_entries": 214,
@@ -170,7 +170,7 @@ When more than one bundle is indexed at once, the JSON instead reports aggregate
       "updated_entries": 0
     }
   ],
-  "summary": "Indexed 214 evidence entries from 2 bundle(s) into evidence_entries_keyword."
+  "summary": "Indexed 214 evidence entries from 2 bundle(s) into evidence_entries."
 }
 ```
 
@@ -219,7 +219,7 @@ Example success JSON:
   "ok": true,
   "query": "checkout button error",
   "db_path": "/path/to/evidence.veclite",
-  "collection": "evidence_entries_keyword",
+  "collection": "evidence_entries",
   "mode": "keyword",
   "results": [
     {
@@ -246,7 +246,7 @@ Example filtered JSON (the `filters` object only appears when a filter is active
   "ok": true,
   "query": "checkout button error",
   "db_path": "/path/to/evidence.veclite",
-  "collection": "evidence_entries_keyword",
+  "collection": "evidence_entries",
   "mode": "keyword",
   "filters": {
     "bundle": "/path/to/bundle",
@@ -256,6 +256,29 @@ Example filtered JSON (the `filters` object only appears when a filter is active
   "results": []
 }
 ```
+
+### `vidtrace migrate-evidence`
+
+Converts a pre-v0.17.0 evidence database (the three-collection layout: `evidence_entries_keyword`, `evidence_entries_text`, `evidence_meta`) into the single `evidence_entries` collection with a named `text` vector space. Running it on a modern database is a no-op (`already_migrated: true`), so it is safe to run unconditionally.
+
+```bash
+vidtrace migrate-evidence /path/to/evidence.veclite --json
+```
+
+```json
+{
+  "ok": true,
+  "db_path": "/path/to/evidence.veclite",
+  "collection": "evidence_entries",
+  "keyword_records": 120,
+  "semantic_records": 94,
+  "migrated_records": 214,
+  "dropped_legacy": true,
+  "summary": "Migrated 214 records into evidence_entries."
+}
+```
+
+When the database is already on the single-collection layout, `already_migrated` is `true`, `migrated_records` is `0`, and `dropped_legacy` is `false`.
 
 ### `vidtrace investigate`
 

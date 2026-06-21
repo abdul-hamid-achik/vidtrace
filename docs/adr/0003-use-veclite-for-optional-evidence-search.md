@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted
+Accepted, superseded in part by ADR-0003 Addendum (single-collection migration, v0.17.0+)
 
 ## Context
 
@@ -40,7 +40,7 @@ Extraction remains independent. Indexing reads an existing bundle and writes a s
 
 Phase 1 uses BM25 only:
 
-- collection: `evidence_entries_keyword`
+- collection: `evidence_entries` (single collection since v0.17.0; pre-v0.17.0 used `evidence_entries_keyword`)
 - one record per `timeline.json` entry
 - content: timestamp, OCR text, transcript text, and frame path
 - payload: `schema_version`, `bundle`, `source_video`, `time_seconds`, `source`, `frame`, `ocr_path`, `has_ocr`, and `has_transcript`
@@ -49,12 +49,15 @@ Phase 1 uses BM25 only:
 
 Phase 2 adds semantic text and hybrid search behind explicit config (implemented):
 
-- collection: `evidence_entries_text`
-- dimension: auto-detected from the configured embedding provider's vectors
-- vector: embedding of the same content indexed for BM25, stored with that content so VecLite `HybridSearch` can combine vector and keyword scores
-- search modes: keyword (default, no provider needed), semantic, hybrid
+- collection: `evidence_entries` (single collection since v0.17.0; pre-v0.17.0 used `evidence_entries_text`)
+- vector: embedding of the same content indexed for BM25, stored in a named `text` vector space on the same record so VecLite `HybridSearchSpace` can combine vector and keyword scores for that space
+- search modes: keyword (default, no provider needed), semantic (`SearchSpace`), hybrid (`HybridSearchSpace`)
 - provider: an `Embedder` interface (`internal/embed`) with an Ollama provider that shells out over HTTP, matching how vidtrace orchestrates ffmpeg, ffprobe, tesseract, and whisper
-- profile guard: the embedding profile (provider, model, dimensions) is stored in an `evidence_meta` collection, and indexing or searching with a different provider, model, or dimension is rejected
+- profile guard: the embedding profile (provider, model, dimensions) is attached to the collection and the named `text` vector space; indexing or searching with a different provider, model, or dimension is rejected
+
+### Addendum: single-collection migration (v0.17.0+)
+
+VecLite v0.16.0 introduced named vector spaces, and v0.17.0 added `UpsertRecordByKey` and `HybridSearchSpace` so a consumer can store one record per timeline entry with BM25 over the content and a named `text` vector space on the same record. vidtrace v0.17.0+ collapsed the pre-v0.17.0 three-collection layout (`evidence_entries_keyword` + `evidence_entries_text` + `evidence_meta`) into a single `evidence_entries` collection. `vidtrace migrate-evidence <db>` converts pre-v0.17.0 databases in place; running it on a modern database is a no-op (`already_migrated: true`). The single-collection layout removes content duplication, unifies the three search modes against one collection, and leaves room for future multimodal evidence (for example an `image` named space for frame embeddings).
 
 Future VecLite named vector spaces can merge text and frame embeddings into one logical evidence collection.
 
@@ -70,5 +73,5 @@ Future VecLite named vector spaces can merge text and frame embeddings into one 
 **Bad:**
 
 - BM25-only indexing depends on VecLite text-only document records.
-- Semantic search duplicates records into a second collection until VecLite named vector spaces exist.
+- Semantic search duplicates records into a second collection until VecLite named vector spaces exist. *(Resolved in v0.17.0+ by the single-collection migration; see the Implementation Direction addendum.)*
 - vidtrace must manage embedding-profile compatibility for semantic indexes.

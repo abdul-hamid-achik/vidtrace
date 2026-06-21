@@ -92,6 +92,76 @@ func TestValidateInvalidBundle(t *testing.T) {
 	}
 }
 
+func TestValidateWarnsOnEmptyTranscriptWithWhisperModel(t *testing.T) {
+	t.Parallel()
+
+	dir := writeFixture(t)
+	mustWrite(t, filepath.Join(dir, "frames", "frame_0001.png"), "fake frame")
+	mustWrite(t, filepath.Join(dir, "frames", "frame_0002.png"), "fake frame")
+	mustWrite(t, filepath.Join(dir, "ocr", "frame_0001.txt"), "Login failed")
+	mustWrite(t, filepath.Join(dir, "ocr", "frame_0002.txt"), "")
+	mustWrite(t, filepath.Join(dir, "timeline.json"), `{
+  "schema_version": "1",
+  "entries": [
+    {
+      "time_seconds": 0,
+      "frame": "frames/frame_0001.png",
+      "ocr": {"path": "ocr/frame_0001.txt", "text": "Login failed"},
+      "transcript": []
+    },
+    {
+      "time_seconds": 1,
+      "frame": "frames/frame_0002.png",
+      "ocr": {"path": "ocr/frame_0002.txt", "text": ""},
+      "transcript": []
+    }
+  ]
+}`)
+	// transcript/ dir exists (created by writeFixture) but is empty.
+
+	report := Validate(dir)
+	if !report.OK {
+		t.Fatalf("bundle with empty transcript should still be valid (silent video), got %#v", report)
+	}
+	if !hasWarning(report, "transcript/ is empty") {
+		t.Fatalf("expected a transcript-empty warning, got %#v", report.Warnings)
+	}
+}
+
+func TestValidateWarnsOnFrameOCRCountDrift(t *testing.T) {
+	t.Parallel()
+
+	dir := writeFixture(t)
+	mustWrite(t, filepath.Join(dir, "frames", "frame_0001.png"), "fake frame")
+	mustWrite(t, filepath.Join(dir, "frames", "frame_0002.png"), "fake frame")
+	mustWrite(t, filepath.Join(dir, "ocr", "frame_0001.txt"), "Login failed")
+	mustWrite(t, filepath.Join(dir, "timeline.json"), `{
+  "schema_version": "1",
+  "entries": [
+    {
+      "time_seconds": 0,
+      "frame": "frames/frame_0001.png",
+      "ocr": {"path": "ocr/frame_0001.txt", "text": "Login failed"},
+      "transcript": []
+    },
+    {
+      "time_seconds": 1,
+      "frame": "frames/frame_0002.png",
+      "ocr": {"path": "ocr/frame_0002.txt", "text": ""},
+      "transcript": []
+    }
+  ]
+}`)
+	// 2 frames but only 1 OCR file (frame_0002.txt is missing on disk but
+	// referenced in timeline; timeline_ocr_paths will fail, and the count drift
+	// warning should also fire).
+
+	report := Validate(dir)
+	if !hasWarning(report, "frame count (2) differs from OCR frame txt count (1)") {
+		t.Fatalf("expected a frame/OCR count drift warning, got %#v", report.Warnings)
+	}
+}
+
 func writeFixture(t *testing.T) string {
 	t.Helper()
 
@@ -132,6 +202,15 @@ func writeFixture(t *testing.T) string {
 func hasCheck(report ValidationReport, name string, ok bool) bool {
 	for _, check := range report.Checks {
 		if check.Name == name && check.OK == ok {
+			return true
+		}
+	}
+	return false
+}
+
+func hasWarning(report ValidationReport, substr string) bool {
+	for _, w := range report.Warnings {
+		if strings.Contains(w, substr) {
 			return true
 		}
 	}

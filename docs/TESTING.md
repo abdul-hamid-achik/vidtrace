@@ -76,6 +76,10 @@ Do not commit this video or generated bundles. Run real-video checks outside the
 bin/vidtrace extract ~/Downloads/bug.mp4 --out /tmp/vidtrace-bug-smoke --name bug --json
 ```
 
+## Extractor Parity
+
+The legacy `scripts/extract.sh` was removed after Go pipeline parity was verified on a synthetic clip and on a real video (same frames, OCR, and transcript outputs, plus Go-only `metadata.json` and `timeline.json`). The parity decision is recorded in `CHANGELOG.md`. The ongoing synthetic parity check is `task smoke`.
+
 ## What To Assert
 
 For agent-facing behavior, prefer JSON and generated files over human text:
