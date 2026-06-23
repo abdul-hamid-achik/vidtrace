@@ -18,6 +18,7 @@ import (
 
 	"github.com/abdul-hamid-achik/vidtrace/internal/embed"
 	"github.com/abdul-hamid-achik/vidtrace/internal/evidence"
+	"github.com/abdul-hamid-achik/vidtrace/internal/fcheap"
 )
 
 func TestValidateToolReportsOK(t *testing.T) {
@@ -352,6 +353,177 @@ func TestRoundTripCallsCompareAnalyzeInvestigate(t *testing.T) {
 		if len(res.Content) == 0 {
 			t.Fatalf("tool %s returned no content", c.name)
 		}
+	}
+}
+
+func TestStashToolsErrorWhenFcheapUnavailable(t *testing.T) {
+	if fcheap.Available() {
+		t.Skip("fcheap is installed; error path not testable without mocking")
+	}
+
+	ctx := context.Background()
+
+	// stash_list should return a tool error
+	result, _, err := stashListTool(ctx, nil, StashListInput{})
+	if err != nil {
+		t.Fatalf("stashListTool error: %v", err)
+	}
+	if result == nil || !result.IsError {
+		t.Fatalf("expected tool error when fcheap unavailable")
+	}
+
+	// stash_info should return a tool error
+	result, _, err = stashInfoTool(ctx, nil, StashInfoInput{StashID: "some_id"})
+	if err != nil {
+		t.Fatalf("stashInfoTool error: %v", err)
+	}
+	if result == nil || !result.IsError {
+		t.Fatalf("expected tool error when fcheap unavailable")
+	}
+
+	// stash_search should return a tool error
+	result, _, err = stashSearchTool(ctx, nil, StashSearchInput{Query: "test"})
+	if err != nil {
+		t.Fatalf("stashSearchTool error: %v", err)
+	}
+	if result == nil || !result.IsError {
+		t.Fatalf("expected tool error when fcheap unavailable")
+	}
+
+	// stash_connect should return a tool error
+	result, _, err = stashConnectTool(ctx, nil, StashConnectInput{StashID: "some_id", Codebase: "/tmp"})
+	if err != nil {
+		t.Fatalf("stashConnectTool error: %v", err)
+	}
+	if result == nil || !result.IsError {
+		t.Fatalf("expected tool error when fcheap unavailable")
+	}
+}
+
+func TestStashToolsValidateInput(t *testing.T) {
+	ctx := context.Background()
+
+	// stash_info requires stash_id
+	result, _, err := stashInfoTool(ctx, nil, StashInfoInput{})
+	if err != nil {
+		t.Fatalf("stashInfoTool error: %v", err)
+	}
+	if result == nil || !result.IsError || !strings.Contains(result.Content[0].(*mcp.TextContent).Text, "stash_id is required") {
+		t.Fatalf("expected stash_id required error")
+	}
+
+	// stash_search requires query
+	result, _, err = stashSearchTool(ctx, nil, StashSearchInput{})
+	if err != nil {
+		t.Fatalf("stashSearchTool error: %v", err)
+	}
+	if result == nil || !result.IsError || !strings.Contains(result.Content[0].(*mcp.TextContent).Text, "query is required") {
+		t.Fatalf("expected query required error")
+	}
+
+	// stash_connect requires stash_id
+	result, _, err = stashConnectTool(ctx, nil, StashConnectInput{Codebase: "/tmp"})
+	if err != nil {
+		t.Fatalf("stashConnectTool error: %v", err)
+	}
+	if result == nil || !result.IsError || !strings.Contains(result.Content[0].(*mcp.TextContent).Text, "stash_id is required") {
+		t.Fatalf("expected stash_id required error")
+	}
+
+	// stash_connect requires codebase
+	result, _, err = stashConnectTool(ctx, nil, StashConnectInput{StashID: "some_id"})
+	if err != nil {
+		t.Fatalf("stashConnectTool error: %v", err)
+	}
+	if result == nil || !result.IsError || !strings.Contains(result.Content[0].(*mcp.TextContent).Text, "codebase is required") {
+		t.Fatalf("expected codebase required error")
+	}
+}
+
+func TestInvestigateToolValidatesInput(t *testing.T) {
+	ctx := context.Background()
+
+	// Missing query
+	result, _, err := investigateTool(ctx, nil, InvestigateInput{BundleDir: "/tmp"})
+	if err != nil {
+		t.Fatalf("investigateTool error: %v", err)
+	}
+	if result == nil || !result.IsError || !strings.Contains(result.Content[0].(*mcp.TextContent).Text, "query is required") {
+		t.Fatalf("expected query required error")
+	}
+
+	// Missing both bundle_dir and stash_id
+	result, _, err = investigateTool(ctx, nil, InvestigateInput{Query: "test"})
+	if err != nil {
+		t.Fatalf("investigateTool error: %v", err)
+	}
+	if result == nil || !result.IsError || !strings.Contains(result.Content[0].(*mcp.TextContent).Text, "bundle_dir or stash_id is required") {
+		t.Fatalf("expected bundle_dir or stash_id required error")
+	}
+
+	// Connect without codebase_dir should be rejected
+	result, _, err = investigateTool(ctx, nil, InvestigateInput{BundleDir: "/tmp", Query: "test", Connect: true})
+	if err != nil {
+		t.Fatalf("investigateTool error: %v", err)
+	}
+	if result == nil || !result.IsError || !strings.Contains(result.Content[0].(*mcp.TextContent).Text, "connect requires codebase_dir") {
+		t.Fatalf("expected connect requires codebase_dir error")
+	}
+}
+
+func TestRoundTripIncludesStashTools(t *testing.T) {
+	ctx := context.Background()
+	server := New("test")
+	clientT, serverT := mcp.NewInMemoryTransports()
+	ss, err := server.Connect(ctx, serverT, nil)
+	if err != nil {
+		t.Fatalf("server connect: %v", err)
+	}
+	defer func() { _ = ss.Close() }()
+
+	client := mcp.NewClient(&mcp.Implementation{Name: "c", Version: "0"}, nil)
+	cs, err := client.Connect(ctx, clientT, nil)
+	if err != nil {
+		t.Fatalf("client connect: %v", err)
+	}
+	defer func() { _ = cs.Close() }()
+
+	tools, err := cs.ListTools(ctx, nil)
+	if err != nil {
+		t.Fatalf("ListTools: %v", err)
+	}
+	names := map[string]bool{}
+	for _, tool := range tools.Tools {
+		names[tool.Name] = true
+	}
+	for _, want := range []string{"stash_list", "stash_info", "stash_search", "stash_connect"} {
+		if !names[want] {
+			t.Fatalf("tool %q not registered", want)
+		}
+	}
+}
+
+func TestInvestigateToolWithConnectFlag(t *testing.T) {
+	bundleDir := writeBundle(t)
+	result, report, err := investigateTool(context.Background(), nil, InvestigateInput{
+		BundleDir:   bundleDir,
+		Query:       "login fails",
+		CodebaseDir: t.TempDir(),
+		Connect:     true,
+	})
+	if err != nil {
+		t.Fatalf("investigateTool error: %v", err)
+	}
+	if result != nil && result.IsError {
+		t.Fatalf("unexpected tool error: %#v", result)
+	}
+	if !report.OK {
+		t.Fatalf("report should be OK")
+	}
+	// If fcheap is available, connect may have run. If not, ConnectError should be set.
+	// Either way, the report should be valid.
+	if !fcheap.Available() && report.ConnectError == "" {
+		t.Fatalf("connect_error should be set when fcheap unavailable and --connect is set")
 	}
 }
 

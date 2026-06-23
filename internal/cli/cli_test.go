@@ -871,6 +871,20 @@ func TestInvestigateRequiresQuery(t *testing.T) {
 	}
 }
 
+func TestInvestigateConnectRequiresCodebase(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+
+	bundleDir := writeCLIBundle(t)
+	code := Run([]string{"investigate", bundleDir, "--query", "test", "--connect"}, &stdout, &stderr, "test")
+
+	if code != 2 {
+		t.Fatalf("expected exit code 2, got %d", code)
+	}
+	if !strings.Contains(stderr.String(), "--connect requires --codebase") {
+		t.Fatalf("expected connect-requires-codebase error, got %q", stderr.String())
+	}
+}
+
 func TestNormalizeExtractArgsAllowsFlagsAfterPath(t *testing.T) {
 	args, err := normalizeExtractArgs([]string{"/tmp/bug.mp4", "--fps", "2", "--json", "--out=/tmp/out"})
 	if err != nil {

@@ -31,6 +31,8 @@ This file guides coding agents working on `vidtrace`.
   - `tesseract`
   - `whisper`
   - `ollama` (optional, for semantic and hybrid evidence search)
+  - `fcheap` (optional, for bundle stashing and codebase connect)
+  - `vecgrep` (optional, for codebase search via fcheap connect)
 
 ## Architecture Direction
 
@@ -43,6 +45,7 @@ This file guides coding agents working on `vidtrace`.
 - Put terminal review UI in `internal/studio`.
 - Put evidence indexing/search in `internal/evidence`, and embedding providers behind the `embed.Embedder` interface in `internal/embed`.
 - Put the MCP server in `internal/mcpserver`; its tools must wrap existing internal packages and stay read-only (no video/bundle mutation).
+- Put fcheap CLI wrapping in `internal/fcheap`, mirroring `internal/ffmpeg`, `internal/tesseract`, and `internal/whisper`.
 - Put future media-tool wrappers in separate internal packages, for example `internal/ffmpeg`, `internal/tesseract`, and `internal/whisper`.
 - Keep artifact schemas explicit and versionable.
 
@@ -68,6 +71,9 @@ task run -- extract /path/to/bug.mp4 --json
 task run -- index /path/to/bundle --db /tmp/vidtrace-evidence.veclite --json
 task run -- search /tmp/vidtrace-evidence.veclite "ticket click does not work" --json
 task run -- investigate /path/to/bundle --query "ticket click does not work" --codebase /path/to/repo --json
+task run -- investigate /path/to/bundle --query "ticket click does not work" --codebase /path/to/repo --connect --json
+task run -- stash save /path/to/bundle --name "bug-evidence" --json
+task run -- investigate --stash <stash-id> --query "ticket click does not work" --json
 task run -- compare /path/to/bundle --ticket ticket.md --json
 task run -- analyze /path/to/bundle --ticket ticket.md
 ```
@@ -104,6 +110,8 @@ task run -- validate /tmp/vidtrace-real/bug_artifacts_* --json
 task run -- index /tmp/vidtrace-real/bug_artifacts_* --db /tmp/vidtrace-real/evidence.veclite --json
 task run -- search /tmp/vidtrace-real/evidence.veclite "clicking a task does not take me to the assessment" --json
 task run -- investigate /tmp/vidtrace-real/bug_artifacts_* --query "clicking a task does not take me to the assessment" --codebase /path/to/repo --json
+task run -- investigate /tmp/vidtrace-real/bug_artifacts_* --query "clicking a task does not take me to the assessment" --codebase /path/to/repo --connect --json
+task run -- stash save /tmp/vidtrace-real/bug_artifacts_* --name "bug-evidence" --json
 task run -- studio /tmp/vidtrace-real/bug_artifacts_*
 ```
 

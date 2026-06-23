@@ -82,6 +82,39 @@ vidtrace investigate "$output_dir" \
   --json
 ```
 
+Run real codebase search via `fcheap connect` (vecgrep) and get `file:line` code matches alongside video evidence:
+
+```bash
+vidtrace investigate "$output_dir" \
+  --query "clicking a ticket does not work" \
+  --codebase /path/to/app \
+  --connect \
+  --json
+```
+
+Stash a bundle to the fcheap vault for sharing or archival:
+
+```bash
+vidtrace stash save "$output_dir" --name "OPG-15070 bug" --tag bug --json
+```
+
+List, inspect, restore, and search stashes:
+
+```bash
+vidtrace stash list --tool vidtrace --json
+vidtrace stash info <stash-id> --json
+vidtrace stash restore <stash-id> --to /tmp/restored --json
+vidtrace stash search "login fails" --json
+```
+
+Investigate a stashed bundle without a local copy:
+
+```bash
+vidtrace investigate --stash <stash-id> --query "clicking a ticket does not work" --json
+```
+
+`vidtrace doctor` reports whether `fcheap` and `vecgrep` are installed. All stash and connect features degrade gracefully with a clear error when the tools are missing.
+
 Then compare the ticket with extracted evidence:
 
 ```bash
@@ -151,6 +184,8 @@ task run -- validate /path/to/bundle --json
 task run -- index /path/to/bundle --db /tmp/vidtrace-evidence.veclite --json
 task run -- search /tmp/vidtrace-evidence.veclite "ticket click" --json
 task run -- investigate /path/to/bundle --query "ticket click" --codebase /path/to/app --json
+task run -- investigate /path/to/bundle --query "ticket click" --codebase /path/to/app --connect --json
+task run -- stash save /path/to/bundle --name "bug-evidence" --json
 task site
 ```
 

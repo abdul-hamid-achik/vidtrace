@@ -42,6 +42,8 @@ func Check() Result {
 	// Optional tools enable extra features but never fail the doctor check.
 	optionalTools := []ToolStatus{
 		checkTool("ollama", "--version"),
+		checkTool("fcheap", "--version"),
+		checkTool("vecgrep", "--version"),
 	}
 
 	result := Result{
@@ -61,6 +63,12 @@ func Check() Result {
 
 	if !optionalTools[0].Found {
 		result.RecommendedNextSteps = append(result.RecommendedNextSteps, "Optional: install Ollama for semantic and hybrid evidence search (vidtrace index/search --embed ollama).")
+	}
+	if !optionalTools[1].Found {
+		result.RecommendedNextSteps = append(result.RecommendedNextSteps, "Optional: install fcheap for stash and connect commands (vidtrace stash, vidtrace investigate --connect).")
+	}
+	if !optionalTools[2].Found {
+		result.RecommendedNextSteps = append(result.RecommendedNextSteps, "Optional: install vecgrep for semantic codebase search (used by fcheap connect).")
 	}
 
 	if !contains(result.TesseractLanguages, "eng") {

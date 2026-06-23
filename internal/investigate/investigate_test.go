@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/abdul-hamid-achik/vidtrace/internal/evidence"
+	"github.com/abdul-hamid-achik/vidtrace/internal/fcheap"
 )
 
 func TestRunReturnsEvidenceAndVecgrepCommands(t *testing.T) {
@@ -184,6 +185,166 @@ func writeInvestigateBundle(t *testing.T) string {
   ]
 }`)
 	return dir
+}
+
+func TestRunBackwardCompatibleWithoutConnectOrStash(t *testing.T) {
+	report, err := Run(Options{
+		BundleDir: writeInvestigateBundle(t),
+		Query:     "ticket",
+	})
+	if err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+	if report.StashID != "" {
+		t.Fatalf("stash_id should be empty without --stash: %q", report.StashID)
+	}
+	if len(report.CodeMatches) != 0 {
+		t.Fatalf("code_matches should be empty without --connect: %#v", report.CodeMatches)
+	}
+	if report.ConnectError != "" {
+		t.Fatalf("connect_error should be empty without --connect: %q", report.ConnectError)
+	}
+}
+
+func TestRunConnectErrorWhenFcheapUnavailable(t *testing.T) {
+	// This test verifies that --connect gracefully degrades when fcheap is
+	// not available. If fcheap IS installed in the test environment, we skip
+	// because the connect will actually try to run.
+	if fcheap.Available() {
+		t.Skip("fcheap is installed; connect error path not testable without mocking")
+	}
+
+	report, err := Run(Options{
+		BundleDir:   writeInvestigateBundle(t),
+		Query:       "ticket",
+		CodebaseDir: t.TempDir(),
+		Connect:     true,
+	})
+	if err != nil {
+		t.Fatalf("Run should not fail when connect fails: %v", err)
+	}
+	if !report.OK {
+		t.Fatalf("report should be OK even with connect error")
+	}
+	if report.ConnectError == "" {
+		t.Fatalf("connect_error should be set when fcheap unavailable")
+	}
+	if len(report.CodeMatches) != 0 {
+		t.Fatalf("code_matches should be empty on connect error: %#v", report.CodeMatches)
+	}
+}
+
+func TestRunStashErrorWhenFcheapUnavailable(t *testing.T) {
+	if fcheap.Available() {
+		t.Skip("fcheap is installed; stash error path not testable without mocking")
+	}
+
+	_, err := Run(Options{
+		StashID: "some_stash_id",
+		Query:   "ticket",
+	})
+	if err == nil {
+		t.Fatalf("Run should fail when stash is requested but fcheap unavailable")
+	}
+	if !strings.Contains(err.Error(), "fcheap is not installed") {
+		t.Fatalf("error should mention fcheap not installed: %v", err)
+	}
+}
+
+func TestMarkdownRendersCodeMatchesAndStash(t *testing.T) {
+	report := Report{
+		OK:      true,
+		Query:   "ticket bug",
+		Mode:    "keyword",
+		Summary: "Found 1 video evidence hit(s).",
+		Evidence: []evidence.SearchResult{
+			{TimeSeconds: 1.0, Frame: "frames/frame_0002.png", OCR: "Ticket OPG-14010"},
+		},
+		SuggestedQueries: []string{"ticket bug"},
+		StashID:          "test_stash_123",
+		CodeMatches: []fcheap.CodeMatch{
+			{File: "src/ticket.go", Score: 0.85, Text: "func handleTicketClick()"},
+			{File: "src/routes.go", Score: 0.72, Text: "router.GET('/ticket/:id')"},
+		},
+	}
+
+	out := Markdown(report)
+	for _, want := range []string{
+		"## Stash",
+		"test_stash_123",
+		"## Code Matches",
+		"src/ticket.go",
+		"src/routes.go",
+		"func handleTicketClick()",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("expected markdown to contain %q, got:\n%s", want, out)
+		}
+	}
+}
+
+func TestMarkdownRendersConnectError(t *testing.T) {
+	report := Report{
+		OK:           true,
+		Query:        "ticket bug",
+		Mode:         "keyword",
+		Summary:      "Found 0 video evidence hit(s).",
+		ConnectError: "fcheap is not installed or not on PATH",
+	}
+
+	out := Markdown(report)
+	if !strings.Contains(out, "## Connect Error") {
+		t.Fatalf("expected markdown to contain Connect Error section, got:\n%s", out)
+	}
+	if !strings.Contains(out, "fcheap is not installed") {
+		t.Fatalf("expected markdown to contain the error text")
+	}
+}
+
+func TestMarkdownNoStashOrCodeMatchesWhenEmpty(t *testing.T) {
+	report := Report{
+		OK:      true,
+		Query:   "ticket",
+		Mode:    "keyword",
+		Summary: "Found 0 hits.",
+	}
+
+	out := Markdown(report)
+	if strings.Contains(out, "## Stash") {
+		t.Fatalf("markdown should not contain Stash section when StashID is empty")
+	}
+	if strings.Contains(out, "## Code Matches") {
+		t.Fatalf("markdown should not contain Code Matches section when empty")
+	}
+	if strings.Contains(out, "## Connect Error") {
+		t.Fatalf("markdown should not contain Connect Error section when empty")
+	}
+}
+
+func TestSummaryMentionsCodeMatches(t *testing.T) {
+	results := []evidence.SearchResult{
+		{TimeSeconds: 1.0, Frame: "frames/frame_0001.png", OCR: "Login failed"},
+	}
+	matches := []fcheap.CodeMatch{
+		{File: "src/auth.go", Score: 0.85, Text: "func login()"},
+		{File: "src/routes.go", Score: 0.72, Text: "router.POST('/login')"},
+	}
+
+	got := summary(results, []string{"login failed"}, "/tmp/repo", matches)
+	if !strings.Contains(got, "2 code match(es) found via fcheap connect") {
+		t.Fatalf("expected summary to mention code matches, got: %s", got)
+	}
+}
+
+func TestSummaryOmitsCodeMatchesWhenEmpty(t *testing.T) {
+	results := []evidence.SearchResult{
+		{TimeSeconds: 1.0, Frame: "frames/frame_0001.png", OCR: "Login failed"},
+	}
+
+	got := summary(results, []string{"login failed"}, "/tmp/repo", nil)
+	if strings.Contains(got, "code match(es)") {
+		t.Fatalf("summary should not mention code matches when empty, got: %s", got)
+	}
 }
 
 func mustMkdirInvestigate(t *testing.T, path string) {

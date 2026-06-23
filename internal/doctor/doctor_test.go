@@ -54,3 +54,54 @@ func TestPrintHumanRendersOptionalTools(t *testing.T) {
 		t.Fatalf("expected optional tools section, got:\n%s", out)
 	}
 }
+
+func TestCheckIncludesFcheapAndVecgrepAsOptionalTools(t *testing.T) {
+	result := Check()
+
+	names := map[string]bool{}
+	for _, tool := range result.OptionalTools {
+		names[tool.Name] = true
+	}
+	if !names["fcheap"] {
+		t.Fatalf("expected fcheap in optional tools, got %#v", result.OptionalTools)
+	}
+	if !names["vecgrep"] {
+		t.Fatalf("expected vecgrep in optional tools, got %#v", result.OptionalTools)
+	}
+}
+
+func TestMissingFcheapDoesNotFailDoctor(t *testing.T) {
+	result := Result{
+		OK:            true,
+		OptionalTools: []ToolStatus{{Name: "fcheap", Found: false}},
+	}
+	if !result.OK {
+		t.Fatal("a missing optional tool must not flip OK to false")
+	}
+}
+
+func TestMissingVecgrepDoesNotFailDoctor(t *testing.T) {
+	result := Result{
+		OK:            true,
+		OptionalTools: []ToolStatus{{Name: "vecgrep", Found: false}},
+	}
+	if !result.OK {
+		t.Fatal("a missing optional tool must not flip OK to false")
+	}
+}
+
+func TestPrintHumanRendersFcheapAndVecgrep(t *testing.T) {
+	var buf bytes.Buffer
+	PrintHuman(&buf, Result{
+		OK:    true,
+		Tools: []ToolStatus{{Name: "ffmpeg", Found: true, Path: "/usr/bin/ffmpeg"}},
+		OptionalTools: []ToolStatus{
+			{Name: "fcheap", Found: true, Path: "/usr/bin/fcheap"},
+			{Name: "vecgrep", Found: false},
+		},
+	})
+	out := buf.String()
+	if !strings.Contains(out, "fcheap: found") || !strings.Contains(out, "vecgrep: missing") {
+		t.Fatalf("expected fcheap and vecgrep in optional tools, got:\n%s", out)
+	}
+}

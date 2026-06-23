@@ -6,9 +6,9 @@ Turn bug videos into timestamped evidence bundles that humans and coding agents 
 
 ## Status
 
-`v0.8.0` is published. The Go CLI extracts evidence bundles (with a live progress bar on a terminal and fail-fast OCR-language checks), emits stable JSON for automation, validates bundles, compares and analyzes a ticket against video evidence, opens a compact terminal Studio for human review (and refuses non-interactive callers so agents are never trapped in the TUI), searches bundle evidence (BM25 keyword plus optional semantic and hybrid search via Ollama) with bundle, source-video, evidence-source, and time-window filters across many bundles, and exposes read-only evidence tools to agents over MCP (`vidtrace mcp`). It ships through GitHub Releases as cross-platform archives, Linux `.deb`/`.rpm` packages, and a Homebrew tap.
+`v0.10.0` is the latest release. The Go CLI extracts evidence bundles (with a live progress bar on a terminal and fail-fast OCR-language checks), emits stable JSON for automation, validates bundles, compares and analyzes a ticket against video evidence, opens a compact terminal Studio for human review (and refuses non-interactive callers so agents are never trapped in the TUI), searches bundle evidence (BM25 keyword plus optional semantic and hybrid search via Ollama) with bundle, source-video, evidence-source, and time-window filters across many bundles, stashes bundles to a fcheap vault for sharing and restoration (`vidtrace stash`), runs real codebase search via `fcheap connect` (vecgrep) alongside video evidence (`vidtrace investigate --connect`), and exposes read-only evidence and stash tools to agents over MCP (`vidtrace mcp`). It ships through GitHub Releases as cross-platform archives, Linux `.deb`/`.rpm` packages, and a Homebrew tap.
 
-Extraction stays independent from the optional VecLite indexes and embedding providers.
+Extraction stays independent from the optional VecLite indexes and embedding providers. fcheap and vecgrep are optional external tools reported by `vidtrace doctor`.
 
 The project is still early. Treat `--json`, `metadata.json`, and `timeline.json` as the main contracts and change them deliberately.
 
@@ -133,6 +133,24 @@ vidtrace investigate /path/to/bug_artifacts_YYYYMMDD_HHMMSS \
   --json
 ```
 
+Run real codebase search alongside video evidence (requires fcheap + vecgrep):
+
+```bash
+vidtrace investigate /path/to/bug_artifacts_YYYYMMDD_HHMMSS \
+  --query "clicking a ticket does not work" \
+  --codebase /path/to/app \
+  --connect \
+  --json
+```
+
+Stash a bundle to the fcheap vault and investigate from a stash:
+
+```bash
+vidtrace stash save /path/to/bug_artifacts_YYYYMMDD_HHMMSS --name "bug-evidence" --json
+vidtrace stash list --tool vidtrace --json
+vidtrace investigate --stash <stash-id> --query "clicking a ticket does not work" --json
+```
+
 Compare a ticket with an artifact bundle:
 
 ```bash
@@ -176,6 +194,9 @@ task run -- validate /path/to/bundle --json
 task run -- index /path/to/bundle --db /tmp/vidtrace-evidence.veclite --json
 task run -- search /tmp/vidtrace-evidence.veclite "ticket click" --json
 task run -- investigate /path/to/bundle --query "ticket click" --codebase /path/to/app --json
+task run -- investigate /path/to/bundle --query "ticket click" --codebase /path/to/app --connect --json
+task run -- stash save /path/to/bundle --name "bug-evidence" --json
+task run -- stash list --tool vidtrace --json
 task run -- compare /path/to/bundle --ticket ticket.md --json
 task run -- studio /path/to/bundle
 task site
@@ -229,6 +250,8 @@ bin/vidtrace validate /tmp/vidtrace-real/bug_artifacts_* --json
 bin/vidtrace index /tmp/vidtrace-real/bug_artifacts_* --db /tmp/vidtrace-real/evidence.veclite --json
 bin/vidtrace search /tmp/vidtrace-real/evidence.veclite "clicking a task does not take me to the assessment" --json
 bin/vidtrace investigate /tmp/vidtrace-real/bug_artifacts_* --query "clicking a task does not take me to the assessment" --codebase /path/to/repo --json
+bin/vidtrace investigate /tmp/vidtrace-real/bug_artifacts_* --query "clicking a task does not take me to the assessment" --codebase /path/to/repo --connect --json
+bin/vidtrace stash save /tmp/vidtrace-real/bug_artifacts_* --name "bug-evidence" --json
 bin/vidtrace studio /tmp/vidtrace-real/bug_artifacts_*
 ```
 
@@ -255,11 +278,9 @@ Start with:
 
 Current high-value improvements:
 
-- Add semantic/hybrid evidence search and MCP workflows tracked in `BACKLOG.md`.
-- Use `docs/adr/0003-use-veclite-for-optional-evidence-search.md` as the architecture record for optional VecLite indexing.
-- Dogfood the `v0.5.0` Studio review workflow with real videos.
-- Improve `timeline.json` matching beyond the current frame-window overlap rules.
-- Evaluate signing/notarization for macOS distribution.
+- Use `docs/adr/0005-fcheap-vecgrep-integration.md` as the architecture record for the fcheap + vecgrep integration.
+- Dogfood the integrated bug-video-to-code-fix workflow with real videos via `vidtrace investigate --connect`.
+- Evaluate signing/notarization for macOS distribution (playbook in `docs/RELEASE.md`).
 
 ## Project Conventions
 

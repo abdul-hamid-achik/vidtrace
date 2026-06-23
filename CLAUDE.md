@@ -14,6 +14,8 @@ Read `AGENTS.md` first. It contains the canonical coding-agent instructions for 
 - `ffprobe` for metadata
 - `tesseract` for OCR
 - `whisper` for transcript generation
+- `fcheap` (optional) for bundle stashing and vault restoration
+- `vecgrep` (optional) for semantic codebase search via `fcheap connect`
 
 ## Common Commands
 
@@ -24,6 +26,8 @@ task run -- docs agent
 task run -- validate /path/to/bundle --json
 task run -- compare /path/to/bundle --ticket ticket.md --json
 task run -- analyze /path/to/bundle --ticket ticket.md
+task run -- investigate /path/to/bundle --query "ticket click" --codebase /path/to/repo --connect --json
+task run -- stash save /path/to/bundle --name "bug-evidence" --json
 task run -- studio /path/to/bundle
 task site
 task e2e
@@ -37,6 +41,8 @@ bin/vidtrace validate /tmp/vidtrace-real/bug_artifacts_* --json
 bin/vidtrace index /tmp/vidtrace-real/bug_artifacts_* --db /tmp/vidtrace-real/evidence.veclite --json
 bin/vidtrace search /tmp/vidtrace-real/evidence.veclite "clicking a task does not take me to the assessment" --json
 bin/vidtrace investigate /tmp/vidtrace-real/bug_artifacts_* --query "clicking a task does not take me to the assessment" --codebase /path/to/repo --json
+bin/vidtrace investigate /tmp/vidtrace-real/bug_artifacts_* --query "clicking a task does not take me to the assessment" --codebase /path/to/repo --connect --json
+bin/vidtrace stash save /tmp/vidtrace-real/bug_artifacts_* --name "bug-evidence" --json
 bin/vidtrace studio /tmp/vidtrace-real/bug_artifacts_*
 ```
 

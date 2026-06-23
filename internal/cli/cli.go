@@ -48,6 +48,8 @@ func Run(args []string, stdout, stderr io.Writer, version string) int {
 		return runAnalyze(args[1:], stdout, stderr)
 	case "compare":
 		return runCompare(args[1:], stdout, stderr)
+	case "stash":
+		return runStash(args[1:], stdout, stderr)
 	case "validate":
 		return runValidate(args[1:], stdout, stderr)
 	case "mcp":
@@ -291,6 +293,7 @@ Commands:
   mcp          Run the MCP server (read-only evidence tools over stdio)
   migrate-evidence  Convert a pre-v0.17.0 evidence DB to the single-collection layout
   search       Search an evidence database for timestamped video evidence
+  stash        Save, list, restore, inspect, or search artifact bundles in the fcheap vault
   studio       Open the artifact inspection studio
   validate     Validate an artifact bundle, optionally as JSON
   version      Print the CLI version
@@ -305,6 +308,8 @@ Examples:
   vidtrace index /path/to/bundle --db /tmp/evidence.veclite --json
   vidtrace search /tmp/evidence.veclite "ticket click does not work" --json
   vidtrace investigate /path/to/bundle --query "ticket click does not work" --codebase /path/to/app
+  vidtrace stash save /path/to/bundle --name "bug" --tag bug
+  vidtrace stash list --tool vidtrace --json
   vidtrace analyze /path/to/bundle --ticket ticket.md
   vidtrace compare /path/to/bundle --ticket ticket.md --json
   vidtrace validate /path/to/bundle --json

@@ -1,0 +1,74 @@
+version: 1
+name: cli_investigate_connect
+
+metadata:
+  feature: investigation
+  owner: core
+  priority: high
+  tags:
+    - investigate
+    - connect
+    - fcheap
+    - vecgrep
+    - agent
+
+intent: |
+  Verify that vidtrace investigate --connect produces a valid report with
+  code_matches when fcheap and vecgrep are available, and degrades gracefully
+  with a connect_error when they are not.
+
+target:
+  cmd:
+    - "/bin/sh"
+    - "-c"
+    - "./bin/vidtrace investigate .glyphrun/tmp/investigate_connect/sample_artifacts --query \"ticket does not work\" --codebase . --connect --json"
+  cwd: "."
+  timeoutMs: 30000
+
+terminal:
+  cols: 120
+  rows: 40
+  profile: xterm-256color
+  alternateScreen: forbid
+
+preconditions:
+  commands:
+    - run: "go build -o ./bin/vidtrace ./cmd/vidtrace"
+      timeoutMs: 120000
+    - run: "rm -rf .glyphrun/tmp/investigate_connect && mkdir -p .glyphrun/tmp/investigate_connect"
+      timeoutMs: 5000
+    - run: "sh e2e/fixtures/sample_bundle.sh .glyphrun/tmp/investigate_connect/sample_artifacts"
+      timeoutMs: 5000
+
+imports:
+  - ../actions/wait_clean_exit.yml
+
+steps:
+  - use: wait_clean_exit
+
+outcomes:
+  - id: clean_exit
+    description: investigate --connect exits successfully (even if connect fails gracefully)
+    verify:
+      process:
+        exitCode: 0
+  - id: json_ok
+    description: investigate --connect JSON reports success
+    verify:
+      command:
+        run: "./bin/vidtrace investigate .glyphrun/tmp/investigate_connect/sample_artifacts --query \"ticket does not work\" --codebase . --connect --json | grep -q '\"ok\": true'"
+  - id: evidence_still_present
+    description: investigation still includes timestamped video evidence with --connect
+    verify:
+      command:
+        run: "./bin/vidtrace investigate .glyphrun/tmp/investigate_connect/sample_artifacts --query \"ticket does not work\" --codebase . --connect --json | grep -q '\"frame\": \"frames/frame_0002.png\"'"
+  - id: backward_compatible
+    description: investigate without --connect still works identically
+    verify:
+      command:
+        run: "./bin/vidtrace investigate .glyphrun/tmp/investigate_connect/sample_artifacts --query \"ticket does not work\" --codebase . --json | grep -q '\"ok\": true'"
+  - id: connect_requires_codebase
+    description: investigate --connect without --codebase exits with usage error
+    verify:
+      command:
+        run: "! ./bin/vidtrace investigate .glyphrun/tmp/investigate_connect/sample_artifacts --query \"ticket does not work\" --connect --json 2>/dev/null"

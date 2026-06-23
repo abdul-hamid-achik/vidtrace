@@ -4,9 +4,18 @@ This backlog keeps product ideas, engineering work, and integration bets visible
 
 ## Recently Completed
 
-### VecLite v0.17.0 Single-Collection Migration
+### v0.10.0 Release
 
-As a maintainer, I can collapse the pre-v0.17.0 three-collection evidence layout into a single `evidence_entries` collection with a named `text` vector space, so that keyword, semantic, and hybrid search run against one collection without content duplication.
+As a maintainer, I can ship the fcheap + vecgrep integration as a tagged release.
+
+Acceptance criteria:
+
+- [x] `CHANGELOG.md` has a `0.10.0` section and `README.md` reports `v0.10.0`.
+- [x] Tag `v0.10.0` is pushed and drives the build version.
+- [x] The GitHub release workflow publishes checksums and Darwin/Linux tarballs.
+- [x] No source videos, generated bundles, or build output are tracked.
+
+### VecLite v0.17.0 Single-Collection Migration
 
 Acceptance criteria:
 
@@ -255,7 +264,26 @@ Acceptance criteria:
 
 ## Now
 
-_No active iteration. The next candidates are in **Later**._
+### fcheap + vecgrep Integration
+
+As an agent, I can stash artifact bundles to the fcheap vault, restore them on any machine, run real codebase search via `fcheap connect` (vecgrep), and access stash tools over MCP, so that the workflow from bug video to code fix is seamless across CLI and MCP.
+
+Acceptance criteria:
+
+- [x] `internal/fcheap` wraps the fcheap CLI (`Save`, `List`, `Info`, `Restore`, `Search`, `Connect`, `Available`) with tests.
+- [x] `vidtrace doctor` reports `fcheap` and `vecgrep` as optional tools.
+- [x] `vidtrace stash save|list|restore|info|search` CLI commands work with `--json` output and graceful "fcheap not installed" errors.
+- [x] `vidtrace investigate --connect --codebase` returns real `code_matches` with `file:line` entries.
+- [x] `vidtrace investigate --stash <id>` restores a stashed bundle before investigation.
+- [x] `vidtrace investigate` without `--connect`/`--stash` produces output identical to the previous version (backward compatible).
+- [x] MCP server exposes `stash_list`, `stash_info`, `stash_search`, `stash_connect` tools (read-only per ADR-0004).
+- [x] MCP `investigate` tool accepts `connect`, `stash_id`, `connect_mode`, `connect_limit` and returns `code_matches`.
+- [x] `stash_save` is CLI-only (not in MCP) to respect the read-only constraint.
+- [x] All features degrade gracefully when fcheap/vecgrep are not installed.
+- [x] ADR-0005, CLI_CONTRACT, built-in docs, and AGENTS.md updated.
+- [x] Unit tests cover fcheap wrapper, doctor, stash CLI, investigate connect/stash, and MCP tools.
+- [x] E2E glyphrun specs for stash commands and investigate --connect.
+- [x] `task check` and `task e2e` pass.
 
 ## Later
 

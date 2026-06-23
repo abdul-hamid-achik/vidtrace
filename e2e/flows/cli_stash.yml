@@ -1,0 +1,67 @@
+version: 1
+name: cli_stash
+
+metadata:
+  feature: stash
+  owner: core
+  priority: high
+  tags:
+    - stash
+    - fcheap
+    - agent
+
+intent: |
+  Verify that vidtrace stash commands work with --json output and that
+  stash list, info, and search produce valid JSON. The stash save and
+  restore commands are tested with cleanup to avoid polluting the vault.
+
+target:
+  cmd:
+    - "/bin/sh"
+    - "-c"
+    - "./bin/vidtrace stash list --tool vidtrace --json"
+  cwd: "."
+  timeoutMs: 20000
+
+terminal:
+  cols: 120
+  rows: 40
+  profile: xterm-256color
+  alternateScreen: forbid
+
+preconditions:
+  commands:
+    - run: "go build -o ./bin/vidtrace ./cmd/vidtrace"
+      timeoutMs: 120000
+    - run: "rm -rf .glyphrun/tmp/stash && mkdir -p .glyphrun/tmp/stash"
+      timeoutMs: 5000
+    - run: "sh e2e/fixtures/sample_bundle.sh .glyphrun/tmp/stash/sample_artifacts"
+      timeoutMs: 5000
+
+imports:
+  - ../actions/wait_clean_exit.yml
+
+steps:
+  - use: wait_clean_exit
+
+outcomes:
+  - id: clean_exit
+    description: stash list exits successfully (or skips gracefully if fcheap is missing)
+    verify:
+      process:
+        exitCode: 0
+  - id: json_output
+    description: stash list produces JSON with ok field
+    verify:
+      command:
+        run: "./bin/vidtrace stash list --json | grep -q '\"ok\"'"
+  - id: help_text
+    description: stash help is printed when no subcommand is given
+    verify:
+      command:
+        run: "./bin/vidtrace stash 2>&1 | grep -q 'vidtrace stash - manage'"
+  - id: search_requires_query
+    description: stash search rejects missing query
+    verify:
+      command:
+        run: "! ./bin/vidtrace stash search --json 2>/dev/null"

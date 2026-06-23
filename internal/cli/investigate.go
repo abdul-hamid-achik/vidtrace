@@ -16,13 +16,20 @@ func runInvestigate(args []string, stdout, stderr io.Writer) int {
 	dbPath := fs.String("db", "", "optional evidence database path")
 	codebaseDir := fs.String("codebase", "", "optional codebase path for vecgrep command suggestions")
 	limit := fs.Int("limit", 5, "maximum evidence results")
+	connect := fs.Bool("connect", false, "run fcheap connect to find real code matches in the codebase")
+	stashID := fs.String("stash", "", "fcheap stash ID to restore and investigate instead of a local bundle")
+	connectMode := fs.String("connect-mode", "", "vecgrep search mode for --connect: semantic, keyword, or hybrid")
+	connectLimit := fs.Int("connect-limit", 10, "maximum code matches from --connect")
 	jsonOutput := fs.Bool("json", false, "print machine-readable JSON")
 
-	normalizedArgs, err := normalizeBundleArgs(args, map[string]struct{}{"json": {}}, map[string]struct{}{
-		"query":    {},
-		"db":       {},
-		"codebase": {},
-		"limit":    {},
+	normalizedArgs, err := normalizeBundleArgs(args, map[string]struct{}{"json": {}, "connect": {}}, map[string]struct{}{
+		"query":         {},
+		"db":            {},
+		"codebase":      {},
+		"limit":         {},
+		"stash":         {},
+		"connect-mode":  {},
+		"connect-limit": {},
 	})
 	if err != nil {
 		_, _ = fmt.Fprintln(stderr, err)
@@ -31,19 +38,28 @@ func runInvestigate(args []string, stdout, stderr io.Writer) int {
 	if err := fs.Parse(normalizedArgs); err != nil {
 		return 2
 	}
-	if fs.NArg() != 1 {
-		_, _ = fmt.Fprintln(stderr, "usage: vidtrace investigate /path/to/bundle --query TEXT [--codebase /path/to/repo] [--json]")
-		return 2
-	}
 	if strings.TrimSpace(*query) == "" {
 		_, _ = fmt.Fprintln(stderr, "missing required --query")
 		return 2
 	}
 
-	bundleDir, err := expandHome(fs.Arg(0))
-	if err != nil {
-		return writeInvestigateFailure(stdout, stderr, *jsonOutput, fmt.Errorf("resolve bundle path: %w", err))
+	if *connect && strings.TrimSpace(*codebaseDir) == "" {
+		_, _ = fmt.Fprintln(stderr, "--connect requires --codebase")
+		return 2
 	}
+
+	resolvedStashID := strings.TrimSpace(*stashID)
+	bundleDir := ""
+	if fs.NArg() == 1 {
+		bundleDir, err = expandHome(fs.Arg(0))
+		if err != nil {
+			return writeInvestigateFailure(stdout, stderr, *jsonOutput, fmt.Errorf("resolve bundle path: %w", err))
+		}
+	} else if resolvedStashID == "" {
+		_, _ = fmt.Fprintln(stderr, "usage: vidtrace investigate /path/to/bundle --query TEXT [--codebase /path/to/repo] [--connect] [--stash ID] [--json]")
+		return 2
+	}
+
 	resolvedDBPath := strings.TrimSpace(*dbPath)
 	if resolvedDBPath != "" {
 		resolvedDBPath, err = expandHome(resolvedDBPath)
@@ -60,11 +76,15 @@ func runInvestigate(args []string, stdout, stderr io.Writer) int {
 	}
 
 	report, err := investigate.Run(investigate.Options{
-		BundleDir:   bundleDir,
-		Query:       *query,
-		DBPath:      resolvedDBPath,
-		CodebaseDir: resolvedCodebase,
-		Limit:       *limit,
+		BundleDir:    bundleDir,
+		Query:        *query,
+		DBPath:       resolvedDBPath,
+		CodebaseDir:  resolvedCodebase,
+		Limit:        *limit,
+		Connect:      *connect,
+		StashID:      resolvedStashID,
+		ConnectMode:  strings.TrimSpace(*connectMode),
+		ConnectLimit: *connectLimit,
 	})
 	if err != nil {
 		return writeInvestigateFailure(stdout, stderr, *jsonOutput, err)

@@ -55,6 +55,8 @@ Common workflows:
   - Run "vidtrace index BUNDLE --db evidence.veclite --json" to make timeline evidence searchable.
   - Run "vidtrace search evidence.veclite QUERY --json" to find timestamped evidence.
   - Run "vidtrace investigate BUNDLE --query QUERY --codebase REPO --json" for code-search handoff.
+  - Run "vidtrace investigate BUNDLE --query QUERY --codebase REPO --connect --json" for real code matches via fcheap.
+  - Run "vidtrace stash save BUNDLE --json" to save a bundle to the fcheap vault.
   - Run "vidtrace compare BUNDLE --ticket TICKET --json" to compare a ticket with evidence.
   - Run "vidtrace docs agent" when an agent needs the operating contract.
   - Run "vidtrace studio BUNDLE" to inspect timeline, OCR, transcript, and frame paths.
@@ -83,10 +85,13 @@ Recommended flow:
   6. Optionally run "vidtrace index output_dir --db /tmp/vidtrace-evidence.veclite --json".
   7. Optionally run "vidtrace search /tmp/vidtrace-evidence.veclite QUERY --json".
   8. Optionally run "vidtrace investigate output_dir --query QUERY --codebase REPO --json".
-  9. Use ocr/ocr_all_frames.txt for broad UI text search.
-  10. Use transcript/*.json for spoken context.
-  11. Open selected frames/frame_*.png only when text evidence is ambiguous.
-  12. Run "vidtrace compare output_dir --ticket ticket.md --json" for a first-pass mismatch check.
+  9. Optionally run "vidtrace investigate output_dir --query QUERY --codebase REPO --connect --json" for real code matches.
+  10. Optionally run "vidtrace stash save output_dir --json" to stash the bundle to fcheap.
+  11. Optionally run "vidtrace investigate --stash STASH_ID --query QUERY --json" to investigate a stashed bundle.
+  12. Use ocr/ocr_all_frames.txt for broad UI text search.
+  13. Use transcript/*.json for spoken context.
+  14. Open selected frames/frame_*.png only when text evidence is ambiguous.
+  15. Run "vidtrace compare output_dir --ticket ticket.md --json" for a first-pass mismatch check.
 
 Ticket comparison:
   - State whether the ticket and video appear to match, mismatch, or are inconclusive.
@@ -120,8 +125,11 @@ Commands:
   vidtrace index BUNDLE --db DB [--json]
       Index timeline evidence into a local VecLite database.
 
-  vidtrace investigate BUNDLE --query TEXT [--codebase REPO] [--db DB] [--json]
-      Return video evidence, code-search queries, and vecgrep command suggestions.
+  vidtrace investigate BUNDLE --query TEXT [--codebase REPO] [--connect] [--stash ID] [--db DB] [--json]
+      Return video evidence, code-search queries, vecgrep command suggestions, and real code matches (--connect).
+
+  vidtrace stash save|list|restore|info|search ...
+      Manage artifact bundles in the fcheap vault (save, list, restore, info, search).
 
   vidtrace search DB QUERY [--limit N] [--json]
       Search indexed evidence and return timestamped OCR/transcript results.
@@ -164,7 +172,18 @@ Investigate flags:
   --codebase PATH     optional codebase path for vecgrep command suggestions
   --db PATH           optional reusable evidence database path
   --limit N           maximum evidence results, default 5
+  --connect           run fcheap connect for real code matches (requires --codebase)
+  --stash ID          fcheap stash ID to restore and investigate instead of a local bundle
+  --connect-mode      vecgrep search mode: semantic, keyword, or hybrid
+  --connect-limit N   maximum code matches from --connect, default 10
   --json              emit machine-readable investigation handoff
+
+Stash subcommands:
+  vidtrace stash save BUNDLE [--name NAME] [--tag TAG] [--json]
+  vidtrace stash list [--tool TOOL] [--tag TAG] [--json]
+  vidtrace stash restore ID [--to DIR] [--json]
+  vidtrace stash info ID [--json]
+  vidtrace stash search QUERY [--mode MODE] [--limit N] [--json]
 `)
 }
 

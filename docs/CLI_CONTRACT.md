@@ -21,7 +21,7 @@ vidtrace doctor
 vidtrace doctor -json
 ```
 
-The JSON output is intended for tests and automation.
+The JSON output is intended for tests and automation. Required tools are `ffmpeg`, `ffprobe`, `tesseract`, and `whisper`. Optional tools include `ollama` (for semantic/hybrid evidence search), `fcheap` (for stash vault integration), and `vecgrep` (for codebase search via `fcheap connect`).
 
 ### `vidtrace version`
 
@@ -287,6 +287,8 @@ Creates a compact handoff from video evidence to code search.
 ```bash
 vidtrace investigate /path/to/bug_artifacts_YYYYMMDD_HHMMSS --query "checkout button error"
 vidtrace investigate /path/to/bug_artifacts_YYYYMMDD_HHMMSS --query "checkout button error" --codebase /path/to/app --json
+vidtrace investigate /path/to/bug_artifacts_YYYYMMDD_HHMMSS --query "checkout button error" --codebase /path/to/app --connect --json
+vidtrace investigate --stash fcheap_stash_id --query "checkout button error" --json
 ```
 
 The command indexes/searches the bundle evidence using the BM25 evidence-search path, then returns:
@@ -294,8 +296,27 @@ The command indexes/searches the bundle evidence using the BM25 evidence-search 
 - timestamped video evidence
 - suggested code-search queries
 - ready-to-run vecgrep commands when `--codebase` is provided
+- real `file:line` code matches when `--connect` is used with `--codebase` (via fcheap connect + vecgrep)
 
 It does not index source code inside vidtrace. Use vecgrep for codebase search.
+
+When `--stash <id>` is provided, the bundle is restored from the fcheap vault before investigation. This allows investigating a bundle without a local copy.
+
+When `--connect` is used with `--codebase`, vidtrace saves the bundle to fcheap (if not already stashed), runs `fcheap connect` which invokes vecgrep over the codebase, and returns real code matches. If fcheap or vecgrep are not installed, the connect error is recorded in `connect_error` and the report still succeeds with evidence and suggested queries. Using `--connect` without `--codebase` is a usage error (exit code 2).
+
+Flags:
+
+| Flag | Default | Meaning |
+|---|---|---|
+| `--query` | (required) | Bug or evidence query |
+| `--codebase` | none | Optional codebase path for vecgrep command suggestions |
+| `--db` | none (temp) | Optional reusable evidence database path |
+| `--limit` | `5` | Maximum evidence results |
+| `--connect` | `false` | Run fcheap connect for real code matches (requires `--codebase`) |
+| `--stash` | none | fcheap stash ID to restore and investigate instead of a local bundle |
+| `--connect-mode` | none (hybrid) | vecgrep search mode: `semantic`, `keyword`, or `hybrid` |
+| `--connect-limit` | `10` | Maximum code matches from `--connect` |
+| `--json` | `false` | Emit machine-readable JSON |
 
 Example success JSON:
 
@@ -325,6 +346,43 @@ Example success JSON:
     "cd '/path/to/app' && vecgrep search 'checkout button error' --format=json"
   ],
   "summary": "Found 1 video evidence hit(s) and 2 suggested code search(es); vecgrep command suggestions included."
+}
+```
+
+When `--connect` is used, the JSON adds `code_matches` and optionally `connect_error`:
+
+```json
+{
+  "ok": true,
+  "query": "checkout button error",
+  "bundle_dir": "/path/to/bug_artifacts_YYYYMMDD_HHMMSS",
+  "codebase_dir": "/path/to/app",
+  "mode": "keyword",
+  "evidence": [...],
+  "suggested_queries": [...],
+  "vecgrep_commands": [...],
+  "code_matches": [
+    {
+      "file": "src/checkout/handler.go",
+      "score": 0.85,
+      "text": "func handleCheckoutSubmit(w http.ResponseWriter, r *http.Request)"
+    }
+  ],
+  "summary": "Found 1 video evidence hit(s) and 2 suggested code search(es); vecgrep command suggestions included; 1 code match(es) found via fcheap connect."
+}
+```
+
+When `--stash` is used, the JSON adds `stash_id`:
+
+```json
+{
+  "ok": true,
+  "query": "checkout button error",
+  "bundle_dir": "/tmp/fcheap-restore-abc123",
+  "stash_id": "checkout_bug_evidence_20260623_150000",
+  "mode": "keyword",
+  "evidence": [...],
+  "summary": "..."
 }
 ```
 
@@ -406,6 +464,66 @@ Example failure JSON:
 }
 ```
 
+### `vidtrace stash`
+
+Stashes, lists, restores, inspects, and searches artifact bundles in the fcheap vault. Requires the `fcheap` CLI to be installed.
+
+```bash
+vidtrace stash save /path/to/bundle --name "bug-evidence" --json
+vidtrace stash list [--tool vidtrace] [--tag bug] [--json]
+vidtrace stash restore <stash-id> [--to /path/to/dir] [--json]
+vidtrace stash info <stash-id> [--json]
+vidtrace stash search "query" [--mode hybrid] [--limit 20] [--json]
+```
+
+Subcommands:
+
+| Subcommand | Purpose |
+|---|---|
+| `save` | Save a bundle to the fcheap vault for sharing or archival |
+| `list` | List stashes, optionally filtered by tool or tag |
+| `restore` | Restore a stashed bundle to a local directory |
+| `info` | Get metadata and file list for a stash |
+| `search` | Search across all indexed stashes |
+
+Flags:
+
+| Flag | Default | Meaning |
+|---|---|---|
+| `--name` | none | Display name for the stash (save) |
+| `--tool` | none | Filter by tool name, e.g. `vidtrace` (list) |
+| `--tag` | none | Filter by tag (list) or tag the stash (save) |
+| `--to` | none (temp) | Target directory for restore |
+| `--mode` | none (hybrid) | Search mode: `keyword`, `semantic`, or `hybrid` (search) |
+| `--limit` | `20` | Maximum search results |
+| `--json` | `false` | Emit machine-readable JSON |
+
+Example `stash save` JSON:
+
+```json
+{
+  "ok": true,
+  "id": "bug_evidence_20260623_150000",
+  "name": "bug-evidence"
+}
+```
+
+Example `stash list` JSON:
+
+```json
+{
+  "ok": true,
+  "stashes": [
+    {
+      "id": "bug_evidence_20260623_150000",
+      "name": "bug-evidence",
+      "tool": "vidtrace",
+      "file_count": 120
+    }
+  ]
+}
+```
+
 ### `vidtrace mcp`
 
 Runs a Model Context Protocol server over stdio so agent clients can call vidtrace's read-only evidence tools without shell parsing. Built on the official Go MCP SDK.
@@ -422,9 +540,13 @@ It exposes these read-only tools, whose inputs and structured outputs mirror the
 | `search` | Search an evidence database (`db_path`, `query`, optional `mode`, filters, and `embed`/`embed_model`/`ollama_url`). |
 | `compare` | Structured ticket-vs-bundle comparison (`bundle_dir`, `ticket_path`). |
 | `analyze` | Markdown evidence report (`bundle_dir`, `ticket_path`). |
-| `investigate` | Video-evidence to code-search handoff (`bundle_dir`, `query`, optional `codebase_dir`). |
+| `investigate` | Video-evidence to code-search handoff (`bundle_dir` or `stash_id`, `query`, optional `codebase_dir`, `connect`, `connect_mode`, `connect_limit`). |
+| `stash_list` | List fcheap stashes (`tool`, `tag`). |
+| `stash_info` | Get stash metadata (`stash_id`). |
+| `stash_search` | Search across stashes (`query`, `mode`, `limit`). |
+| `stash_connect` | Connect a stash to a codebase via vecgrep (`stash_id`, `codebase`, `query`, `mode`, `limit`, `index`). |
 
-No tool mutates source videos or generated artifact bundles. Tool failures are returned as MCP tool errors (visible to the model), not protocol errors. A client disconnect (stdin EOF) is a clean shutdown.
+No tool mutates source videos or generated artifact bundles. `stash_save` is intentionally excluded from MCP to respect the read-only constraint (ADR-0004). Tool failures are returned as MCP tool errors (visible to the model), not protocol errors. A client disconnect (stdin EOF) is a clean shutdown.
 
 Example client registration (Claude Desktop / MCP client config):
 

@@ -1,14 +1,17 @@
 package investigate
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/abdul-hamid-achik/vidtrace/internal/evidence"
+	"github.com/abdul-hamid-achik/vidtrace/internal/fcheap"
 )
 
 type Options struct {
@@ -17,6 +20,17 @@ type Options struct {
 	DBPath      string
 	CodebaseDir string
 	Limit       int
+	// Connect enables fcheap connect to run vecgrep over the codebase and
+	// return real file:line code matches. Requires CodebaseDir.
+	Connect bool
+	// StashID restores a stashed bundle from fcheap before investigation.
+	// When set, BundleDir is ignored (the restored stash is used instead).
+	StashID string
+	// ConnectMode controls the vecgrep search mode: semantic, keyword, or
+	// hybrid. Empty uses vecgrep's default (hybrid).
+	ConnectMode string
+	// ConnectLimit caps the number of code matches returned.
+	ConnectLimit int
 }
 
 type Report struct {
@@ -31,6 +45,9 @@ type Report struct {
 	SuggestedQueries []string                `json:"suggested_queries"`
 	VecgrepCommands  []string                `json:"vecgrep_commands,omitempty"`
 	Summary          string                  `json:"summary"`
+	StashID          string                  `json:"stash_id,omitempty"`
+	CodeMatches      []fcheap.CodeMatch      `json:"code_matches,omitempty"`
+	ConnectError     string                  `json:"connect_error,omitempty"`
 }
 
 func Run(opts Options) (Report, error) {
@@ -38,15 +55,34 @@ func Run(opts Options) (Report, error) {
 	if query == "" {
 		return Report{}, fmt.Errorf("query is required")
 	}
-	if strings.TrimSpace(opts.BundleDir) == "" {
-		return Report{}, fmt.Errorf("bundle path is required")
-	}
 	limit := opts.Limit
 	if limit <= 0 {
 		limit = 5
 	}
 
-	bundleDir, err := filepath.Abs(opts.BundleDir)
+	var stashID string
+	bundleDir := strings.TrimSpace(opts.BundleDir)
+
+	// If a stash ID is provided, restore the bundle from fcheap first.
+	if strings.TrimSpace(opts.StashID) != "" {
+		stashID = strings.TrimSpace(opts.StashID)
+		if !fcheap.Available() {
+			return Report{}, fmt.Errorf("fcheap is not installed; cannot restore stash %s", stashID)
+		}
+		restoreCtx, restoreCancel := context.WithTimeout(context.Background(), 60*time.Second)
+		restored, err := fcheap.Restore(restoreCtx, stashID, "")
+		restoreCancel()
+		if err != nil {
+			return Report{}, fmt.Errorf("restore stash %s: %w", stashID, err)
+		}
+		bundleDir = restored
+	}
+
+	if bundleDir == "" {
+		return Report{}, fmt.Errorf("bundle path is required")
+	}
+
+	absBundleDir, err := filepath.Abs(bundleDir)
 	if err != nil {
 		return Report{}, fmt.Errorf("resolve bundle: %w", err)
 	}
@@ -71,7 +107,7 @@ func Run(opts Options) (Report, error) {
 	}
 
 	indexReport, err := evidence.IndexBundle(evidence.IndexOptions{
-		BundleDir: bundleDir,
+		BundleDir: absBundleDir,
 		DBPath:    dbPath,
 	})
 	if err != nil {
@@ -100,6 +136,15 @@ func Run(opts Options) (Report, error) {
 	if temporaryDB {
 		reportDBPath = ""
 	}
+	// If --connect is set with a codebase, run fcheap connect to get real
+	// code matches. This is a best-effort enhancement: failures are recorded
+	// in ConnectError rather than aborting the report.
+	var codeMatches []fcheap.CodeMatch
+	var connectError string
+	if opts.Connect && codebaseDir != "" {
+		codeMatches, connectError = runConnect(absBundleDir, stashID, codebaseDir, query, opts)
+	}
+
 	report := Report{
 		OK:               true,
 		Query:            query,
@@ -111,9 +156,63 @@ func Run(opts Options) (Report, error) {
 		Evidence:         searchReport.Results,
 		SuggestedQueries: suggested,
 		VecgrepCommands:  VecgrepCommands(codebaseDir, suggested),
-		Summary:          summary(searchReport.Results, suggested, codebaseDir),
+		Summary:          summary(searchReport.Results, suggested, codebaseDir, codeMatches),
+		StashID:          stashID,
+		CodeMatches:      codeMatches,
+		ConnectError:     connectError,
 	}
+
 	return report, nil
+}
+
+// runConnect calls fcheap connect to run vecgrep over the codebase using the
+// stashed or local bundle's text. It returns code matches and an error string
+// (empty on success). If no stash ID is provided, the bundle is saved to fcheap
+// first as a temporary stash, then connected. If fcheap is not available, returns
+// a descriptive error without panicking.
+//
+// Note: when a temporary stash is created (no explicit --stash), it persists in
+// the fcheap vault after the connect call. Callers who want a clean vault should
+// drop it via `fcheap drop <id> --force` or use --stash to provide a pre-stashed
+// bundle.
+func runConnect(absBundleDir, stashID, codebaseDir, query string, opts Options) ([]fcheap.CodeMatch, string) {
+	if !fcheap.Available() {
+		return nil, "fcheap is not installed or not on PATH"
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+
+	// If no stash ID is provided, save the bundle to fcheap first so we can
+	// use fcheap connect. The stash is temporary and only used for the
+	// connect call.
+	effectiveStashID := stashID
+	if effectiveStashID == "" {
+		saveResult, err := fcheap.Save(ctx, absBundleDir, "vidtrace-investigate", "vidtrace", nil)
+		if err != nil {
+			return nil, fmt.Sprintf("stash bundle for connect: %s", err)
+		}
+		effectiveStashID = saveResult.ID
+	}
+
+	connectLimit := opts.ConnectLimit
+	if connectLimit <= 0 {
+		connectLimit = 10
+	}
+
+	result, err := fcheap.Connect(ctx, fcheap.ConnectOptions{
+		StashID:     effectiveStashID,
+		CodebaseDir: codebaseDir,
+		Query:       query,
+		Mode:        opts.ConnectMode,
+		Limit:       connectLimit,
+		Index:       true,
+	})
+	if err != nil {
+		return nil, err.Error()
+	}
+
+	return result.Matches, ""
 }
 
 func Markdown(report Report) string {
@@ -152,9 +251,29 @@ func Markdown(report Report) string {
 		writef(&b, "- Pass `--codebase /path/to/repo` to include ready-to-run vecgrep commands.\n")
 	}
 
+	if report.StashID != "" {
+		writef(&b, "\n## Stash\n\n")
+		writef(&b, "- Restored from fcheap stash: `%s`\n", report.StashID)
+	}
+
+	if len(report.CodeMatches) > 0 {
+		writef(&b, "\n## Code Matches\n\n")
+		for _, match := range report.CodeMatches {
+			writef(&b, "- `%s` (score %.4f): %s\n", match.File, match.Score, truncate(match.Text, 120))
+		}
+	}
+
+	if report.ConnectError != "" {
+		writef(&b, "\n## Connect Error\n\n")
+		writef(&b, "- %s\n", report.ConnectError)
+	}
+
 	writef(&b, "\n## Notes\n\n")
 	writef(&b, "- Start with the cited frame paths before changing code.\n")
 	writef(&b, "- Use vecgrep for source-code search; vidtrace does not index source code.\n")
+	if len(report.CodeMatches) > 0 {
+		writef(&b, "- Code matches were found via fcheap connect (vecgrep over the codebase).\n")
+	}
 	return b.String()
 }
 
@@ -205,12 +324,16 @@ func VecgrepCommands(codebaseDir string, queries []string) []string {
 	return commands
 }
 
-func summary(results []evidence.SearchResult, suggestions []string, codebaseDir string) string {
+func summary(results []evidence.SearchResult, suggestions []string, codebaseDir string, codeMatches []fcheap.CodeMatch) string {
 	codebase := "no codebase provided"
 	if codebaseDir != "" {
 		codebase = "vecgrep command suggestions included"
 	}
-	return fmt.Sprintf("Found %d video evidence hit(s) and %d suggested code search(es); %s.", len(results), len(suggestions), codebase)
+	suffix := ""
+	if len(codeMatches) > 0 {
+		suffix = fmt.Sprintf("; %d code match(es) found via fcheap connect", len(codeMatches))
+	}
+	return fmt.Sprintf("Found %d video evidence hit(s) and %d suggested code search(es); %s.%s", len(results), len(suggestions), codebase, suffix)
 }
 
 func keywordPhrase(text string, limit int) string {

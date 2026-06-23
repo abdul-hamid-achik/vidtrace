@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-06-23
+
+### Added
+
+- fcheap and vecgrep integration for bundle stashing and codebase search. `vidtrace stash save|list|restore|info|search` wraps the fcheap CLI for vault persistence, sharing, and cross-stash evidence search. `vidtrace investigate --connect --codebase` runs `fcheap connect` (vecgrep) and returns real `file:line` code matches alongside video evidence; `vidtrace investigate --stash <id>` restores a stashed bundle before investigation. All new features degrade gracefully when fcheap or vecgrep are not installed. The MCP server exposes read-only `stash_list`, `stash_info`, `stash_search`, and `stash_connect` tools and enhances `investigate` with `connect`, `stash_id`, `connect_mode`, and `connect_limit` fields. `vidtrace doctor` reports `fcheap` and `vecgrep` as optional tools. See ADR-0005.
+
 ## [0.9.0] - 2026-06-21
 
 ### Removed
