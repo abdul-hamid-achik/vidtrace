@@ -703,7 +703,7 @@ func TestSemanticReindexDoesNotDuplicateVectors(t *testing.T) {
 		}
 	}
 
-	db, err := veclite.Open(dbPath, veclite.WithReadOnly(true))
+	db, err := veclite.Open(dbPath, veclite.WithReadOnly(true), veclite.WithSharedRead(true))
 	if err != nil {
 		t.Fatalf("open db: %v", err)
 	}

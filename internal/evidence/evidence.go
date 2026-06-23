@@ -522,7 +522,7 @@ func Search(opts SearchOptions) (SearchReport, error) {
 		return SearchReport{}, fmt.Errorf("evidence db not found: %s", dbPath)
 	}
 
-	db, err := veclite.Open(dbPath, veclite.WithReadOnly(true))
+	db, err := veclite.Open(dbPath, veclite.WithReadOnly(true), veclite.WithSharedRead(true))
 	if err != nil {
 		return SearchReport{}, fmt.Errorf("open evidence db: %w", err)
 	}
