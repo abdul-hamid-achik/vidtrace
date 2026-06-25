@@ -87,6 +87,64 @@ func ExtractFrames(ctx context.Context, videoPath string, fps float64, outputPat
 	return err
 }
 
+// CutClip extracts a sub-clip from videoPath starting at startSec and ending at
+// endSec, writing to outputPath. When reencode is false (the default) it uses
+// stream copy (-c copy) for speed; when true it re-encodes with libx264/aac,
+// which is slower but works when stream copy produces seeking artifacts.
+func CutClip(ctx context.Context, videoPath string, startSec, endSec float64, outputPath string, reencode bool) error {
+	args := []string{
+		"-hide_banner",
+		"-loglevel", "error",
+		"-ss", formatFloat(startSec),
+		"-to", formatFloat(endSec),
+		"-i", videoPath,
+	}
+	if reencode {
+		args = append(args, "-c:v", "libx264", "-c:a", "aac")
+	} else {
+		args = append(args, "-c", "copy")
+	}
+	args = append(args, outputPath)
+	_, err := run(ctx, "ffmpeg", args...)
+	return err
+}
+
+// MakeGIF creates an animated GIF from a time range in the video. fps controls
+// the GIF frame rate (10 is a good default for UI bugs); width controls the
+// output pixel width (height auto-scales to preserve aspect ratio). It uses
+// a two-pass palette approach for high quality without banding.
+func MakeGIF(ctx context.Context, videoPath string, startSec, endSec float64, outputPath string, fps, width int) error {
+	filter := fmt.Sprintf("fps=%d,scale=%d:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse", fps, width)
+	_, err := run(ctx, "ffmpeg",
+		"-hide_banner",
+		"-loglevel", "error",
+		"-ss", formatFloat(startSec),
+		"-to", formatFloat(endSec),
+		"-i", videoPath,
+		"-vf", filter,
+		"-loop", "0",
+		outputPath,
+	)
+	return err
+}
+
+// ConcatClips concatenates the clips listed in listFilePath into outputPath.
+// listFilePath must be a text file with one "file 'path'" line per clip. Uses
+// the concat demuxer with stream copy, which is fast and avoids re-encoding
+// when all clips share the same codec parameters (e.g. cut from the same source).
+func ConcatClips(ctx context.Context, listFilePath, outputPath string) error {
+	_, err := run(ctx, "ffmpeg",
+		"-hide_banner",
+		"-loglevel", "error",
+		"-f", "concat",
+		"-safe", "0",
+		"-i", listFilePath,
+		"-c", "copy",
+		outputPath,
+	)
+	return err
+}
+
 func run(ctx context.Context, name string, args ...string) ([]byte, error) {
 	cmd := exec.CommandContext(ctx, name, args...)
 	var stdout, stderr bytes.Buffer

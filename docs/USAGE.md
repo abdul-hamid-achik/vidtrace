@@ -115,6 +115,16 @@ vidtrace investigate --stash <stash-id> --query "clicking a ticket does not work
 
 `vidtrace doctor` reports whether `fcheap` and `vecgrep` are installed. All stash and connect features degrade gracefully with a clear error when the tools are missing.
 
+Cut clips, make GIFs, and stitch videos from timestamp ranges:
+
+```bash
+vidtrace clip cut /path/to/video.mp4 --label "issue1=0:18-3:40" --label "issue2=3:40-4:05" --json
+vidtrace clip gif /path/to/video.mp4 --label "issue1=0:18-3:40" --fps 10 --width 480 --json
+vidtrace clip stitch clip1.mp4 clip2.mp4 --name summary --json
+```
+
+Timestamps support `SS`, `MM:SS`, and `HH:MM:SS`. Use `--range` for unnamed clips or `--label LABEL=START-END` for named clips. Add `--stash --tag intel` to stash clips to fcheap after cutting. A `clips.json` manifest is written to each output directory.
+
 Then compare the ticket with extracted evidence:
 
 ```bash

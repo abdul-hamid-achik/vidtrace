@@ -264,6 +264,26 @@ Acceptance criteria:
 
 ## Now
 
+### Video Clip, GIF, and Stitch Feature
+
+As an agent or QA engineer, I can cut video clips, make GIFs, and stitch clips from timestamp ranges, so that I can produce per-issue clips and shareable GIFs from bug recordings without manual ffmpeg commands.
+
+Acceptance criteria:
+
+- [x] `vidtrace clip cut <video> --label "issue1=0:18-3:40" --json` cuts named clips with stream copy (fast) or re-encoding.
+- [x] `vidtrace clip gif <video> --label "issue1=0:18-3:40" --fps 10 --width 480 --json` creates animated GIFs with a two-pass palette.
+- [x] `vidtrace clip stitch clip1.mp4 clip2.mp4 --name summary --json` concatenates clips via the ffmpeg concat demuxer.
+- [x] `--range` (repeatable) and `--label` (repeatable, `LABEL=START-END`) flags supported; labels take precedence.
+- [x] Timestamp formats: `SS`, `MM:SS`, `HH:MM:SS`.
+- [x] `--out` (default `~/Downloads`), `--name`, `--stash` (fcheap), `--tag` (repeatable) flags.
+- [x] `internal/clip` package with `ParseTimestamp`, `ParseRange`, `ParseLabelRange`, `ValidateSpec`, `SafeLabel`, `CutClips`, `MakeGIFs`, `StitchClips`.
+- [x] `internal/ffmpeg` gains `CutClip`, `MakeGIF`, `ConcatClips`.
+- [x] `clips.json` manifest written to each output directory.
+- [x] CLI help, `printHelp`, and built-in docs (`docs agent`, `docs commands`) updated.
+- [x] Unit tests for timestamp/range parsing, validation, ffmpeg functions, and CLI integration.
+- [x] E2E glyphrun spec (`cli_clip.yml`) covers cut, gif, stitch, labeled cut, manifest, and help outcomes.
+- [x] `task check` and `task e2e` pass.
+
 ### codemap Integration
 
 As an agent, I can resolve code matches to enclosing symbols, list callers, compute blast radius, and pin vidtrace evidence findings to code symbols, so that the workflow from bug video to code fix includes structural code graph context.

@@ -6,7 +6,7 @@ Turn bug videos into timestamped evidence bundles that humans and coding agents 
 
 ## Status
 
-`v0.10.0` is the latest release. The Go CLI extracts evidence bundles (with a live progress bar on a terminal and fail-fast OCR-language checks), emits stable JSON for automation, validates bundles, compares and analyzes a ticket against video evidence, opens a compact terminal Studio for human review (and refuses non-interactive callers so agents are never trapped in the TUI), searches bundle evidence (BM25 keyword plus optional semantic and hybrid search via Ollama) with bundle, source-video, evidence-source, and time-window filters across many bundles, stashes bundles to a fcheap vault for sharing and restoration (`vidtrace stash`), runs real codebase search via `fcheap connect` (vecgrep) alongside video evidence (`vidtrace investigate --connect`), and exposes read-only evidence and stash tools to agents over MCP (`vidtrace mcp`). It ships through GitHub Releases as cross-platform archives, Linux `.deb`/`.rpm` packages, and a Homebrew tap.
+`v0.10.0` is the latest release. The Go CLI extracts evidence bundles (with a live progress bar on a terminal and fail-fast OCR-language checks), emits stable JSON for automation, validates bundles, compares and analyzes a ticket against video evidence, opens a compact terminal Studio for human review (and refuses non-interactive callers so agents are never trapped in the TUI), searches bundle evidence (BM25 keyword plus optional semantic and hybrid search via Ollama) with bundle, source-video, evidence-source, and time-window filters across many bundles, stashes bundles to a fcheap vault for sharing and restoration (`vidtrace stash`), cuts clips, makes GIFs, and stitches videos from timestamp ranges with optional fcheap stashing (`vidtrace clip`), runs real codebase search via `fcheap connect` (vecgrep) alongside video evidence (`vidtrace investigate --connect`), and exposes read-only evidence and stash tools to agents over MCP (`vidtrace mcp`). It ships through GitHub Releases as cross-platform archives, Linux `.deb`/`.rpm` packages, and a Homebrew tap.
 
 Extraction stays independent from the optional VecLite indexes and embedding providers. fcheap and vecgrep are optional external tools reported by `vidtrace doctor`.
 
@@ -150,6 +150,19 @@ vidtrace stash save /path/to/bug_artifacts_YYYYMMDD_HHMMSS --name "bug-evidence"
 vidtrace stash list --tool vidtrace --json
 vidtrace investigate --stash <stash-id> --query "clicking a ticket does not work" --json
 ```
+
+Cut clips, make GIFs, and stitch videos from timestamp ranges:
+
+```bash
+vidtrace clip cut /path/to/video.mp4 \
+  --label "issue1=0:18-3:40" \
+  --label "issue2=3:40-4:05" \
+  --stash --tag intel --json
+vidtrace clip gif /path/to/video.mp4 --label "issue1=0:18-3:40" --fps 10 --width 480 --json
+vidtrace clip stitch clip1.mp4 clip2.mp4 --name summary --json
+```
+
+Timestamps support `SS`, `MM:SS`, and `HH:MM:SS`. Each clips directory includes a `clips.json` manifest.
 
 Compare a ticket with an artifact bundle:
 

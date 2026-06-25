@@ -58,6 +58,9 @@ Common workflows:
   - Run "vidtrace investigate BUNDLE --query QUERY --codebase REPO --connect --json" for real code matches via fcheap.
   - Run "vidtrace investigate BUNDLE --query QUERY --codebase REPO --connect --codemap --json" for symbol resolution and blast radius via codemap.
   - Run "vidtrace stash save BUNDLE --json" to save a bundle to the fcheap vault.
+  - Run "vidtrace clip cut VIDEO --label ISSUE=START-END --json" to cut clips from a video.
+  - Run "vidtrace clip gif VIDEO --label ISSUE=START-END --json" to make GIFs from a video.
+  - Run "vidtrace clip stitch clip1.mp4 clip2.mp4 --json" to join clips into one video.
   - Run "vidtrace compare BUNDLE --ticket TICKET --json" to compare a ticket with evidence.
   - Run "vidtrace docs agent" when an agent needs the operating contract.
   - Run "vidtrace studio BUNDLE" to inspect timeline, OCR, transcript, and frame paths.
@@ -90,10 +93,13 @@ Recommended flow:
   10. Optionally run "vidtrace investigate output_dir --query QUERY --codebase REPO --connect --codemap --json" for symbol resolution, callers, and blast radius.
   11. Optionally run "vidtrace stash save output_dir --json" to stash the bundle to fcheap.
   12. Optionally run "vidtrace investigate --stash STASH_ID --query QUERY --json" to investigate a stashed bundle.
-  13. Use ocr/ocr_all_frames.txt for broad UI text search.
-  14. Use transcript/*.json for spoken context.
-  15. Open selected frames/frame_*.png only when text evidence is ambiguous.
-  16. Run "vidtrace compare output_dir --ticket ticket.md --json" for a first-pass mismatch check.
+  13. Optionally run "vidtrace clip cut VIDEO --label ISSUE=START-END --stash --json" to cut and stash per-issue clips.
+  14. Optionally run "vidtrace clip gif VIDEO --label ISSUE=START-END --json" to make GIFs for tickets.
+  15. Optionally run "vidtrace clip stitch clip1.mp4 clip2.mp4 --json" to join clips into a summary video.
+  16. Use ocr/ocr_all_frames.txt for broad UI text search.
+  17. Use transcript/*.json for spoken context.
+  18. Open selected frames/frame_*.png only when text evidence is ambiguous.
+  19. Run "vidtrace compare output_dir --ticket ticket.md --json" for a first-pass mismatch check.
 
 Ticket comparison:
   - State whether the ticket and video appear to match, mismatch, or are inconclusive.
@@ -130,6 +136,9 @@ Commands:
   vidtrace investigate BUNDLE --query TEXT [--codebase REPO] [--connect] [--codemap] [--stash ID] [--db DB] [--json]
       Return video evidence, code-search queries, vecgrep command suggestions, and real code matches (--connect).
       With --codemap, resolve code matches to enclosing symbols, list callers, and compute blast radius.
+
+  vidtrace clip cut|gif|stitch ...
+      Cut clips, make GIFs, or stitch videos from timestamp ranges.
 
   vidtrace stash save|list|restore|info|search ...
       Manage artifact bundles in the fcheap vault (save, list, restore, info, search).
@@ -190,6 +199,22 @@ Stash subcommands:
   vidtrace stash restore ID [--to DIR] [--json]
   vidtrace stash info ID [--json]
   vidtrace stash search QUERY [--mode MODE] [--limit N] [--json]
+
+Clip subcommands:
+  vidtrace clip cut VIDEO [--range RANGE] [--label LABEL=RANGE] [--out DIR] [--name NAME] [--reencode] [--stash] [--tag TAG] [--json]
+  vidtrace clip gif VIDEO [--range RANGE] [--label LABEL=RANGE] [--out DIR] [--name NAME] [--fps N] [--width N] [--stash] [--tag TAG] [--json]
+  vidtrace clip stitch CLIP1 CLIP2 [...] [--out DIR] [--name NAME] [--json]
+
+Timestamp formats:
+  SS          seconds (e.g. 45)
+  MM:SS       minutes and seconds (e.g. 3:40)
+  HH:MM:SS    hours, minutes, seconds (e.g. 1:23:45)
+
+Range format:
+  START-END   e.g. "0:18-3:40" or "14:50-16:14"
+
+Label format:
+  LABEL=START-END  e.g. "issue1-blank-row=0:18-3:40"
 `)
 }
 

@@ -524,6 +524,94 @@ Example `stash list` JSON:
 }
 ```
 
+### `vidtrace clip`
+
+Cuts video clips, makes GIFs, and stitches clips from timestamp ranges. Requires `ffmpeg`.
+
+```bash
+vidtrace clip cut /path/to/video.mp4 --label "issue1=0:18-3:40" --json
+vidtrace clip gif /path/to/video.mp4 --label "issue1=0:18-3:40" --fps 10 --width 480 --json
+vidtrace clip stitch clip1.mp4 clip2.mp4 --name summary --json
+```
+
+Subcommands:
+
+| Subcommand | Purpose |
+|---|---|
+| `cut` | Cut one or more clips from a video at timestamp ranges |
+| `gif` | Create animated GIF(s) from timestamp ranges |
+| `stitch` | Join multiple clips into one concatenated video |
+| `help` | Show clip help |
+
+Timestamp formats:
+
+| Format | Example | Seconds |
+|---|---|---|
+| `SS` | `45` | 45 |
+| `MM:SS` | `3:40` | 220 |
+| `HH:MM:SS` | `1:23:45` | 5025 |
+
+Range format: `START-END` (e.g. `0:18-3:40`).
+Label format: `LABEL=START-END` (e.g. `issue1-blank-row=0:18-3:40`).
+
+`clip cut` flags:
+
+| Flag | Default | Meaning |
+|---|---|---|
+| `--range` | none (repeatable) | Timestamp range `START-END` |
+| `--label` | none (repeatable) | Named range `LABEL=START-END` (overrides `--range`) |
+| `--out` | `~/Downloads` | Parent output directory |
+| `--name` | video basename | Prefix for clip filenames and output directory |
+| `--reencode` | `false` | Force re-encoding instead of stream copy |
+| `--stash` | `false` | Stash the clips directory to fcheap after cutting |
+| `--tag` | none (repeatable) | Tag for the fcheap stash |
+| `--tool` | `vidtrace` | Tool tag for the fcheap stash |
+| `--json` | `false` | Emit machine-readable JSON |
+
+`clip gif` flags:
+
+| Flag | Default | Meaning |
+|---|---|---|
+| `--range` | none (repeatable) | Timestamp range `START-END` |
+| `--label` | none (repeatable) | Named range `LABEL=START-END` |
+| `--out` | `~/Downloads` | Parent output directory |
+| `--name` | video basename | Prefix for GIF filenames and output directory |
+| `--fps` | `10` | GIF frame rate |
+| `--width` | `480` | GIF width in pixels (height auto-scales) |
+| `--stash` | `false` | Stash the GIFs directory to fcheap |
+| `--tag` | none (repeatable) | Tag for the fcheap stash |
+| `--tool` | `vidtrace` | Tool tag for the fcheap stash |
+| `--json` | `false` | Emit machine-readable JSON |
+
+`clip stitch` flags:
+
+| Flag | Default | Meaning |
+|---|---|---|
+| `--out` | `~/Downloads` | Parent output directory |
+| `--name` | `stitched` | Output filename (without extension) |
+| `--json` | `false` | Emit machine-readable JSON |
+
+Example `clip cut` JSON:
+
+```json
+{
+  "ok": true,
+  "source_video": "/path/to/video.mp4",
+  "output_dir": "/tmp/clips/intel-session_clips_20260625_140000",
+  "clips": [
+    {
+      "label": "issue1-blank-row",
+      "start_seconds": 18,
+      "end_seconds": 220,
+      "duration_seconds": 202,
+      "path": "issue1-blank-row.mp4"
+    }
+  ]
+}
+```
+
+A `clips.json` manifest is written to each output directory alongside the clips or GIFs.
+
 ### `vidtrace mcp`
 
 Runs a Model Context Protocol server over stdio so agent clients can call vidtrace's read-only evidence tools without shell parsing. Built on the official Go MCP SDK.

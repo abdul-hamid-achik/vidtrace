@@ -1,0 +1,88 @@
+version: 1
+name: cli_clip
+
+metadata:
+  feature: clip
+  owner: core
+  priority: high
+  tags:
+    - clip
+    - ffmpeg
+    - agent
+
+intent: |
+  Verify that vidtrace clip cut works with --json output on a tiny synthetic
+  video, producing valid JSON with clip entries and creating the expected
+  clip files on disk.
+
+target:
+  cmd:
+    - "/bin/sh"
+    - "-c"
+    - "./bin/vidtrace clip cut .glyphrun/tmp/input/bug.mp4 --range 0:01-0:02 --out .glyphrun/tmp/clips --name test-clip --json"
+  cwd: "."
+  timeoutMs: 30000
+
+terminal:
+  cols: 120
+  rows: 40
+  profile: xterm-256color
+  alternateScreen: forbid
+
+preconditions:
+  commands:
+    - run: "go build -o ./bin/vidtrace ./cmd/vidtrace"
+      timeoutMs: 120000
+    - run: "rm -rf .glyphrun/tmp/input .glyphrun/tmp/clips .glyphrun/tmp/clips2 .glyphrun/tmp/gifs && mkdir -p .glyphrun/tmp/input .glyphrun/tmp/clips"
+      timeoutMs: 5000
+    - run: "ffmpeg -hide_banner -loglevel error -y -f lavfi -i testsrc2=size=640x360:rate=1:duration=2 -f lavfi -i sine=frequency=1000:duration=2 -c:v libx264 -pix_fmt yuv420p -c:a aac .glyphrun/tmp/input/bug.mp4"
+      timeoutMs: 30000
+
+steps:
+  - wait:
+      process:
+        exitCode: 0
+      timeoutMs: 30000
+  - snapshot: result
+
+outcomes:
+  - id: clean_exit
+    description: clip cut exits successfully
+    verify:
+      process:
+        exitCode: 0
+  - id: json_ok
+    description: stdout includes a successful JSON summary
+    verify:
+      screen:
+        contains: '"ok": true'
+  - id: clip_count
+    description: the summary reports one clip
+    verify:
+      screen:
+        contains: '"clips"'
+  - id: clip_file_created
+    description: the clip file is created in the output directory
+    verify:
+      command:
+        run: "test -f .glyphrun/tmp/clips/test-clip_clips_*/clip_01.mp4"
+  - id: manifest_written
+    description: clips.json manifest is created in the output directory
+    verify:
+      command:
+        run: "test -f .glyphrun/tmp/clips/test-clip_clips_*/clips.json"
+  - id: help_text
+    description: clip help is printed when no subcommand is given
+    verify:
+      command:
+        run: "./bin/vidtrace clip 2>&1 | grep -q 'vidtrace clip - cut clips'"
+  - id: gif_works
+    description: clip gif produces a GIF file
+    verify:
+      command:
+        run: "rm -rf .glyphrun/tmp/gifs && ./bin/vidtrace clip gif .glyphrun/tmp/input/bug.mp4 --range 0:01-0:02 --out .glyphrun/tmp/gifs --name test-gif --json 2>&1 | grep -q '\"ok\": true' && test -f .glyphrun/tmp/gifs/test-gif_gifs_*/clip_01.gif"
+  - id: cut_with_label
+    description: clip cut with --label names the clip
+    verify:
+      command:
+        run: "./bin/vidtrace clip cut .glyphrun/tmp/input/bug.mp4 --label 'issue1=0:01-0:02' --out .glyphrun/tmp/clips2 --name labeled --json 2>&1 | grep -q 'issue1.mp4'"

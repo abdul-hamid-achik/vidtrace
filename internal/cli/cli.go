@@ -48,6 +48,8 @@ func Run(args []string, stdout, stderr io.Writer, version string) int {
 		return runAnalyze(args[1:], stdout, stderr)
 	case "compare":
 		return runCompare(args[1:], stdout, stderr)
+	case "clip":
+		return runClip(args[1:], stdout, stderr)
 	case "stash":
 		return runStash(args[1:], stdout, stderr)
 	case "validate":
@@ -284,6 +286,7 @@ Usage:
 
 Commands:
   analyze      Write a Markdown evidence report for a bundle and ticket
+  clip         Cut clips, make GIFs, or stitch videos from timestamp ranges
   compare      Compare a ticket with bundle evidence, optionally as JSON
   doctor       Check required local tools: ffmpeg, ffprobe, tesseract, whisper
   docs         Print built-in product and agent usage docs
@@ -308,6 +311,7 @@ Examples:
   vidtrace index /path/to/bundle --db /tmp/evidence.veclite --json
   vidtrace search /tmp/evidence.veclite "ticket click does not work" --json
   vidtrace investigate /path/to/bundle --query "ticket click does not work" --codebase /path/to/app
+  vidtrace clip cut ~/Downloads/bug.mp4 --label "issue1=0:18-3:40" --json
   vidtrace stash save /path/to/bundle --name "bug" --tag bug
   vidtrace stash list --tool vidtrace --json
   vidtrace analyze /path/to/bundle --ticket ticket.md
