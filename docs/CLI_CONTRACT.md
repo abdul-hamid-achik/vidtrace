@@ -546,7 +546,7 @@ It exposes these read-only tools, whose inputs and structured outputs mirror the
 | `stash_search` | Search across stashes (`query`, `mode`, `limit`). |
 | `stash_connect` | Connect a stash to a codebase via vecgrep (`stash_id`, `codebase`, `query`, `mode`, `limit`, `index`). |
 
-No tool mutates source videos or generated artifact bundles. `stash_save` is intentionally excluded from MCP to respect the read-only constraint (ADR-0004). Tool failures are returned as MCP tool errors (visible to the model), not protocol errors. A client disconnect (stdin EOF) is a clean shutdown.
+No tool mutates source videos or generated artifact bundles. `stash_save` is intentionally excluded from MCP to respect the read-only constraint. Tool failures are returned as MCP tool errors (visible to the model), not protocol errors. A client disconnect (stdin EOF) is a clean shutdown.
 
 Example client registration (Claude Desktop / MCP client config):
 

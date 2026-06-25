@@ -63,8 +63,8 @@ Use `vidtrace docs agent` for the fastest in-CLI product guide. For ticket/video
 
 ## Notes and Documentation Boundary
 
-The `docs/` folder is the VitePress website source (published to Vercel). Keep it to public product docs only: CLI contracts, schemas, architecture, testing, install, release, and usage. Do not drop strategy notes, implementation checkpoints, bug analysis, ADRs, or planning files into `docs/`. (ADRs 0001-0005 remain in `docs/adr/` for historical continuity; new ADRs from 0006 onward go in the Obsidian vault.)
+The `docs/` folder is the VitePress website source (published to Vercel). Keep it to public product docs only: CLI contracts, schemas, architecture, testing, install, release, and usage. Do not drop strategy notes, implementation checkpoints, bug analysis, ADRs, or planning files into `docs/`.
 
-Project notes, strategy, checkpoints, implementation notes, bug analysis, and ADRs (from ADR-0006 onward) belong in the Obsidian vault at `~/notes/projects/<project>/`. Use the `obsidian` CLI (`/usr/local/bin/obsidian`) to read and update notes there. Each project has its own folder (`vidtrace`, `veclite`, `vecgrep`, `graphite`, etc.) with an `index.md` that tracks current state — keep it updated when a note is added, and link notes with Obsidian wikilinks.
+Project notes, strategy, checkpoints, implementation notes, bug analysis, and ADRs belong in the Obsidian vault at `~/notes/projects/<project>/`. Use the `obsidian` CLI (`/usr/local/bin/obsidian`) to read and update notes there. Each project has its own folder (`vidtrace`, `veclite`, `vecgrep`, `graphite`, etc.) with an `index.md` that tracks current state — keep it updated when a note is added, and link notes with Obsidian wikilinks.
 
 `BACKLOG.md` and `CHANGELOG.md` stay in the repo; everything longer-lived than a PR lives in the vault. See `AGENTS.md` "Notes and Documentation Boundary" for the full rule.

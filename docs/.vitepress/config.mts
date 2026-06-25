@@ -38,8 +38,7 @@ export default defineConfig({
         text: "Architecture",
         items: [
           { text: "Architecture", link: "/ARCHITECTURE" },
-          { text: "Roadmap", link: "/ROADMAP" },
-          { text: "ADRs", link: "/adr/" }
+          { text: "Roadmap", link: "/ROADMAP" }
         ]
       }
     ],

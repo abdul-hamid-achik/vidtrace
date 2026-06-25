@@ -21,4 +21,3 @@
 
 - [Architecture](ARCHITECTURE.md): component boundaries and pipeline shape.
 - [Roadmap](ROADMAP.md): iteration plan.
-- [Architecture Decision Records](adr/): durable technical decisions.
