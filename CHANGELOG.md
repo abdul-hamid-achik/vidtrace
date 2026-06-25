@@ -4,6 +4,8 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-06-25
+
 ### Added
 
 - `vidtrace clip` for cutting video clips, making GIFs, and stitching clips from timestamp ranges. `clip cut` extracts sub-clips with named labels (e.g. `--label "issue1=0:18-3:40"`), `clip gif` creates animated GIFs with configurable fps and width, `clip stitch` concatenates clips into one video via the ffmpeg concat demuxer. All subcommands support `--json` output, `--out`, `--name`, and `--stash` (to fcheap). `internal/clip` provides timestamp parsing (`ParseTimestamp`, `ParseRange`, `ParseLabelRange`), validation, and orchestration; `internal/ffmpeg` gains `CutClip`, `MakeGIF`, and `ConcatClips`. A `clips.json` manifest is written to each output directory. E2E glyphrun spec covers cut, gif, stitch, and labeled cut outcomes.
