@@ -264,6 +264,26 @@ Acceptance criteria:
 
 ## Now
 
+### codemap Integration
+
+As an agent, I can resolve code matches to enclosing symbols, list callers, compute blast radius, and pin vidtrace evidence findings to code symbols, so that the workflow from bug video to code fix includes structural code graph context.
+
+Acceptance criteria:
+
+- [x] `internal/codemap` wraps the codemap CLI (`SymbolAt`, `Callers`, `Callees`, `Impact`, `Semantic`, `Find`, `Context`, `Source`, `Annotate`, `Available`) with tests.
+- [x] `vidtrace doctor` reports `codemap` as an optional tool.
+- [x] `vidtrace investigate --connect --codemap` resolves code matches to enclosing symbols, lists callers, and computes blast radius.
+- [x] `vidtrace investigate --codemap-annotate` pins vidtrace evidence findings to resolved symbols with `source="vidtrace"`.
+- [x] `vidtrace investigate` without `--codemap` produces output identical to the previous version (backward compatible).
+- [x] MCP server exposes `codemap_symbol_at`, `codemap_callers`, `codemap_impact`, `codemap_semantic`, `codemap_find`, `codemap_context` tools (read-only per ADR-0004).
+- [x] MCP `investigate` tool accepts `codemap`, `codemap_depth`, `codemap_annotate` and returns `codemap_expansion`.
+- [x] `codemap_annotate` is CLI-only (not in MCP) to respect the read-only constraint.
+- [x] All codemap features degrade gracefully when codemap is not installed.
+- [x] CLI docs, AGENTS.md, CLAUDE.md, and CHANGELOG.md updated.
+- [x] Unit tests cover codemap wrapper, doctor, investigate codemap expansion, and MCP tools.
+- [ ] E2E glyphrun spec for `investigate --connect --codemap`.
+- [x] `task check` and `task e2e` pass.
+
 ### fcheap + vecgrep Integration
 
 As an agent, I can stash artifact bundles to the fcheap vault, restore them on any machine, run real codebase search via `fcheap connect` (vecgrep), and access stash tools over MCP, so that the workflow from bug video to code fix is seamless across CLI and MCP.

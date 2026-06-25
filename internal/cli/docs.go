@@ -56,6 +56,7 @@ Common workflows:
   - Run "vidtrace search evidence.veclite QUERY --json" to find timestamped evidence.
   - Run "vidtrace investigate BUNDLE --query QUERY --codebase REPO --json" for code-search handoff.
   - Run "vidtrace investigate BUNDLE --query QUERY --codebase REPO --connect --json" for real code matches via fcheap.
+  - Run "vidtrace investigate BUNDLE --query QUERY --codebase REPO --connect --codemap --json" for symbol resolution and blast radius via codemap.
   - Run "vidtrace stash save BUNDLE --json" to save a bundle to the fcheap vault.
   - Run "vidtrace compare BUNDLE --ticket TICKET --json" to compare a ticket with evidence.
   - Run "vidtrace docs agent" when an agent needs the operating contract.
@@ -86,12 +87,13 @@ Recommended flow:
   7. Optionally run "vidtrace search /tmp/vidtrace-evidence.veclite QUERY --json".
   8. Optionally run "vidtrace investigate output_dir --query QUERY --codebase REPO --json".
   9. Optionally run "vidtrace investigate output_dir --query QUERY --codebase REPO --connect --json" for real code matches.
-  10. Optionally run "vidtrace stash save output_dir --json" to stash the bundle to fcheap.
-  11. Optionally run "vidtrace investigate --stash STASH_ID --query QUERY --json" to investigate a stashed bundle.
-  12. Use ocr/ocr_all_frames.txt for broad UI text search.
-  13. Use transcript/*.json for spoken context.
-  14. Open selected frames/frame_*.png only when text evidence is ambiguous.
-  15. Run "vidtrace compare output_dir --ticket ticket.md --json" for a first-pass mismatch check.
+  10. Optionally run "vidtrace investigate output_dir --query QUERY --codebase REPO --connect --codemap --json" for symbol resolution, callers, and blast radius.
+  11. Optionally run "vidtrace stash save output_dir --json" to stash the bundle to fcheap.
+  12. Optionally run "vidtrace investigate --stash STASH_ID --query QUERY --json" to investigate a stashed bundle.
+  13. Use ocr/ocr_all_frames.txt for broad UI text search.
+  14. Use transcript/*.json for spoken context.
+  15. Open selected frames/frame_*.png only when text evidence is ambiguous.
+  16. Run "vidtrace compare output_dir --ticket ticket.md --json" for a first-pass mismatch check.
 
 Ticket comparison:
   - State whether the ticket and video appear to match, mismatch, or are inconclusive.
@@ -125,8 +127,9 @@ Commands:
   vidtrace index BUNDLE --db DB [--json]
       Index timeline evidence into a local VecLite database.
 
-  vidtrace investigate BUNDLE --query TEXT [--codebase REPO] [--connect] [--stash ID] [--db DB] [--json]
+  vidtrace investigate BUNDLE --query TEXT [--codebase REPO] [--connect] [--codemap] [--stash ID] [--db DB] [--json]
       Return video evidence, code-search queries, vecgrep command suggestions, and real code matches (--connect).
+      With --codemap, resolve code matches to enclosing symbols, list callers, and compute blast radius.
 
   vidtrace stash save|list|restore|info|search ...
       Manage artifact bundles in the fcheap vault (save, list, restore, info, search).
@@ -176,6 +179,9 @@ Investigate flags:
   --stash ID          fcheap stash ID to restore and investigate instead of a local bundle
   --connect-mode      vecgrep search mode: semantic, keyword, or hybrid
   --connect-limit N   maximum code matches from --connect, default 10
+  --codemap           run codemap expansion after --connect to resolve symbols, callers, and blast radius
+  --codemap-depth N   max hops for codemap blast radius, default 3
+  --codemap-annotate  pin vidtrace evidence findings to resolved codemap symbols
   --json              emit machine-readable investigation handoff
 
 Stash subcommands:

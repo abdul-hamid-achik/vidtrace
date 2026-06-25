@@ -7,3 +7,5 @@ Architecture decisions capture durable product and engineering choices.
 - [ADR-0003: Use VecLite for Optional Evidence Search](0003-use-veclite-for-optional-evidence-search.md)
 - [ADR-0004: Use the Go MCP SDK for the Agent Server](0004-use-go-mcp-sdk-for-agent-server.md)
 - [ADR-0005: Integrate fcheap and vecgrep for Bundle Stashing and Code Search](0005-fcheap-vecgrep-integration.md)
+
+> ADRs from ADR-0006 onward live in the Obsidian vault (`~/notes/projects/vidtrace/`), not in `docs/`. The `docs/` folder is the VitePress public docs site; ADRs are internal architecture decisions. See `AGENTS.md` for the boundary rule.

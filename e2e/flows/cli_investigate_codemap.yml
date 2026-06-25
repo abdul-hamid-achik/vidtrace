@@ -1,0 +1,80 @@
+version: 1
+name: cli_investigate_codemap
+
+metadata:
+  feature: investigation
+  owner: core
+  priority: high
+  tags:
+    - investigate
+    - connect
+    - codemap
+    - agent
+
+intent: |
+  Verify that vidtrace investigate --connect --codemap produces a valid report
+  that includes code graph expansion (symbol resolution, callers, blast radius)
+  when codemap is available, and degrades gracefully with a codemap_error when
+  it is not. Also verify that --codemap requires --connect and that the report
+  remains backward-compatible with --connect-only behavior.
+
+target:
+  cmd:
+    - "/bin/sh"
+    - "-c"
+    - "./bin/vidtrace investigate .glyphrun/tmp/investigate_codemap/sample_artifacts --query \"ticket does not work\" --codebase . --connect --codemap --json"
+  cwd: "."
+  timeoutMs: 30000
+
+terminal:
+  cols: 120
+  rows: 40
+  profile: xterm-256color
+  alternateScreen: forbid
+
+preconditions:
+  commands:
+    - run: "go build -o ./bin/vidtrace ./cmd/vidtrace"
+      timeoutMs: 120000
+    - run: "rm -rf .glyphrun/tmp/investigate_codemap && mkdir -p .glyphrun/tmp/investigate_codemap"
+      timeoutMs: 5000
+    - run: "sh e2e/fixtures/sample_bundle.sh .glyphrun/tmp/investigate_codemap/sample_artifacts"
+      timeoutMs: 5000
+
+imports:
+  - ../actions/wait_clean_exit.yml
+
+steps:
+  - use: wait_clean_exit
+
+outcomes:
+  - id: clean_exit
+    description: investigate --connect --codemap exits successfully (even if codemap is unavailable)
+    verify:
+      process:
+        exitCode: 0
+  - id: json_ok
+    description: investigate --connect --codemap JSON reports success
+    verify:
+      command:
+        run: "./bin/vidtrace investigate .glyphrun/tmp/investigate_codemap/sample_artifacts --query \"ticket does not work\" --codebase . --connect --codemap --json | grep -q '\"ok\": true'"
+  - id: evidence_still_present
+    description: investigation still includes timestamped video evidence with --codemap
+    verify:
+      command:
+        run: "./bin/vidtrace investigate .glyphrun/tmp/investigate_codemap/sample_artifacts --query \"ticket does not work\" --codebase . --connect --codemap --json | grep -q '\"frame\": \"frames/frame_0002.png\"'"
+  - id: codemap_requires_connect
+    description: investigate --codemap without --connect exits with usage error
+    verify:
+      command:
+        run: "! ./bin/vidtrace investigate .glyphrun/tmp/investigate_codemap/sample_artifacts --query \"ticket does not work\" --codemap --json 2>/dev/null"
+  - id: codemap_without_connect_flag
+    description: --codemap without --connect produces a clear error message
+    verify:
+      command:
+        run: "./bin/vidtrace investigate .glyphrun/tmp/investigate_codemap/sample_artifacts --query \"ticket does not work\" --codemap --json 2>&1 | grep -q 'codemap requires'"
+  - id: backward_compatible
+    description: investigate --connect without --codemap still works identically
+    verify:
+      command:
+        run: "./bin/vidtrace investigate .glyphrun/tmp/investigate_codemap/sample_artifacts --query \"ticket does not work\" --codebase . --connect --json | grep -q '\"ok\": true'"

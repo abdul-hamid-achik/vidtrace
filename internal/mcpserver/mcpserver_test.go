@@ -16,6 +16,7 @@ import (
 
 	mcp "github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/abdul-hamid-achik/vidtrace/internal/codemap"
 	"github.com/abdul-hamid-achik/vidtrace/internal/embed"
 	"github.com/abdul-hamid-achik/vidtrace/internal/evidence"
 	"github.com/abdul-hamid-achik/vidtrace/internal/fcheap"
@@ -469,6 +470,15 @@ func TestInvestigateToolValidatesInput(t *testing.T) {
 	if result == nil || !result.IsError || !strings.Contains(result.Content[0].(*mcp.TextContent).Text, "connect requires codebase_dir") {
 		t.Fatalf("expected connect requires codebase_dir error")
 	}
+
+	// Codemap without connect should be rejected
+	result, _, err = investigateTool(ctx, nil, InvestigateInput{BundleDir: "/tmp", Query: "test", Codemap: true})
+	if err != nil {
+		t.Fatalf("investigateTool error: %v", err)
+	}
+	if result == nil || !result.IsError || !strings.Contains(result.Content[0].(*mcp.TextContent).Text, "codemap requires connect") {
+		t.Fatalf("expected codemap requires connect error")
+	}
 }
 
 func TestRoundTripIncludesStashTools(t *testing.T) {
@@ -524,6 +534,147 @@ func TestInvestigateToolWithConnectFlag(t *testing.T) {
 	// Either way, the report should be valid.
 	if !fcheap.Available() && report.ConnectError == "" {
 		t.Fatalf("connect_error should be set when fcheap unavailable and --connect is set")
+	}
+}
+
+func TestRoundTripIncludesCodemapTools(t *testing.T) {
+	ctx := context.Background()
+	server := New("test")
+	clientT, serverT := mcp.NewInMemoryTransports()
+	ss, err := server.Connect(ctx, serverT, nil)
+	if err != nil {
+		t.Fatalf("server connect: %v", err)
+	}
+	defer func() { _ = ss.Close() }()
+
+	client := mcp.NewClient(&mcp.Implementation{Name: "c", Version: "0"}, nil)
+	cs, err := client.Connect(ctx, clientT, nil)
+	if err != nil {
+		t.Fatalf("client connect: %v", err)
+	}
+	defer func() { _ = cs.Close() }()
+
+	tools, err := cs.ListTools(ctx, nil)
+	if err != nil {
+		t.Fatalf("ListTools: %v", err)
+	}
+	names := map[string]bool{}
+	for _, tool := range tools.Tools {
+		names[tool.Name] = true
+	}
+	for _, want := range []string{"codemap_symbol_at", "codemap_callers", "codemap_impact", "codemap_semantic", "codemap_find", "codemap_context"} {
+		if !names[want] {
+			t.Fatalf("tool %q not registered", want)
+		}
+	}
+}
+
+func TestCodemapToolsValidateInput(t *testing.T) {
+	ctx := context.Background()
+
+	// codemap_symbol_at requires file
+	result, _, err := codemapSymbolAtTool(ctx, nil, CodemapSymbolAtInput{Line: 10})
+	if err != nil {
+		t.Fatalf("codemapSymbolAtTool error: %v", err)
+	}
+	if result == nil || !result.IsError || !strings.Contains(result.Content[0].(*mcp.TextContent).Text, "file is required") {
+		t.Fatalf("expected file required error")
+	}
+
+	// codemap_symbol_at requires line
+	result, _, err = codemapSymbolAtTool(ctx, nil, CodemapSymbolAtInput{File: "main.go"})
+	if err != nil {
+		t.Fatalf("codemapSymbolAtTool error: %v", err)
+	}
+	if result == nil || !result.IsError || !strings.Contains(result.Content[0].(*mcp.TextContent).Text, "line is required") {
+		t.Fatalf("expected line required error")
+	}
+
+	// codemap_callers requires symbol
+	result, _, err = codemapCallersTool(ctx, nil, CodemapCallersInput{})
+	if err != nil {
+		t.Fatalf("codemapCallersTool error: %v", err)
+	}
+	if result == nil || !result.IsError || !strings.Contains(result.Content[0].(*mcp.TextContent).Text, "symbol is required") {
+		t.Fatalf("expected symbol required error")
+	}
+
+	// codemap_impact requires symbol
+	result, _, err = codemapImpactTool(ctx, nil, CodemapImpactInput{})
+	if err != nil {
+		t.Fatalf("codemapImpactTool error: %v", err)
+	}
+	if result == nil || !result.IsError || !strings.Contains(result.Content[0].(*mcp.TextContent).Text, "symbol is required") {
+		t.Fatalf("expected symbol required error")
+	}
+
+	// codemap_semantic requires query
+	result, _, err = codemapSemanticTool(ctx, nil, CodemapSemanticInput{})
+	if err != nil {
+		t.Fatalf("codemapSemanticTool error: %v", err)
+	}
+	if result == nil || !result.IsError || !strings.Contains(result.Content[0].(*mcp.TextContent).Text, "query is required") {
+		t.Fatalf("expected query required error")
+	}
+
+	// codemap_find requires query
+	result, _, err = codemapFindTool(ctx, nil, CodemapFindInput{})
+	if err != nil {
+		t.Fatalf("codemapFindTool error: %v", err)
+	}
+	if result == nil || !result.IsError || !strings.Contains(result.Content[0].(*mcp.TextContent).Text, "query is required") {
+		t.Fatalf("expected query required error")
+	}
+
+	// codemap_context requires symbol
+	result, _, err = codemapContextTool(ctx, nil, CodemapContextInput{})
+	if err != nil {
+		t.Fatalf("codemapContextTool error: %v", err)
+	}
+	if result == nil || !result.IsError || !strings.Contains(result.Content[0].(*mcp.TextContent).Text, "symbol is required") {
+		t.Fatalf("expected symbol required error")
+	}
+}
+
+func TestCodemapToolsErrorWhenCodemapUnavailable(t *testing.T) {
+	if codemap.Available() {
+		t.Skip("codemap is installed; error path not testable without mocking")
+	}
+
+	ctx := context.Background()
+
+	// All codemap tools should return tool errors when codemap is unavailable
+	tools := []func() (*mcp.CallToolResult, any, error){
+		func() (*mcp.CallToolResult, any, error) {
+			return codemapSymbolAtTool(ctx, nil, CodemapSymbolAtInput{File: "main.go", Line: 1})
+		},
+		func() (*mcp.CallToolResult, any, error) {
+			return codemapCallersTool(ctx, nil, CodemapCallersInput{Symbol: "main"})
+		},
+		func() (*mcp.CallToolResult, any, error) {
+			return codemapImpactTool(ctx, nil, CodemapImpactInput{Symbol: "main"})
+		},
+		func() (*mcp.CallToolResult, any, error) {
+			return codemapSemanticTool(ctx, nil, CodemapSemanticInput{Query: "test"})
+		},
+		func() (*mcp.CallToolResult, any, error) {
+			return codemapFindTool(ctx, nil, CodemapFindInput{Query: "test"})
+		},
+		func() (*mcp.CallToolResult, any, error) {
+			return codemapContextTool(ctx, nil, CodemapContextInput{Symbol: "main"})
+		},
+	}
+	for i, fn := range tools {
+		result, _, err := fn()
+		if err != nil {
+			t.Fatalf("codemap tool %d error: %v", i, err)
+		}
+		if result == nil || !result.IsError {
+			t.Fatalf("expected tool error when codemap unavailable for tool %d", i)
+		}
+		if !strings.Contains(result.Content[0].(*mcp.TextContent).Text, "codemap is not installed") {
+			t.Fatalf("expected 'codemap is not installed' error for tool %d, got: %s", i, result.Content[0].(*mcp.TextContent).Text)
+		}
 	}
 }
 

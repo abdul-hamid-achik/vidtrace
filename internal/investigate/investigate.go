@@ -2,14 +2,17 @@ package investigate
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/abdul-hamid-achik/vidtrace/internal/codemap"
 	"github.com/abdul-hamid-achik/vidtrace/internal/evidence"
 	"github.com/abdul-hamid-achik/vidtrace/internal/fcheap"
 )
@@ -31,6 +34,16 @@ type Options struct {
 	ConnectMode string
 	// ConnectLimit caps the number of code matches returned.
 	ConnectLimit int
+	// Codemap enables structural code graph expansion after fcheap connect
+	// surfaces code candidates. For each code match, resolves the enclosing
+	// symbol, lists callers, and computes the blast radius. Requires Connect
+	// and CodebaseDir.
+	Codemap bool
+	// CodemapDepth controls the blast radius depth (default 3).
+	CodemapDepth int
+	// CodemapAnnotate pins vidtrace evidence findings to resolved symbols
+	// as persistent codemap annotations (source="vidtrace").
+	CodemapAnnotate bool
 }
 
 type Report struct {
@@ -48,6 +61,31 @@ type Report struct {
 	StashID          string                  `json:"stash_id,omitempty"`
 	CodeMatches      []fcheap.CodeMatch      `json:"code_matches,omitempty"`
 	ConnectError     string                  `json:"connect_error,omitempty"`
+	CodemapExpansion *CodemapExpansion       `json:"codemap_expansion,omitempty"`
+	CodemapError     string                  `json:"codemap_error,omitempty"`
+}
+
+// CodemapExpansion holds the structural code graph results for code matches
+// surfaced by fcheap connect. Each entry maps a code match to its enclosing
+// symbol, callers, and blast radius.
+type CodemapExpansion struct {
+	Symbols []SymbolExpansion `json:"symbols"`
+	Summary string            `json:"summary"`
+}
+
+// SymbolExpansion is the codemap graph data for a single code match.
+type SymbolExpansion struct {
+	File         string           `json:"file"`
+	Line         int              `json:"line"`
+	Symbol       string           `json:"symbol"`
+	FQN          string           `json:"fqn,omitempty"`
+	Kind         string           `json:"kind,omitempty"`
+	Resolution   string           `json:"resolution"`
+	Callers      []codemap.Symbol `json:"callers,omitempty"`
+	BlastRadius  []codemap.Symbol `json:"blast_radius,omitempty"`
+	Tested       bool             `json:"tested,omitempty"`
+	AnnotationID int              `json:"annotation_id,omitempty"`
+	Score        float64          `json:"score,omitempty"`
 }
 
 func Run(opts Options) (Report, error) {
@@ -145,6 +183,15 @@ func Run(opts Options) (Report, error) {
 		codeMatches, connectError = runConnect(absBundleDir, stashID, codebaseDir, query, opts)
 	}
 
+	// If --codemap is set and connect produced code matches, run codemap
+	// expansion to resolve symbols, callers, and blast radius. This is a
+	// best-effort enhancement: failures are recorded in CodemapError.
+	var codemapExpansion *CodemapExpansion
+	var codemapError string
+	if opts.Codemap && len(codeMatches) > 0 {
+		codemapExpansion, codemapError = runCodemapExpansion(codeMatches, searchReport.Results, query, opts)
+	}
+
 	report := Report{
 		OK:               true,
 		Query:            query,
@@ -156,10 +203,12 @@ func Run(opts Options) (Report, error) {
 		Evidence:         searchReport.Results,
 		SuggestedQueries: suggested,
 		VecgrepCommands:  VecgrepCommands(codebaseDir, suggested),
-		Summary:          summary(searchReport.Results, suggested, codebaseDir, codeMatches),
+		Summary:          summary(searchReport.Results, suggested, codebaseDir, codeMatches, codemapExpansion),
 		StashID:          stashID,
 		CodeMatches:      codeMatches,
 		ConnectError:     connectError,
+		CodemapExpansion: codemapExpansion,
+		CodemapError:     codemapError,
 	}
 
 	return report, nil
@@ -268,11 +317,60 @@ func Markdown(report Report) string {
 		writef(&b, "- %s\n", report.ConnectError)
 	}
 
+	if report.CodemapExpansion != nil && len(report.CodemapExpansion.Symbols) > 0 {
+		writef(&b, "\n## Code Graph Expansion\n\n")
+		for _, sym := range report.CodemapExpansion.Symbols {
+			writef(&b, "### `%s` (%s)\n\n", sym.Symbol, sym.Resolution)
+			writef(&b, "- File: `%s:%d`\n", sym.File, sym.Line)
+			if sym.Kind != "" {
+				writef(&b, "- Kind: %s\n", sym.Kind)
+			}
+			if sym.FQN != "" {
+				writef(&b, "- FQN: `%s`\n", sym.FQN)
+			}
+			if len(sym.Callers) > 0 {
+				writef(&b, "- Callers (%d):\n", len(sym.Callers))
+				for _, c := range sym.Callers {
+					writef(&b, "  - `%s`", c.Symbol)
+					if c.File != "" {
+						writef(&b, " (`%s:%d`)", c.File, c.StartLine)
+					}
+					writef(&b, "\n")
+				}
+			}
+			if len(sym.BlastRadius) > 0 {
+				writef(&b, "- Blast radius (%d symbols):\n", len(sym.BlastRadius))
+				for _, br := range sym.BlastRadius {
+					writef(&b, "  - `%s`", br.Symbol)
+					if br.File != "" {
+						writef(&b, " (`%s:%d`)", br.File, br.StartLine)
+					}
+					writef(&b, "\n")
+				}
+			}
+			if sym.Tested {
+				writef(&b, "- Test coverage: yes\n")
+			}
+			if sym.AnnotationID > 0 {
+				writef(&b, "- Annotation: pinned (id %d, source=vidtrace)\n", sym.AnnotationID)
+			}
+			writef(&b, "\n")
+		}
+	}
+
+	if report.CodemapError != "" {
+		writef(&b, "\n## Codemap Error\n\n")
+		writef(&b, "- %s\n", report.CodemapError)
+	}
+
 	writef(&b, "\n## Notes\n\n")
 	writef(&b, "- Start with the cited frame paths before changing code.\n")
 	writef(&b, "- Use vecgrep for source-code search; vidtrace does not index source code.\n")
 	if len(report.CodeMatches) > 0 {
 		writef(&b, "- Code matches were found via fcheap connect (vecgrep over the codebase).\n")
+	}
+	if report.CodemapExpansion != nil && len(report.CodemapExpansion.Symbols) > 0 {
+		writef(&b, "- Code graph expansion was performed via codemap (symbol-at, callers, impact).\n")
 	}
 	return b.String()
 }
@@ -324,7 +422,7 @@ func VecgrepCommands(codebaseDir string, queries []string) []string {
 	return commands
 }
 
-func summary(results []evidence.SearchResult, suggestions []string, codebaseDir string, codeMatches []fcheap.CodeMatch) string {
+func summary(results []evidence.SearchResult, suggestions []string, codebaseDir string, codeMatches []fcheap.CodeMatch, expansion *CodemapExpansion) string {
 	codebase := "no codebase provided"
 	if codebaseDir != "" {
 		codebase = "vecgrep command suggestions included"
@@ -333,7 +431,135 @@ func summary(results []evidence.SearchResult, suggestions []string, codebaseDir 
 	if len(codeMatches) > 0 {
 		suffix = fmt.Sprintf("; %d code match(es) found via fcheap connect", len(codeMatches))
 	}
+	if expansion != nil && len(expansion.Symbols) > 0 {
+		suffix += fmt.Sprintf("; %d symbol(s) expanded via codemap", len(expansion.Symbols))
+	}
 	return fmt.Sprintf("Found %d video evidence hit(s) and %d suggested code search(es); %s.%s", len(results), len(suggestions), codebase, suffix)
+}
+
+// runCodemapExpansion takes the code matches from fcheap connect and resolves
+// each to its enclosing symbol via codemap symbol-at, then lists callers and
+// computes the blast radius via codemap impact. If CodemapAnnotate is set,
+// pins a vidtrace evidence annotation to each resolved symbol. Returns a
+// best-effort expansion; errors are recorded in the returned string.
+func runCodemapExpansion(matches []fcheap.CodeMatch, evidenceResults []evidence.SearchResult, query string, opts Options) (*CodemapExpansion, string) {
+	if !codemap.Available() {
+		return nil, "codemap is not installed or not on PATH"
+	}
+
+	depth := opts.CodemapDepth
+	if depth <= 0 {
+		depth = 3
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+
+	// Build a concise evidence reference for annotations.
+	evidenceRef := buildEvidenceRef(query, evidenceResults)
+
+	seen := map[string]bool{}
+	var symbols []SymbolExpansion
+	for _, match := range matches {
+		file, line, ok := splitFileLine(match.File)
+		if !ok {
+			continue
+		}
+
+		sa, err := codemap.SymbolAt(ctx, file, line)
+		if err != nil || sa.Resolution == "none" || sa.Symbol == "" {
+			continue
+		}
+
+		// Deduplicate by symbol — multiple matches can resolve to the same one.
+		if seen[sa.Symbol] {
+			continue
+		}
+		seen[sa.Symbol] = true
+
+		exp := SymbolExpansion{
+			File:       file,
+			Line:       line,
+			Symbol:     sa.Symbol,
+			FQN:        sa.FQN,
+			Kind:       sa.Kind,
+			Resolution: sa.Resolution,
+			Score:      match.Score,
+		}
+
+		if callers, err := codemap.Callers(ctx, sa.Symbol, false); err == nil {
+			exp.Callers = callers.Results
+		}
+
+		if impact, err := codemap.Impact(ctx, sa.Symbol, depth); err == nil {
+			exp.BlastRadius = impact.BlastRadius
+			exp.Tested = impact.Tested
+		}
+
+		if opts.CodemapAnnotate {
+			note := fmt.Sprintf("vidtrace evidence for query %q: %s", query, evidenceRef)
+			dataJSON, _ := json.Marshal(map[string]any{
+				"query":       query,
+				"code_match":  match.File,
+				"evidence":    evidenceRef,
+				"match_score": match.Score,
+			})
+			ann, err := codemap.Annotate(ctx, codemap.AnnotateOptions{
+				Symbol: sa.Symbol,
+				Note:   note,
+				Source: "vidtrace",
+				Data:   string(dataJSON),
+			})
+			if err == nil {
+				exp.AnnotationID = ann.ID
+			}
+		}
+
+		symbols = append(symbols, exp)
+	}
+
+	if len(symbols) == 0 {
+		return nil, "no symbols resolved from code matches"
+	}
+
+	summary := fmt.Sprintf("Resolved %d symbol(s) from %d code match(es)", len(symbols), len(matches))
+	return &CodemapExpansion{Symbols: symbols, Summary: summary}, ""
+}
+
+// buildEvidenceRef creates a short string referencing the top evidence hits
+// for use in codemap annotations.
+func buildEvidenceRef(query string, results []evidence.SearchResult) string {
+	if len(results) == 0 {
+		return "no timestamped evidence"
+	}
+	var parts []string
+	for i, r := range results {
+		if i >= 3 {
+			break
+		}
+		text := firstNonEmpty(r.Transcript, r.OCR, r.Frame)
+		if text != "" {
+			parts = append(parts, fmt.Sprintf("%.1fs: %s", r.TimeSeconds, truncate(text, 80)))
+		}
+	}
+	if len(parts) == 0 {
+		return "no text evidence"
+	}
+	return strings.Join(parts, "; ")
+}
+
+// splitFileLine splits a "path/to/file.go:42" string into file and line.
+func splitFileLine(s string) (string, int, bool) {
+	idx := strings.LastIndex(s, ":")
+	if idx < 0 {
+		return s, 0, false
+	}
+	file := s[:idx]
+	line, err := strconv.Atoi(s[idx+1:])
+	if err != nil {
+		return s, 0, false
+	}
+	return file, line, true
 }
 
 func keywordPhrase(text string, limit int) string {

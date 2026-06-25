@@ -20,6 +20,9 @@ func runInvestigate(args []string, stdout, stderr io.Writer) int {
 	stashID := fs.String("stash", "", "fcheap stash ID to restore and investigate instead of a local bundle")
 	connectMode := fs.String("connect-mode", "", "vecgrep search mode for --connect: semantic, keyword, or hybrid")
 	connectLimit := fs.Int("connect-limit", 10, "maximum code matches from --connect")
+	codemap := fs.Bool("codemap", false, "run codemap expansion after --connect to resolve symbols, callers, and blast radius")
+	codemapDepth := fs.Int("codemap-depth", 3, "max hops for codemap blast radius")
+	codemapAnnotate := fs.Bool("codemap-annotate", false, "pin vidtrace evidence findings to resolved codemap symbols")
 	jsonOutput := fs.Bool("json", false, "print machine-readable JSON")
 
 	normalizedArgs, err := normalizeBundleArgs(args, map[string]struct{}{"json": {}, "connect": {}}, map[string]struct{}{
@@ -30,6 +33,7 @@ func runInvestigate(args []string, stdout, stderr io.Writer) int {
 		"stash":         {},
 		"connect-mode":  {},
 		"connect-limit": {},
+		"codemap-depth": {},
 	})
 	if err != nil {
 		_, _ = fmt.Fprintln(stderr, err)
@@ -48,6 +52,11 @@ func runInvestigate(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 
+	if *codemap && !*connect {
+		_, _ = fmt.Fprintln(stderr, "--codemap requires --connect")
+		return 2
+	}
+
 	resolvedStashID := strings.TrimSpace(*stashID)
 	bundleDir := ""
 	if fs.NArg() == 1 {
@@ -56,7 +65,7 @@ func runInvestigate(args []string, stdout, stderr io.Writer) int {
 			return writeInvestigateFailure(stdout, stderr, *jsonOutput, fmt.Errorf("resolve bundle path: %w", err))
 		}
 	} else if resolvedStashID == "" {
-		_, _ = fmt.Fprintln(stderr, "usage: vidtrace investigate /path/to/bundle --query TEXT [--codebase /path/to/repo] [--connect] [--stash ID] [--json]")
+		_, _ = fmt.Fprintln(stderr, "usage: vidtrace investigate /path/to/bundle --query TEXT [--codebase /path/to/repo] [--connect] [--codemap] [--stash ID] [--json]")
 		return 2
 	}
 
@@ -76,15 +85,18 @@ func runInvestigate(args []string, stdout, stderr io.Writer) int {
 	}
 
 	report, err := investigate.Run(investigate.Options{
-		BundleDir:    bundleDir,
-		Query:        *query,
-		DBPath:       resolvedDBPath,
-		CodebaseDir:  resolvedCodebase,
-		Limit:        *limit,
-		Connect:      *connect,
-		StashID:      resolvedStashID,
-		ConnectMode:  strings.TrimSpace(*connectMode),
-		ConnectLimit: *connectLimit,
+		BundleDir:       bundleDir,
+		Query:           *query,
+		DBPath:          resolvedDBPath,
+		CodebaseDir:     resolvedCodebase,
+		Limit:           *limit,
+		Connect:         *connect,
+		StashID:         resolvedStashID,
+		ConnectMode:     strings.TrimSpace(*connectMode),
+		ConnectLimit:    *connectLimit,
+		Codemap:         *codemap,
+		CodemapDepth:    *codemapDepth,
+		CodemapAnnotate: *codemapAnnotate,
 	})
 	if err != nil {
 		return writeInvestigateFailure(stdout, stderr, *jsonOutput, err)

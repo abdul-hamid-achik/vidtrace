@@ -33,6 +33,7 @@ This file guides coding agents working on `vidtrace`.
   - `ollama` (optional, for semantic and hybrid evidence search)
   - `fcheap` (optional, for bundle stashing and codebase connect)
   - `vecgrep` (optional, for codebase search via fcheap connect)
+  - `codemap` (optional, for structural code graph queries: symbol resolution, callers, impact analysis)
 
 ## Architecture Direction
 
@@ -46,6 +47,7 @@ This file guides coding agents working on `vidtrace`.
 - Put evidence indexing/search in `internal/evidence`, and embedding providers behind the `embed.Embedder` interface in `internal/embed`.
 - Put the MCP server in `internal/mcpserver`; its tools must wrap existing internal packages and stay read-only (no video/bundle mutation).
 - Put fcheap CLI wrapping in `internal/fcheap`, mirroring `internal/ffmpeg`, `internal/tesseract`, and `internal/whisper`.
+- Put codemap CLI wrapping in `internal/codemap`, mirroring `internal/fcheap`.
 - Put future media-tool wrappers in separate internal packages, for example `internal/ffmpeg`, `internal/tesseract`, and `internal/whisper`.
 - Keep artifact schemas explicit and versionable.
 
@@ -72,6 +74,7 @@ task run -- index /path/to/bundle --db /tmp/vidtrace-evidence.veclite --json
 task run -- search /tmp/vidtrace-evidence.veclite "ticket click does not work" --json
 task run -- investigate /path/to/bundle --query "ticket click does not work" --codebase /path/to/repo --json
 task run -- investigate /path/to/bundle --query "ticket click does not work" --codebase /path/to/repo --connect --json
+task run -- investigate /path/to/bundle --query "ticket click does not work" --codebase /path/to/repo --connect --codemap --json
 task run -- stash save /path/to/bundle --name "bug-evidence" --json
 task run -- investigate --stash <stash-id> --query "ticket click does not work" --json
 task run -- compare /path/to/bundle --ticket ticket.md --json
@@ -111,6 +114,7 @@ task run -- index /tmp/vidtrace-real/bug_artifacts_* --db /tmp/vidtrace-real/evi
 task run -- search /tmp/vidtrace-real/evidence.veclite "clicking a task does not take me to the assessment" --json
 task run -- investigate /tmp/vidtrace-real/bug_artifacts_* --query "clicking a task does not take me to the assessment" --codebase /path/to/repo --json
 task run -- investigate /tmp/vidtrace-real/bug_artifacts_* --query "clicking a task does not take me to the assessment" --codebase /path/to/repo --connect --json
+task run -- investigate /tmp/vidtrace-real/bug_artifacts_* --query "clicking a task does not take me to the assessment" --codebase /path/to/repo --connect --codemap --json
 task run -- stash save /tmp/vidtrace-real/bug_artifacts_* --name "bug-evidence" --json
 task run -- studio /tmp/vidtrace-real/bug_artifacts_*
 ```
@@ -137,9 +141,9 @@ task run -- studio /tmp/vidtrace-real/bug_artifacts_*
 
 ## Notes and Documentation Boundary
 
-The `docs/` folder is the VitePress documentation website source. It is published to Vercel and consumed by the public. Keep it strictly to public product docs: CLI contracts, schemas, architecture, testing, install, release, usage, and ADRs. Never drop strategy notes, implementation checkpoints, bug analysis, or one-off planning files into `docs/`.
+The `docs/` folder is the VitePress documentation website source. It is published to Vercel and consumed by the public. Keep it strictly to public product docs: CLI contracts, schemas, architecture, testing, install, release, and usage. Never drop strategy notes, implementation checkpoints, bug analysis, ADRs, or one-off planning files into `docs/`. (ADRs 0001-0005 were originally placed in `docs/adr/` and remain there for historical continuity; new ADRs from 0006 onward go in the Obsidian vault.)
 
-Project notes, strategy, checkpoints, implementation notes, and bug analysis belong in the Obsidian vault at `~/notes/projects/<project>/`. Use the `obsidian` CLI (`/usr/local/bin/obsidian`) to create, read, and update notes there. Each project has its own folder:
+Project notes, strategy, checkpoints, implementation notes, bug analysis, and ADRs (from ADR-0006 onward) belong in the Obsidian vault at `~/notes/projects/<project>/`. Use the `obsidian` CLI (`/usr/local/bin/obsidian`) to create, read, and update notes there. Each project has its own folder:
 
 - `~/notes/projects/vidtrace/` — this project's notes and index
 - `~/notes/projects/veclite/` — VecLite library notes

@@ -90,6 +90,28 @@ func TestMissingVecgrepDoesNotFailDoctor(t *testing.T) {
 	}
 }
 
+func TestCheckIncludesCodemapAsOptionalTool(t *testing.T) {
+	result := Check()
+
+	names := map[string]bool{}
+	for _, tool := range result.OptionalTools {
+		names[tool.Name] = true
+	}
+	if !names["codemap"] {
+		t.Fatalf("expected codemap in optional tools, got %#v", result.OptionalTools)
+	}
+}
+
+func TestMissingCodemapDoesNotFailDoctor(t *testing.T) {
+	result := Result{
+		OK:            true,
+		OptionalTools: []ToolStatus{{Name: "codemap", Found: false}},
+	}
+	if !result.OK {
+		t.Fatal("a missing optional tool must not flip OK to false")
+	}
+}
+
 func TestPrintHumanRendersFcheapAndVecgrep(t *testing.T) {
 	var buf bytes.Buffer
 	PrintHuman(&buf, Result{
@@ -98,10 +120,14 @@ func TestPrintHumanRendersFcheapAndVecgrep(t *testing.T) {
 		OptionalTools: []ToolStatus{
 			{Name: "fcheap", Found: true, Path: "/usr/bin/fcheap"},
 			{Name: "vecgrep", Found: false},
+			{Name: "codemap", Found: true, Path: "/opt/homebrew/bin/codemap"},
 		},
 	})
 	out := buf.String()
 	if !strings.Contains(out, "fcheap: found") || !strings.Contains(out, "vecgrep: missing") {
 		t.Fatalf("expected fcheap and vecgrep in optional tools, got:\n%s", out)
+	}
+	if !strings.Contains(out, "codemap: found") {
+		t.Fatalf("expected codemap in optional tools, got:\n%s", out)
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/abdul-hamid-achik/vidtrace/internal/codemap"
 	"github.com/abdul-hamid-achik/vidtrace/internal/evidence"
 	"github.com/abdul-hamid-achik/vidtrace/internal/fcheap"
 )
@@ -330,9 +331,12 @@ func TestSummaryMentionsCodeMatches(t *testing.T) {
 		{File: "src/routes.go", Score: 0.72, Text: "router.POST('/login')"},
 	}
 
-	got := summary(results, []string{"login failed"}, "/tmp/repo", matches)
+	got := summary(results, []string{"login failed"}, "/tmp/repo", matches, nil)
 	if !strings.Contains(got, "2 code match(es) found via fcheap connect") {
 		t.Fatalf("expected summary to mention code matches, got: %s", got)
+	}
+	if strings.Contains(got, "codemap") {
+		t.Fatalf("summary should not mention codemap when expansion is nil, got: %s", got)
 	}
 }
 
@@ -341,9 +345,178 @@ func TestSummaryOmitsCodeMatchesWhenEmpty(t *testing.T) {
 		{TimeSeconds: 1.0, Frame: "frames/frame_0001.png", OCR: "Login failed"},
 	}
 
-	got := summary(results, []string{"login failed"}, "/tmp/repo", nil)
+	got := summary(results, []string{"login failed"}, "/tmp/repo", nil, nil)
 	if strings.Contains(got, "code match(es)") {
 		t.Fatalf("summary should not mention code matches when empty, got: %s", got)
+	}
+}
+
+func TestSummaryMentionsCodemapExpansion(t *testing.T) {
+	results := []evidence.SearchResult{
+		{TimeSeconds: 1.0, Frame: "frames/frame_0001.png", OCR: "Login failed"},
+	}
+	matches := []fcheap.CodeMatch{
+		{File: "src/auth.go", Score: 0.85, Text: "func login()"},
+	}
+	expansion := &CodemapExpansion{
+		Symbols: []SymbolExpansion{
+			{Symbol: "login", File: "src/auth.go", Line: 10},
+			{Symbol: "handleLogin", File: "src/routes.go", Line: 25},
+		},
+	}
+
+	got := summary(results, []string{"login failed"}, "/tmp/repo", matches, expansion)
+	if !strings.Contains(got, "1 code match(es) found via fcheap connect") {
+		t.Fatalf("expected summary to mention code matches, got: %s", got)
+	}
+	if !strings.Contains(got, "2 symbol(s) expanded via codemap") {
+		t.Fatalf("expected summary to mention codemap expansion, got: %s", got)
+	}
+}
+
+func TestMarkdownRendersCodemapExpansion(t *testing.T) {
+	report := Report{
+		OK:      true,
+		Query:   "ticket bug",
+		Mode:    "keyword",
+		Summary: "Found 1 video evidence hit(s).",
+		CodemapExpansion: &CodemapExpansion{
+			Symbols: []SymbolExpansion{
+				{
+					Symbol:     "handleTicketClick",
+					File:       "src/ticket.go",
+					Line:       42,
+					Kind:       "function",
+					Resolution: "exact",
+					Callers: []codemap.Symbol{
+						{Symbol: "router.ServeHTTP", File: "src/router.go", StartLine: 15},
+					},
+					BlastRadius: []codemap.Symbol{
+						{Symbol: "main", File: "main.go", StartLine: 5},
+					},
+					Tested: true,
+				},
+			},
+		},
+	}
+
+	out := Markdown(report)
+	for _, want := range []string{
+		"## Code Graph Expansion",
+		"handleTicketClick",
+		"src/ticket.go:42",
+		"Callers (1)",
+		"router.ServeHTTP",
+		"Blast radius (1 symbols)",
+		"Test coverage: yes",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("expected markdown to contain %q, got:\n%s", want, out)
+		}
+	}
+}
+
+func TestMarkdownRendersCodemapError(t *testing.T) {
+	report := Report{
+		OK:           true,
+		Query:        "ticket bug",
+		Mode:         "keyword",
+		Summary:      "Found 0 video evidence hit(s).",
+		CodemapError: "codemap is not installed or not on PATH",
+	}
+
+	out := Markdown(report)
+	if !strings.Contains(out, "## Codemap Error") {
+		t.Fatalf("expected markdown to contain Codemap Error section, got:\n%s", out)
+	}
+	if !strings.Contains(out, "codemap is not installed") {
+		t.Fatalf("expected markdown to contain the codemap error text")
+	}
+}
+
+func TestMarkdownNoCodemapWhenEmpty(t *testing.T) {
+	report := Report{
+		OK:      true,
+		Query:   "ticket",
+		Mode:    "keyword",
+		Summary: "Found 0 hits.",
+	}
+
+	out := Markdown(report)
+	if strings.Contains(out, "## Code Graph Expansion") {
+		t.Fatalf("markdown should not contain Code Graph Expansion when nil")
+	}
+	if strings.Contains(out, "## Codemap Error") {
+		t.Fatalf("markdown should not contain Codemap Error when empty")
+	}
+}
+
+func TestRunCodemapErrorWhenCodemapUnavailable(t *testing.T) {
+	// This test verifies that --codemap gracefully degrades when codemap is
+	// not available. We need code matches for codemap to run, but codemap
+	// expansion only runs when len(codeMatches) > 0, which requires fcheap.
+	// So we test the runCodemapExpansion function directly.
+	if codemap.Available() {
+		t.Skip("codemap is installed; error path not testable without mocking")
+	}
+
+	matches := []fcheap.CodeMatch{
+		{File: "src/ticket.go:42", Score: 0.85, Text: "func handleTicketClick()"},
+	}
+
+	expansion, errStr := runCodemapExpansion(matches, nil, "ticket", Options{})
+	if expansion != nil {
+		t.Fatalf("expansion should be nil when codemap unavailable")
+	}
+	if errStr == "" {
+		t.Fatalf("expected error string when codemap unavailable")
+	}
+	if !strings.Contains(errStr, "codemap is not installed") {
+		t.Fatalf("error should mention codemap not installed: %s", errStr)
+	}
+}
+
+func TestSplitFileLine(t *testing.T) {
+	tests := []struct {
+		input    string
+		file     string
+		line     int
+		expected bool
+	}{
+		{"src/ticket.go:42", "src/ticket.go", 42, true},
+		{"src/ticket.go", "src/ticket.go", 0, false},
+		{"src/ticket.go:abc", "src/ticket.go:abc", 0, false},
+		{"", "", 0, false},
+	}
+	for _, tc := range tests {
+		file, line, ok := splitFileLine(tc.input)
+		if ok != tc.expected {
+			t.Errorf("splitFileLine(%q) ok = %v, want %v", tc.input, ok, tc.expected)
+		}
+		if ok && (file != tc.file || line != tc.line) {
+			t.Errorf("splitFileLine(%q) = (%q, %d), want (%q, %d)", tc.input, file, line, tc.file, tc.line)
+		}
+	}
+}
+
+func TestBuildEvidenceRef(t *testing.T) {
+	results := []evidence.SearchResult{
+		{TimeSeconds: 1.0, Transcript: "I clicked the ticket"},
+		{TimeSeconds: 2.0, OCR: "Ticket OPG-14010 details"},
+	}
+	ref := buildEvidenceRef("ticket", results)
+	if !strings.Contains(ref, "1.0s") {
+		t.Fatalf("expected evidence ref to contain first timestamp, got: %s", ref)
+	}
+	if !strings.Contains(ref, "I clicked the ticket") {
+		t.Fatalf("expected evidence ref to contain first transcript, got: %s", ref)
+	}
+}
+
+func TestBuildEvidenceRefEmptyResults(t *testing.T) {
+	ref := buildEvidenceRef("query", nil)
+	if ref != "no timestamped evidence" {
+		t.Fatalf("expected empty results message, got: %s", ref)
 	}
 }
 

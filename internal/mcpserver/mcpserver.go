@@ -14,6 +14,7 @@ import (
 
 	"github.com/abdul-hamid-achik/vidtrace/internal/analysis"
 	"github.com/abdul-hamid-achik/vidtrace/internal/bundle"
+	"github.com/abdul-hamid-achik/vidtrace/internal/codemap"
 	"github.com/abdul-hamid-achik/vidtrace/internal/embed"
 	"github.com/abdul-hamid-achik/vidtrace/internal/evidence"
 	"github.com/abdul-hamid-achik/vidtrace/internal/fcheap"
@@ -75,6 +76,36 @@ func New(version string) *mcp.Server {
 		Description: "Connect a fcheap stash to a codebase using vecgrep to find file:line code matches. The stash text drives the code search.",
 	}, stashConnectTool)
 
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "codemap_symbol_at",
+		Description: "Resolve a file:line position to its enclosing symbol (FQN, kind, range). The entry point for joining vidtrace evidence onto the code graph.",
+	}, codemapSymbolAtTool)
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "codemap_callers",
+		Description: "List functions/methods that call a given symbol.",
+	}, codemapCallersTool)
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "codemap_impact",
+		Description: "Impact analysis for a symbol: blast radius (transitive callers) and test coverage.",
+	}, codemapImpactTool)
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "codemap_semantic",
+		Description: "Semantic search across the code graph by meaning.",
+	}, codemapSemanticTool)
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "codemap_find",
+		Description: "Find symbols by name (fast, offline). Returns matching symbol names and file locations.",
+	}, codemapFindTool)
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "codemap_context",
+		Description: "Everything about a symbol in one call: definition, callers, callees, tests, and annotations.",
+	}, codemapContextTool)
+
 	return server
 }
 
@@ -101,7 +132,7 @@ func isCleanShutdown(err error) bool {
 
 // ToolNames lists the registered tool names, for documentation and tests.
 func ToolNames() []string {
-	return []string{"validate", "search", "compare", "analyze", "investigate", "stash_list", "stash_info", "stash_search", "stash_connect"}
+	return []string{"validate", "search", "compare", "analyze", "investigate", "stash_list", "stash_info", "stash_search", "stash_connect", "codemap_symbol_at", "codemap_callers", "codemap_impact", "codemap_semantic", "codemap_find", "codemap_context"}
 }
 
 // ValidateInput selects the bundle to validate.
@@ -203,6 +234,13 @@ type InvestigateInput struct {
 	StashID      string `json:"stash_id,omitempty" jsonschema:"fcheap stash ID to restore and investigate instead of a local bundle"`
 	ConnectMode  string `json:"connect_mode,omitempty" jsonschema:"vecgrep search mode for connect: semantic, keyword, or hybrid"`
 	ConnectLimit int    `json:"connect_limit,omitempty" jsonschema:"maximum code matches from connect (default 10)"`
+	// Codemap enables structural code graph expansion after connect surfaces
+	// code candidates. Requires Connect and CodebaseDir.
+	Codemap bool `json:"codemap,omitempty" jsonschema:"run codemap expansion after connect to resolve symbols, callers, and blast radius"`
+	// CodemapDepth controls the blast radius depth (default 3).
+	CodemapDepth int `json:"codemap_depth,omitempty" jsonschema:"max hops for codemap blast radius (default 3)"`
+	// CodemapAnnotate pins vidtrace evidence findings to resolved symbols.
+	CodemapAnnotate bool `json:"codemap_annotate,omitempty" jsonschema:"pin vidtrace evidence findings to resolved codemap symbols"`
 }
 
 func investigateTool(_ context.Context, _ *mcp.CallToolRequest, in InvestigateInput) (*mcp.CallToolResult, investigate.Report, error) {
@@ -215,15 +253,21 @@ func investigateTool(_ context.Context, _ *mcp.CallToolRequest, in InvestigateIn
 	if in.Connect && strings.TrimSpace(in.CodebaseDir) == "" {
 		return toolError[investigate.Report]("connect requires codebase_dir")
 	}
+	if in.Codemap && !in.Connect {
+		return toolError[investigate.Report]("codemap requires connect")
+	}
 	report, err := investigate.Run(investigate.Options{
-		BundleDir:    in.BundleDir,
-		Query:        in.Query,
-		CodebaseDir:  in.CodebaseDir,
-		Limit:        in.Limit,
-		Connect:      in.Connect,
-		StashID:      in.StashID,
-		ConnectMode:  in.ConnectMode,
-		ConnectLimit: in.ConnectLimit,
+		BundleDir:       in.BundleDir,
+		Query:           in.Query,
+		CodebaseDir:     in.CodebaseDir,
+		Limit:           in.Limit,
+		Connect:         in.Connect,
+		StashID:         in.StashID,
+		ConnectMode:     in.ConnectMode,
+		ConnectLimit:    in.ConnectLimit,
+		Codemap:         in.Codemap,
+		CodemapDepth:    in.CodemapDepth,
+		CodemapAnnotate: in.CodemapAnnotate,
 	})
 	if err != nil {
 		return toolError[investigate.Report](err.Error())
@@ -323,6 +367,129 @@ func stashConnectTool(ctx context.Context, _ *mcp.CallToolRequest, in StashConne
 	})
 	if err != nil {
 		return toolError[fcheap.ConnectResult](err.Error())
+	}
+	return nil, result, nil
+}
+
+// CodemapSymbolAtInput resolves a file:line to its enclosing symbol.
+type CodemapSymbolAtInput struct {
+	File string `json:"file" jsonschema:"project-relative file path"`
+	Line int    `json:"line" jsonschema:"1-based line number"`
+}
+
+func codemapSymbolAtTool(ctx context.Context, _ *mcp.CallToolRequest, in CodemapSymbolAtInput) (*mcp.CallToolResult, codemap.SymbolAtResult, error) {
+	if strings.TrimSpace(in.File) == "" {
+		return toolError[codemap.SymbolAtResult]("file is required")
+	}
+	if in.Line <= 0 {
+		return toolError[codemap.SymbolAtResult]("line is required")
+	}
+	if !codemap.Available() {
+		return toolError[codemap.SymbolAtResult]("codemap is not installed or not on PATH")
+	}
+	result, err := codemap.SymbolAt(ctx, in.File, in.Line)
+	if err != nil {
+		return toolError[codemap.SymbolAtResult](err.Error())
+	}
+	return nil, result, nil
+}
+
+// CodemapCallersInput lists callers of a symbol.
+type CodemapCallersInput struct {
+	Symbol  string `json:"symbol" jsonschema:"the symbol name to look up"`
+	Precise bool   `json:"precise,omitempty" jsonschema:"use the language server for exact results (Go via gopls)"`
+}
+
+func codemapCallersTool(ctx context.Context, _ *mcp.CallToolRequest, in CodemapCallersInput) (*mcp.CallToolResult, codemap.CallersResult, error) {
+	if strings.TrimSpace(in.Symbol) == "" {
+		return toolError[codemap.CallersResult]("symbol is required")
+	}
+	if !codemap.Available() {
+		return toolError[codemap.CallersResult]("codemap is not installed or not on PATH")
+	}
+	result, err := codemap.Callers(ctx, in.Symbol, in.Precise)
+	if err != nil {
+		return toolError[codemap.CallersResult](err.Error())
+	}
+	return nil, result, nil
+}
+
+// CodemapImpactInput analyzes the blast radius of a symbol.
+type CodemapImpactInput struct {
+	Symbol string `json:"symbol" jsonschema:"the symbol to analyze"`
+	Depth  int    `json:"depth,omitempty" jsonschema:"max hops for the blast radius (default 3)"`
+}
+
+func codemapImpactTool(ctx context.Context, _ *mcp.CallToolRequest, in CodemapImpactInput) (*mcp.CallToolResult, codemap.ImpactResult, error) {
+	if strings.TrimSpace(in.Symbol) == "" {
+		return toolError[codemap.ImpactResult]("symbol is required")
+	}
+	if !codemap.Available() {
+		return toolError[codemap.ImpactResult]("codemap is not installed or not on PATH")
+	}
+	result, err := codemap.Impact(ctx, in.Symbol, in.Depth)
+	if err != nil {
+		return toolError[codemap.ImpactResult](err.Error())
+	}
+	return nil, result, nil
+}
+
+// CodemapSemanticInput runs semantic search across the code graph.
+type CodemapSemanticInput struct {
+	Query string `json:"query" jsonschema:"natural-language description of the code to find"`
+	TopK  int    `json:"top_k,omitempty" jsonschema:"maximum results (default 10)"`
+}
+
+func codemapSemanticTool(ctx context.Context, _ *mcp.CallToolRequest, in CodemapSemanticInput) (*mcp.CallToolResult, codemap.SemanticResult, error) {
+	if strings.TrimSpace(in.Query) == "" {
+		return toolError[codemap.SemanticResult]("query is required")
+	}
+	if !codemap.Available() {
+		return toolError[codemap.SemanticResult]("codemap is not installed or not on PATH")
+	}
+	result, err := codemap.Semantic(ctx, in.Query, in.TopK)
+	if err != nil {
+		return toolError[codemap.SemanticResult](err.Error())
+	}
+	return nil, result, nil
+}
+
+// CodemapFindInput finds symbols by name.
+type CodemapFindInput struct {
+	Query string `json:"query" jsonschema:"substring to match against symbol names and FQNs"`
+	TopK  int    `json:"top_k,omitempty" jsonschema:"maximum results (default 10)"`
+}
+
+func codemapFindTool(ctx context.Context, _ *mcp.CallToolRequest, in CodemapFindInput) (*mcp.CallToolResult, codemap.FindResult, error) {
+	if strings.TrimSpace(in.Query) == "" {
+		return toolError[codemap.FindResult]("query is required")
+	}
+	if !codemap.Available() {
+		return toolError[codemap.FindResult]("codemap is not installed or not on PATH")
+	}
+	result, err := codemap.Find(ctx, in.Query, in.TopK)
+	if err != nil {
+		return toolError[codemap.FindResult](err.Error())
+	}
+	return nil, result, nil
+}
+
+// CodemapContextInput gathers everything about a symbol in one call.
+type CodemapContextInput struct {
+	Symbol string `json:"symbol" jsonschema:"the symbol to gather full context for"`
+	Depth  int    `json:"depth,omitempty" jsonschema:"max hops for the blast-radius count (default 3)"`
+}
+
+func codemapContextTool(ctx context.Context, _ *mcp.CallToolRequest, in CodemapContextInput) (*mcp.CallToolResult, codemap.ContextResult, error) {
+	if strings.TrimSpace(in.Symbol) == "" {
+		return toolError[codemap.ContextResult]("symbol is required")
+	}
+	if !codemap.Available() {
+		return toolError[codemap.ContextResult]("codemap is not installed or not on PATH")
+	}
+	result, err := codemap.Context(ctx, in.Symbol, in.Depth)
+	if err != nil {
+		return toolError[codemap.ContextResult](err.Error())
 	}
 	return nil, result, nil
 }

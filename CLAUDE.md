@@ -16,6 +16,7 @@ Read `AGENTS.md` first. It contains the canonical coding-agent instructions for 
 - `whisper` for transcript generation
 - `fcheap` (optional) for bundle stashing and vault restoration
 - `vecgrep` (optional) for semantic codebase search via `fcheap connect`
+- `codemap` (optional) for structural code graph queries (symbol resolution, callers, impact analysis)
 
 ## Common Commands
 
@@ -62,8 +63,8 @@ Use `vidtrace docs agent` for the fastest in-CLI product guide. For ticket/video
 
 ## Notes and Documentation Boundary
 
-The `docs/` folder is the VitePress website source (published to Vercel). Keep it to public product docs only: CLI contracts, schemas, architecture, testing, install, release, usage, and ADRs. Do not drop strategy notes, implementation checkpoints, bug analysis, or planning files into `docs/`.
+The `docs/` folder is the VitePress website source (published to Vercel). Keep it to public product docs only: CLI contracts, schemas, architecture, testing, install, release, and usage. Do not drop strategy notes, implementation checkpoints, bug analysis, ADRs, or planning files into `docs/`. (ADRs 0001-0005 remain in `docs/adr/` for historical continuity; new ADRs from 0006 onward go in the Obsidian vault.)
 
-Project notes, strategy, checkpoints, implementation notes, and bug analysis belong in the Obsidian vault at `~/notes/projects/<project>/`. Use the `obsidian` CLI (`/usr/local/bin/obsidian`) to read and update notes there. Each project has its own folder (`vidtrace`, `veclite`, `vecgrep`, `graphite`, etc.) with an `index.md` that tracks current state — keep it updated when a note is added, and link notes with Obsidian wikilinks.
+Project notes, strategy, checkpoints, implementation notes, bug analysis, and ADRs (from ADR-0006 onward) belong in the Obsidian vault at `~/notes/projects/<project>/`. Use the `obsidian` CLI (`/usr/local/bin/obsidian`) to read and update notes there. Each project has its own folder (`vidtrace`, `veclite`, `vecgrep`, `graphite`, etc.) with an `index.md` that tracks current state — keep it updated when a note is added, and link notes with Obsidian wikilinks.
 
 `BACKLOG.md` and `CHANGELOG.md` stay in the repo; everything longer-lived than a PR lives in the vault. See `AGENTS.md` "Notes and Documentation Boundary" for the full rule.

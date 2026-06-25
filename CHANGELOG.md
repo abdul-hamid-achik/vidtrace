@@ -4,6 +4,10 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- codemap integration for structural code graph queries. `internal/codemap` wraps the codemap CLI for symbol resolution (`SymbolAt`), caller analysis (`Callers`, `Callees`), blast radius (`Impact`), semantic search (`Semantic`), name search (`Find`), full context (`Context`), source retrieval (`Source`), and persistent annotations (`Annotate`). `vidtrace investigate --connect --codemap` resolves code matches to enclosing symbols, lists callers, and computes blast radius; `--codemap-annotate` pins vidtrace evidence findings to symbols with `source="vidtrace"`. The MCP server exposes read-only `codemap_symbol_at`, `codemap_callers`, `codemap_impact`, `codemap_semantic`, `codemap_find`, and `codemap_context` tools, and enhances `investigate` with `codemap`, `codemap_depth`, and `codemap_annotate` fields. `vidtrace doctor` reports `codemap` as an optional tool. All codemap features degrade gracefully when codemap is not installed.
+
 ## [0.10.0] - 2026-06-23
 
 ### Added

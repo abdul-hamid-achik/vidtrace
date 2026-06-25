@@ -44,6 +44,7 @@ func Check() Result {
 		checkTool("ollama", "--version"),
 		checkTool("fcheap", "--version"),
 		checkTool("vecgrep", "--version"),
+		checkTool("codemap", "--version"),
 	}
 
 	result := Result{
@@ -69,6 +70,9 @@ func Check() Result {
 	}
 	if !optionalTools[2].Found {
 		result.RecommendedNextSteps = append(result.RecommendedNextSteps, "Optional: install vecgrep for semantic codebase search (used by fcheap connect).")
+	}
+	if !optionalTools[3].Found {
+		result.RecommendedNextSteps = append(result.RecommendedNextSteps, "Optional: install codemap for structural code graph queries (symbol resolution, callers, impact analysis via investigate --codemap).")
 	}
 
 	if !contains(result.TesseractLanguages, "eng") {
