@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/abdul-hamid-achik/veclite"
+	vlsession "github.com/abdul-hamid-achik/veclite/session"
 	"github.com/abdul-hamid-achik/vidtrace/internal/bundle"
 	"github.com/abdul-hamid-achik/vidtrace/internal/embed"
 	"github.com/abdul-hamid-achik/vidtrace/internal/timeline"
@@ -168,7 +169,7 @@ func IndexBundle(opts IndexOptions) (IndexReport, error) {
 		return IndexReport{}, err
 	}
 
-	db, err := veclite.Open(dbPath)
+	db, err := vlsession.New(vlsession.Config{Path: dbPath}).ReadWrite()
 	if err != nil {
 		return IndexReport{}, fmt.Errorf("open evidence db: %w", err)
 	}
@@ -258,7 +259,7 @@ func IndexBundles(bundleDirs []string, dbPath string, embedder embed.Embedder) (
 		return MultiIndexReport{}, fmt.Errorf("create evidence db directory: %w", err)
 	}
 
-	db, err := veclite.Open(resolvedDBPath)
+	db, err := vlsession.New(vlsession.Config{Path: resolvedDBPath}).ReadWrite()
 	if err != nil {
 		return MultiIndexReport{}, fmt.Errorf("open evidence db: %w", err)
 	}
@@ -522,7 +523,7 @@ func Search(opts SearchOptions) (SearchReport, error) {
 		return SearchReport{}, fmt.Errorf("evidence db not found: %s", dbPath)
 	}
 
-	db, err := veclite.Open(dbPath, veclite.WithReadOnly(true), veclite.WithSharedRead(true))
+	db, err := vlsession.New(vlsession.Config{Path: dbPath}).ReadOnly()
 	if err != nil {
 		return SearchReport{}, fmt.Errorf("open evidence db: %w", err)
 	}
@@ -845,7 +846,7 @@ func Migrate(dbPath string) (MigrateReport, error) {
 		return MigrateReport{}, fmt.Errorf("evidence db not found: %s", resolved)
 	}
 
-	db, err := veclite.Open(resolved)
+	db, err := vlsession.New(vlsession.Config{Path: resolved}).ReadWrite()
 	if err != nil {
 		return MigrateReport{}, fmt.Errorf("open evidence db: %w", err)
 	}
