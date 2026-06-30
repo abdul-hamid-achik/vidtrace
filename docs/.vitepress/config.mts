@@ -15,7 +15,7 @@ export default defineConfig({
 
   sitemap: { hostname: 'https://vidtrace.dev' },
   themeConfig: {
-    logo: "/logo.svg",
+    logo: { src: "/logo.svg", dark: "/logo-dark.svg" },
     nav: [
       { text: "Guide", link: "/usage" },
       { text: "Studio", link: "/studio" },
