@@ -14,3 +14,4 @@ coverage.out
 *.m4v
 *.avi
 *_artifacts_*/
+.vercel
