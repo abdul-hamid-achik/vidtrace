@@ -4,6 +4,18 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-07-07
+
+### Added
+
+- `line` and `symbol` fields on each `investigate --connect` `code_matches[]` entry. `line` is the 1-based line number of the matched chunk (parsed from fcheap connect's `file:line` location); `symbol` is the enclosing symbol name, back-filled by `--codemap` and omitted otherwise. The flat `code_matches` entry now anchors owning code without requiring `--codemap`. `file` is now the pure source path (no `:line` suffix). The Markdown handoff renders `file:line` (and the symbol when known).
+
+### Changed
+
+- When `--json` is set, every non-zero exit — including usage and validation errors (exit 2) — now writes `{"ok":false,"error":"..."}` to stdout and leaves stderr empty, matching the existing run-failure shape. Previously usage/validation errors printed plain text to stderr even under `--json`, forcing adapters to drop the real reason. Applied uniformly across `extract`, `doctor`, `index`, `search`, `migrate-evidence`, `investigate`, `compare`, `validate`, `clip`, and `stash`. Flag-parse errors under `--json` are detected via raw arg scan so an unknown flag before `-json` still yields structured output.
+- `investigate --codemap` now relativizes fcheap connect's absolute match paths against the codebase before calling `codemap symbol-at`, so symbol resolution, callers, and blast radius resolve correctly instead of silently returning `resolution: "none"`. `codemap_expansion.symbols[].file` is now project-relative.
+- `extract` `output_dir` documented as the single entry-point field for downstream commands (`validate`, `index`, `investigate`, `compare`, `analyze`, `studio`).
+
 ## [0.13.0] - 2026-06-25
 
 ### Added

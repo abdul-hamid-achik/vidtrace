@@ -63,12 +63,17 @@ type SearchResult struct {
 	Matches []SearchMatch `json:"matches,omitempty"`
 }
 
-// CodeMatch is a single code match from fcheap connect.
+// CodeMatch is a single code match from fcheap connect. File is the source
+// file path (without any :line suffix); Line is the 1-based line number of
+// the matched chunk (0 when unknown). Symbol is the enclosing symbol name
+// when known (populated by codemap expansion; omitted otherwise).
 type CodeMatch struct {
 	StashID string  `json:"stash_id,omitempty"`
 	Score   float64 `json:"score,omitempty"`
 	Text    string  `json:"text"`
 	File    string  `json:"file"`
+	Line    int     `json:"line,omitempty"`
+	Symbol  string  `json:"symbol,omitempty"`
 	Source  string  `json:"source,omitempty"`
 }
 

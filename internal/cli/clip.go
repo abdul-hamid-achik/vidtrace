@@ -17,7 +17,11 @@ import (
 )
 
 func runClip(args []string, stdout, stderr io.Writer) int {
+	jsonWanted := jsonFlagRequested(args)
 	if len(args) == 0 {
+		if jsonWanted {
+			return writeUsageError(stdout, stderr, true, "usage: vidtrace clip [cut|gif|stitch] [flags] /path/to/video.mp4")
+		}
 		printClipHelp(stderr)
 		return 2
 	}
@@ -36,9 +40,7 @@ func runClip(args []string, stdout, stderr io.Writer) int {
 		printClipHelp(stdout)
 		return 0
 	default:
-		_, _ = fmt.Fprintf(stderr, "unknown clip subcommand: %s\n\n", sub)
-		printClipHelp(stderr)
-		return 2
+		return writeUsageError(stdout, stderr, jsonWanted, fmt.Sprintf("unknown clip subcommand: %s", sub))
 	}
 }
 
@@ -55,25 +57,23 @@ func runClipCut(args []string, stdout, stderr io.Writer) int {
 	var ranges []string
 	var labels []string
 	var tags []string
+	jsonWanted := jsonFlagRequested(args)
 	normalizedArgs, err := normalizeClipArgs(args, map[string]struct{}{"json": {}, "reencode": {}, "stash": {}}, map[string]struct{}{
 		"out":  {},
 		"name": {},
 		"tool": {},
 	}, &ranges, &labels, &tags)
 	if err != nil {
-		_, _ = fmt.Fprintln(stderr, err)
-		return 2
+		return writeUsageError(stdout, stderr, jsonWanted, err.Error())
 	}
-	if err := fs.Parse(normalizedArgs); err != nil {
-		return 2
+	if err := parseFlagsJSON(fs, normalizedArgs, jsonWanted); err != nil {
+		return writeUsageError(stdout, stderr, jsonWanted, err.Error())
 	}
 	if fs.NArg() != 1 {
-		_, _ = fmt.Fprintln(stderr, "usage: vidtrace clip cut [flags] /path/to/video.mp4")
-		return 2
+		return writeUsageError(stdout, stderr, *jsonOutput, "usage: vidtrace clip cut [flags] /path/to/video.mp4")
 	}
 	if len(ranges) == 0 && len(labels) == 0 {
-		_, _ = fmt.Fprintln(stderr, "at least one --range or --label is required")
-		return 2
+		return writeUsageError(stdout, stderr, *jsonOutput, "at least one --range or --label is required")
 	}
 
 	specs, err := buildClipSpecs(ranges, labels)
@@ -147,6 +147,7 @@ func runClipGIF(args []string, stdout, stderr io.Writer) int {
 	var ranges []string
 	var labels []string
 	var tags []string
+	jsonWanted := jsonFlagRequested(args)
 	normalizedArgs, err := normalizeClipArgs(args, map[string]struct{}{"json": {}, "stash": {}}, map[string]struct{}{
 		"out":   {},
 		"name":  {},
@@ -155,19 +156,16 @@ func runClipGIF(args []string, stdout, stderr io.Writer) int {
 		"tool":  {},
 	}, &ranges, &labels, &tags)
 	if err != nil {
-		_, _ = fmt.Fprintln(stderr, err)
-		return 2
+		return writeUsageError(stdout, stderr, jsonWanted, err.Error())
 	}
-	if err := fs.Parse(normalizedArgs); err != nil {
-		return 2
+	if err := parseFlagsJSON(fs, normalizedArgs, jsonWanted); err != nil {
+		return writeUsageError(stdout, stderr, jsonWanted, err.Error())
 	}
 	if fs.NArg() != 1 {
-		_, _ = fmt.Fprintln(stderr, "usage: vidtrace clip gif [flags] /path/to/video.mp4")
-		return 2
+		return writeUsageError(stdout, stderr, *jsonOutput, "usage: vidtrace clip gif [flags] /path/to/video.mp4")
 	}
 	if len(ranges) == 0 && len(labels) == 0 {
-		_, _ = fmt.Fprintln(stderr, "at least one --range or --label is required")
-		return 2
+		return writeUsageError(stdout, stderr, *jsonOutput, "at least one --range or --label is required")
 	}
 
 	specs, err := buildClipSpecs(ranges, labels)
@@ -234,20 +232,19 @@ func runClipStitch(args []string, stdout, stderr io.Writer) int {
 	name := fs.String("name", "stitched", "output filename (without extension)")
 	jsonOutput := fs.Bool("json", false, "print machine-readable JSON")
 
+	jsonWanted := jsonFlagRequested(args)
 	normalizedArgs, err := normalizeClipArgs(args, map[string]struct{}{"json": {}}, map[string]struct{}{
 		"out":  {},
 		"name": {},
 	}, nil, nil, nil)
 	if err != nil {
-		_, _ = fmt.Fprintln(stderr, err)
-		return 2
+		return writeUsageError(stdout, stderr, jsonWanted, err.Error())
 	}
-	if err := fs.Parse(normalizedArgs); err != nil {
-		return 2
+	if err := parseFlagsJSON(fs, normalizedArgs, jsonWanted); err != nil {
+		return writeUsageError(stdout, stderr, jsonWanted, err.Error())
 	}
 	if fs.NArg() < 2 {
-		_, _ = fmt.Fprintln(stderr, "usage: vidtrace clip stitch [flags] clip1.mp4 clip2.mp4 [clip3.mp4 ...]")
-		return 2
+		return writeUsageError(stdout, stderr, *jsonOutput, "usage: vidtrace clip stitch [flags] clip1.mp4 clip2.mp4 [clip3.mp4 ...]")
 	}
 
 	clipPaths := make([]string, 0, fs.NArg())

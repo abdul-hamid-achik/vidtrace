@@ -1,6 +1,7 @@
 package investigate
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -496,6 +497,89 @@ func TestSplitFileLine(t *testing.T) {
 		if ok && (file != tc.file || line != tc.line) {
 			t.Errorf("splitFileLine(%q) = (%q, %d), want (%q, %d)", tc.input, file, line, tc.file, tc.line)
 		}
+	}
+}
+
+func TestRelativizeForCodemap(t *testing.T) {
+	tests := []struct {
+		file, codebase, want string
+	}{
+		{"/Users/x/proj/src/a.go", "/Users/x/proj", "src/a.go"},
+		{"/Users/x/proj/src/a.go", "/Users/x/proj/", "src/a.go"},
+		{"src/a.go", "/Users/x/proj", "src/a.go"},
+		{"/other/a.go", "/Users/x/proj", "/other/a.go"},
+		{"", "/Users/x/proj", ""},
+		{"/Users/x/proj/a.go", "", "/Users/x/proj/a.go"},
+	}
+	for _, tc := range tests {
+		if got := relativizeForCodemap(tc.file, tc.codebase); got != tc.want {
+			t.Errorf("relativizeForCodemap(%q,%q) = %q, want %q", tc.file, tc.codebase, got, tc.want)
+		}
+	}
+}
+
+func TestSplitCodeMatchLocations(t *testing.T) {
+	matches := []fcheap.CodeMatch{
+		{File: "src/ticket.go:42", Score: 0.9, Text: "func handleTicket()"},
+		{File: "src/routes.go:7", Score: 0.5, Text: "router.GET"},
+		{File: "README.md", Score: 0.1, Text: "# Project"},
+	}
+	splitCodeMatchLocations(matches)
+
+	if matches[0].File != "src/ticket.go" || matches[0].Line != 42 {
+		t.Fatalf("expected file/line split for first match, got %+v", matches[0])
+	}
+	if matches[1].File != "src/routes.go" || matches[1].Line != 7 {
+		t.Fatalf("expected file/line split for second match, got %+v", matches[1])
+	}
+	if matches[2].File != "README.md" || matches[2].Line != 0 {
+		t.Fatalf("expected no-line match unchanged, got %+v", matches[2])
+	}
+}
+
+func TestMarkdownRendersCodeMatchLineAndSymbol(t *testing.T) {
+	report := Report{
+		OK:      true,
+		Query:   "ticket bug",
+		Mode:    "keyword",
+		Summary: "Found 1 hit.",
+		CodeMatches: []fcheap.CodeMatch{
+			{File: "src/ticket.go", Line: 42, Symbol: "handleTicket", Score: 0.85, Text: "func handleTicket()"},
+			{File: "src/routes.go", Score: 0.4, Text: "router"},
+		},
+	}
+
+	out := Markdown(report)
+	if !strings.Contains(out, "src/ticket.go:42") {
+		t.Fatalf("expected markdown to render file:line, got:\n%s", out)
+	}
+	if !strings.Contains(out, "handleTicket") {
+		t.Fatalf("expected markdown to render resolved symbol, got:\n%s", out)
+	}
+	// A match with no line should render the bare file path, not file:0.
+	if strings.Contains(out, "src/routes.go:0") {
+		t.Fatalf("markdown should not render :0 for unknown line, got:\n%s", out)
+	}
+	if !strings.Contains(out, "src/routes.go") {
+		t.Fatalf("expected bare file path for lineless match, got:\n%s", out)
+	}
+}
+
+func TestCodeMatchJSONIncludesLineAndSymbol(t *testing.T) {
+	match := fcheap.CodeMatch{File: "src/ticket.go", Line: 42, Symbol: "handleTicket", Score: 0.85, Text: "func handleTicket()"}
+	raw, err := json.Marshal(match)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal(raw, &decoded); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if decoded["line"].(float64) != 42 {
+		t.Fatalf("expected line=42, got %v", decoded["line"])
+	}
+	if decoded["symbol"] != "handleTicket" {
+		t.Fatalf("expected symbol=handleTicket, got %v", decoded["symbol"])
 	}
 }
 

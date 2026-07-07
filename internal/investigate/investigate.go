@@ -261,7 +261,24 @@ func runConnect(absBundleDir, stashID, codebaseDir, query string, opts Options) 
 		return nil, err.Error()
 	}
 
+	// fcheap connect encodes the match location as "<file>:<line>" in the
+	// File field. Split it into a pure File path and a 1-based Line so the
+	// flat code_matches entry anchors the owning code without --codemap.
+	splitCodeMatchLocations(result.Matches)
 	return result.Matches, ""
+}
+
+// splitCodeMatchLocations splits the "<file>:<line>" location encoded in each
+// match's File field into a pure File path and a 1-based Line. Matches whose
+// File has no line suffix are left unchanged (Line stays 0).
+func splitCodeMatchLocations(matches []fcheap.CodeMatch) {
+	for i := range matches {
+		file, line, ok := splitFileLine(matches[i].File)
+		if ok {
+			matches[i].File = file
+			matches[i].Line = line
+		}
+	}
 }
 
 func Markdown(report Report) string {
@@ -308,7 +325,15 @@ func Markdown(report Report) string {
 	if len(report.CodeMatches) > 0 {
 		writef(&b, "\n## Code Matches\n\n")
 		for _, match := range report.CodeMatches {
-			writef(&b, "- `%s` (score %.4f): %s\n", match.File, match.Score, truncate(match.Text, 120))
+			location := match.File
+			if match.Line > 0 {
+				location = fmt.Sprintf("%s:%d", match.File, match.Line)
+			}
+			label := location
+			if match.Symbol != "" {
+				label = fmt.Sprintf("%s (%s)", location, match.Symbol)
+			}
+			writef(&b, "- `%s` (score %.4f): %s\n", label, match.Score, truncate(match.Text, 120))
 		}
 	}
 
@@ -460,16 +485,33 @@ func runCodemapExpansion(matches []fcheap.CodeMatch, evidenceResults []evidence.
 
 	seen := map[string]bool{}
 	var symbols []SymbolExpansion
-	for _, match := range matches {
-		file, line, ok := splitFileLine(match.File)
-		if !ok {
-			continue
+	for i := range matches {
+		match := matches[i]
+		file := match.File
+		line := match.Line
+		if line <= 0 {
+			// Defensive fallback for matches that still carry a ":line" suffix
+			// or have no line at all.
+			var ok bool
+			file, line, ok = splitFileLine(match.File)
+			if !ok {
+				continue
+			}
 		}
+
+		// fcheap connect returns absolute paths, but codemap symbol-at
+		// resolves against project-relative paths. Relativize so resolution
+		// does not silently return "none" for absolute paths.
+		file = relativizeForCodemap(file, opts.CodebaseDir)
 
 		sa, err := codemap.SymbolAt(ctx, file, line)
 		if err != nil || sa.Resolution == "none" || sa.Symbol == "" {
 			continue
 		}
+
+		// Back-fill the flat code_matches entry with the resolved symbol so
+		// callers can anchor the owning code without re-running codemap.
+		matches[i].Symbol = sa.Symbol
 
 		// Deduplicate by symbol — multiple matches can resolve to the same one.
 		if seen[sa.Symbol] {
@@ -560,6 +602,22 @@ func splitFileLine(s string) (string, int, bool) {
 		return s, 0, false
 	}
 	return file, line, true
+}
+
+// relativizeForCodemap returns a project-relative form of file when it lives
+// under codebaseDir. codemap symbol-at resolves against project-relative
+// paths and returns resolution "none" for absolute paths, so fcheap
+// connect's absolute paths must be relativized before lookup. Files outside
+// the codebase are returned unchanged.
+func relativizeForCodemap(file, codebaseDir string) string {
+	if file == "" || codebaseDir == "" {
+		return file
+	}
+	rel, err := filepath.Rel(codebaseDir, file)
+	if err != nil || strings.HasPrefix(rel, "..") {
+		return file
+	}
+	return rel
 }
 
 func keywordPhrase(text string, limit int) string {

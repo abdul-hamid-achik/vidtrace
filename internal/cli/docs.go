@@ -107,7 +107,7 @@ Ticket comparison:
   - Call out when the video shows a different screen, flow, error, account, environment, or timestamp than the ticket describes.
 
 Rules:
-  - Treat --json stdout as the automation contract.
+  - Treat --json stdout as the contract; every non-zero exit (incl. exit 2) emits {"ok":false,"error":...} on stdout.
   - Do not rely on human progress text.
   - Do not move or rewrite generated artifacts.
   - Do not commit source videos or artifact bundles.

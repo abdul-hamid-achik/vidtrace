@@ -51,12 +51,12 @@ outcomes:
     description: generated site includes required documentation pages
     verify:
       command:
-        run: "test -f docs/.vitepress/dist/index.html && test -f docs/.vitepress/dist/INSTALL.html && test -f docs/.vitepress/dist/USAGE.html && test -f docs/.vitepress/dist/STUDIO.html && test -f docs/.vitepress/dist/CLI_CONTRACT.html && test -f docs/.vitepress/dist/ARTIFACT_SCHEMA.html && test -f docs/.vitepress/dist/RELEASE.html"
+        run: "test -f docs/.vitepress/dist/index.html && test -f docs/.vitepress/dist/install.html && test -f docs/.vitepress/dist/usage.html && test -f docs/.vitepress/dist/studio.html && test -f docs/.vitepress/dist/cli-contract.html && test -f docs/.vitepress/dist/artifact-schema.html && test -f docs/.vitepress/dist/release.html && test -f docs/.vitepress/dist/clip.html"
   - id: generated_from_markdown
     description: generated page contains rendered markdown content
     verify:
       command:
-        run: "grep -q 'Human Workflow' docs/.vitepress/dist/USAGE.html"
+        run: "grep -q 'Human Workflow' docs/.vitepress/dist/usage.html"
   - id: navigation_generated
     description: generated site contains VitePress navigation for core docs
     verify:

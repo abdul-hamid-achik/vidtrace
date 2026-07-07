@@ -899,6 +899,168 @@ func TestInvestigateCodemapRequiresConnect(t *testing.T) {
 	}
 }
 
+// decodeUsageError unmarshals a {ok,error} usage-error payload and asserts
+// the shape Cortex's adapter depends on under -json.
+func decodeUsageError(t *testing.T, stdout *bytes.Buffer) struct {
+	OK    bool   `json:"ok"`
+	Error string `json:"error"`
+} {
+	t.Helper()
+	var got struct {
+		OK    bool   `json:"ok"`
+		Error string `json:"error"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("expected {ok,error} JSON, got %q: %v", stdout.String(), err)
+	}
+	return got
+}
+
+func TestJSONFlagRequested(t *testing.T) {
+	tests := []struct {
+		args []string
+		want bool
+	}{
+		{[]string{"--json"}, true},
+		{[]string{"-json"}, true},
+		{[]string{"--json=true"}, true},
+		{[]string{"--json=false"}, false},
+		{[]string{"extract", "/tmp/x.mp4", "--json"}, true},
+		{[]string{"investigate", "--badflag", "--json"}, true},
+		{[]string{"investigate", "--query", "x"}, false},
+		{[]string{}, false},
+	}
+	for _, tc := range tests {
+		if got := jsonFlagRequested(tc.args); got != tc.want {
+			t.Errorf("jsonFlagRequested(%v) = %v, want %v", tc.args, got, tc.want)
+		}
+	}
+}
+
+func TestInvestigateJSONUsageErrorMissingQuery(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"investigate", "/tmp/bundle", "--json"}, &stdout, &stderr, "test")
+	if code != 2 {
+		t.Fatalf("expected exit code 2, got %d", code)
+	}
+	got := decodeUsageError(t, &stdout)
+	if got.OK {
+		t.Fatalf("expected ok=false, got %#v", got)
+	}
+	if !strings.Contains(got.Error, "missing required --query") {
+		t.Fatalf("expected missing-query error, got %q", got.Error)
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("expected empty stderr under -json, got %q", stderr.String())
+	}
+}
+
+func TestInvestigateJSONConnectRequiresCodebase(t *testing.T) {
+	bundleDir := writeCLIBundle(t)
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"investigate", bundleDir, "--query", "x", "--connect", "--json"}, &stdout, &stderr, "test")
+	if code != 2 {
+		t.Fatalf("expected exit code 2, got %d", code)
+	}
+	got := decodeUsageError(t, &stdout)
+	if !strings.Contains(got.Error, "--connect requires --codebase") {
+		t.Fatalf("expected connect-requires-codebase error, got %q", got.Error)
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("expected empty stderr under -json, got %q", stderr.String())
+	}
+}
+
+func TestInvestigateJSONMissingBundle(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"investigate", "--query", "x", "--json"}, &stdout, &stderr, "test")
+	if code != 2 {
+		t.Fatalf("expected exit code 2, got %d", code)
+	}
+	got := decodeUsageError(t, &stdout)
+	if !strings.Contains(got.Error, "usage: vidtrace investigate") {
+		t.Fatalf("expected usage error, got %q", got.Error)
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("expected empty stderr under -json, got %q", stderr.String())
+	}
+}
+
+func TestInvestigateJSONBadFlagBeforeJSON(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"investigate", "--nope", "--json"}, &stdout, &stderr, "test")
+	if code != 2 {
+		t.Fatalf("expected exit code 2, got %d", code)
+	}
+	got := decodeUsageError(t, &stdout)
+	if got.OK {
+		t.Fatalf("expected ok=false for unknown flag under -json, got %#v", got)
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("expected empty stderr under -json, got %q", stderr.String())
+	}
+}
+
+func TestExtractJSONUsageErrorMissingVideo(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"extract", "--json"}, &stdout, &stderr, "test")
+	if code != 2 {
+		t.Fatalf("expected exit code 2, got %d", code)
+	}
+	got := decodeUsageError(t, &stdout)
+	if !strings.Contains(got.Error, "usage: vidtrace extract") {
+		t.Fatalf("expected extract usage error, got %q", got.Error)
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("expected empty stderr under -json, got %q", stderr.String())
+	}
+}
+
+func TestValidateJSONUsageErrorMissingBundle(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"validate", "--json"}, &stdout, &stderr, "test")
+	if code != 2 {
+		t.Fatalf("expected exit code 2, got %d", code)
+	}
+	got := decodeUsageError(t, &stdout)
+	if !strings.Contains(got.Error, "usage: vidtrace validate") {
+		t.Fatalf("expected validate usage error, got %q", got.Error)
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("expected empty stderr under -json, got %q", stderr.String())
+	}
+}
+
+func TestSearchJSONUsageErrorMissingArgs(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"search", "--json"}, &stdout, &stderr, "test")
+	if code != 2 {
+		t.Fatalf("expected exit code 2, got %d", code)
+	}
+	got := decodeUsageError(t, &stdout)
+	if !strings.Contains(got.Error, "usage: vidtrace search") {
+		t.Fatalf("expected search usage error, got %q", got.Error)
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("expected empty stderr under -json, got %q", stderr.String())
+	}
+}
+
+func TestStashListJSONBadFlag(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"stash", "list", "--nope", "--json"}, &stdout, &stderr, "test")
+	if code != 2 {
+		t.Fatalf("expected exit code 2, got %d", code)
+	}
+	got := decodeUsageError(t, &stdout)
+	if got.OK {
+		t.Fatalf("expected ok=false for unknown flag under -json, got %#v", got)
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("expected empty stderr under -json, got %q", stderr.String())
+	}
+}
+
 func TestNormalizeExtractArgsAllowsFlagsAfterPath(t *testing.T) {
 	args, err := normalizeExtractArgs([]string{"/tmp/bug.mp4", "--fps", "2", "--json", "--out=/tmp/out"})
 	if err != nil {

@@ -10,6 +10,8 @@ This document describes the intended stable command surface for `vidtrace`.
 | 1 | Runtime failure or missing requirement |
 | 2 | Usage error |
 
+When `--json` is set, **every** non-zero exit (including usage/validation errors at exit 2) writes `{"ok":false,"error":"<message>"}` to stdout and leaves stderr empty, matching the run-failure shape. Never emit or parse bare plain-text under `--json`; the `ok`/`error` shape is the stable contract for downstream tools and adapters.
+
 ## Implemented Commands
 
 ### `vidtrace doctor`
@@ -21,7 +23,7 @@ vidtrace doctor
 vidtrace doctor -json
 ```
 
-The JSON output is intended for tests and automation. Required tools are `ffmpeg`, `ffprobe`, `tesseract`, and `whisper`. Optional tools include `ollama` (for semantic/hybrid evidence search), `fcheap` (for stash vault integration), and `vecgrep` (for codebase search via `fcheap connect`).
+The JSON output is intended for tests and automation. Required tools are `ffmpeg`, `ffprobe`, `tesseract`, and `whisper`. Optional tools include `ollama` (for semantic/hybrid evidence search), `fcheap` (for stash vault integration), `vecgrep` (for codebase search via `fcheap connect`), and `codemap` (for structural code graph queries via `investigate --codemap`).
 
 ### `vidtrace version`
 
@@ -316,6 +318,9 @@ Flags:
 | `--stash` | none | fcheap stash ID to restore and investigate instead of a local bundle |
 | `--connect-mode` | none (hybrid) | vecgrep search mode: `semantic`, `keyword`, or `hybrid` |
 | `--connect-limit` | `10` | Maximum code matches from `--connect` |
+| `--codemap` | `false` | After `--connect`, resolve code matches to enclosing symbols, list callers, and compute blast radius (requires `--connect`) |
+| `--codemap-depth` | `3` | Max hops for the codemap blast radius |
+| `--codemap-annotate` | `false` | Pin vidtrace evidence findings to resolved codemap symbols as persistent annotations (`source="vidtrace"`) |
 | `--json` | `false` | Emit machine-readable JSON |
 
 Example success JSON:
@@ -349,7 +354,7 @@ Example success JSON:
 }
 ```
 
-When `--connect` is used, the JSON adds `code_matches` and optionally `connect_error`:
+When `--connect` is used, the JSON adds `code_matches` and optionally `connect_error`. Each `code_matches` entry carries `file` (the source path without any `:line` suffix), `line` (1-based line number of the matched chunk; 0/omitted when unknown), and `symbol` (the enclosing symbol name, populated by `--codemap` and omitted otherwise) so downstream tools can anchor the owning code without re-running codemap:
 
 ```json
 {
@@ -364,11 +369,49 @@ When `--connect` is used, the JSON adds `code_matches` and optionally `connect_e
   "code_matches": [
     {
       "file": "src/checkout/handler.go",
+      "line": 42,
       "score": 0.85,
       "text": "func handleCheckoutSubmit(w http.ResponseWriter, r *http.Request)"
     }
   ],
   "summary": "Found 1 video evidence hit(s) and 2 suggested code search(es); vecgrep command suggestions included; 1 code match(es) found via fcheap connect."
+}
+```
+
+When `--codemap` is added to `--connect`, vidtrace resolves each code match to its enclosing symbol via `codemap symbol-at`, lists direct callers via `codemap callers`, and computes a transitive blast radius via `codemap impact`. Resolved symbol names are also back-filled into the flat `code_matches[]` entries' `symbol` field, so downstream tools that only read `code_matches` still get the owning symbol. Pass `--codemap-annotate` to pin a vidtrace evidence annotation (with `source="vidtrace"`) to each resolved symbol so future code-graph queries can join back to the evidence. `--codemap` requires `--connect` (exit code 2 otherwise) and degrades gracefully: if `codemap` is not installed, the report still succeeds and the failure is recorded in `codemap_error`. `vidtrace doctor` reports whether `codemap` is installed.
+
+When `--codemap` is used, the JSON adds `codemap_expansion` (and optionally `codemap_error`):
+
+```json
+{
+  "ok": true,
+  "query": "checkout button error",
+  "bundle_dir": "/path/to/bug_artifacts_YYYYMMDD_HHMMSS",
+  "codebase_dir": "/path/to/app",
+  "mode": "keyword",
+  "evidence": [...],
+  "suggested_queries": [...],
+  "vecgrep_commands": [...],
+  "code_matches": [...],
+  "codemap_expansion": {
+    "symbols": [
+      {
+        "file": "src/checkout/handler.go",
+        "line": 42,
+        "symbol": "github.com/app/checkout.handleCheckoutSubmit",
+        "kind": "func",
+        "resolution": "symbol",
+        "callers": [
+          { "name": "github.com/app/router.handleCheckoutRoute", "file": "src/router/router.go", "line": 18 }
+        ],
+        "blast_radius": [
+          { "name": "github.com/app/main.run", "file": "src/main.go", "line": 9 }
+        ],
+        "tested": false
+      }
+    ]
+  },
+  "summary": "Found 1 video evidence hit(s) and 2 suggested code search(es); vecgrep command suggestions included; 1 code match(es) found via fcheap connect; 1 symbol(s) expanded via codemap."
 }
 ```
 
@@ -430,7 +473,7 @@ Flags:
 | `--name` | input basename | Artifact bundle name prefix |
 | `--json` | `false` | Emit machine-readable run summary |
 
-Human output is progress-oriented and readable, with numbered step progress bars. JSON output writes only JSON to stdout.
+Human output is progress-oriented and readable, with numbered step progress bars. JSON output writes only JSON to stdout. The `output_dir` field is the entry-point for downstream tools: feed it straight into `vidtrace validate`, `vidtrace index`, `vidtrace investigate`, `vidtrace compare`, `vidtrace analyze`, or `vidtrace studio` without further parsing.
 
 Example success JSON:
 
@@ -459,8 +502,8 @@ Example failure JSON:
 
 ```json
 {
-  "error": "source video not found: /path/to/missing.mp4",
-  "ok": false
+  "ok": false,
+  "error": "source video not found: /path/to/missing.mp4"
 }
 ```
 
@@ -526,7 +569,7 @@ Example `stash list` JSON:
 
 ### `vidtrace clip`
 
-Cuts video clips, makes GIFs, and stitches clips from timestamp ranges. Requires `ffmpeg`.
+Cuts video clips, makes GIFs, and stitches clips from timestamp ranges. Requires `ffmpeg`. See [Clip](clip.md) for the workflow-oriented guide.
 
 ```bash
 vidtrace clip cut /path/to/video.mp4 --label "issue1=0:18-3:40" --json
@@ -628,13 +671,20 @@ It exposes these read-only tools, whose inputs and structured outputs mirror the
 | `search` | Search an evidence database (`db_path`, `query`, optional `mode`, filters, and `embed`/`embed_model`/`ollama_url`). |
 | `compare` | Structured ticket-vs-bundle comparison (`bundle_dir`, `ticket_path`). |
 | `analyze` | Markdown evidence report (`bundle_dir`, `ticket_path`). |
-| `investigate` | Video-evidence to code-search handoff (`bundle_dir` or `stash_id`, `query`, optional `codebase_dir`, `connect`, `connect_mode`, `connect_limit`). |
+| `investigate` | Video-evidence to code-search handoff (`bundle_dir` or `stash_id`, `query`, optional `codebase_dir`, `connect`, `connect_mode`, `connect_limit`, `codemap`, `codemap_depth`, `codemap_annotate`). |
 | `stash_list` | List fcheap stashes (`tool`, `tag`). |
 | `stash_info` | Get stash metadata (`stash_id`). |
 | `stash_search` | Search across stashes (`query`, `mode`, `limit`). |
 | `stash_connect` | Connect a stash to a codebase via vecgrep (`stash_id`, `codebase`, `query`, `mode`, `limit`, `index`). |
+| `codemap_symbol_at` | Resolve a `file` + `line` to its enclosing symbol (FQN, kind, range). |
+| `codemap_callers` | List callers of a `symbol` (optional `precise` via the language server). |
+| `codemap_impact` | Blast radius and test coverage for a `symbol` (optional `depth`, default 3). |
+| `codemap_semantic` | Semantic search across the code graph by meaning (`query`, optional `top_k`). |
+| `codemap_find` | Find symbols by name or FQN substring (`query`, optional `top_k`). |
+| `codemap_context` | Everything about a `symbol` in one call: definition, callers, callees, tests, annotations (optional `depth`). |
 
 No tool mutates source videos or generated artifact bundles. `stash_save` is intentionally excluded from MCP to respect the read-only constraint. Tool failures are returned as MCP tool errors (visible to the model), not protocol errors. A client disconnect (stdin EOF) is a clean shutdown.
+The `codemap_*` tools and the `codemap`/`codemap_annotate` options on `investigate` require the optional `codemap` CLI; they return a clear error when it is not installed, so a missing `codemap` never breaks the MCP server or the other tools. `vidtrace doctor` reports whether `codemap` is installed.
 
 Example client registration (Claude Desktop / MCP client config):
 

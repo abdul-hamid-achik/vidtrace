@@ -19,6 +19,7 @@ func runIndex(args []string, stdout, stderr io.Writer) int {
 	ollamaURL := fs.String("ollama-url", "", "Ollama base URL (default http://localhost:11434)")
 	jsonOutput := fs.Bool("json", false, "print machine-readable JSON")
 
+	jsonWanted := jsonFlagRequested(args)
 	normalizedArgs, err := normalizeBundleArgs(args, map[string]struct{}{"json": {}}, map[string]struct{}{
 		"db":          {},
 		"embed":       {},
@@ -26,19 +27,16 @@ func runIndex(args []string, stdout, stderr io.Writer) int {
 		"ollama-url":  {},
 	})
 	if err != nil {
-		_, _ = fmt.Fprintln(stderr, err)
-		return 2
+		return writeUsageError(stdout, stderr, jsonWanted, err.Error())
 	}
-	if err := fs.Parse(normalizedArgs); err != nil {
-		return 2
+	if err := parseFlagsJSON(fs, normalizedArgs, jsonWanted); err != nil {
+		return writeUsageError(stdout, stderr, jsonWanted, err.Error())
 	}
 	if fs.NArg() < 1 {
-		_, _ = fmt.Fprintln(stderr, "usage: vidtrace index /path/to/bundle [/path/to/bundle ...] --db /path/to/evidence.veclite [--embed ollama --embed-model MODEL] [--json]")
-		return 2
+		return writeUsageError(stdout, stderr, *jsonOutput, "usage: vidtrace index /path/to/bundle [/path/to/bundle ...] --db /path/to/evidence.veclite [--embed ollama --embed-model MODEL] [--json]")
 	}
 	if strings.TrimSpace(*dbPath) == "" {
-		_, _ = fmt.Fprintln(stderr, "missing required --db")
-		return 2
+		return writeUsageError(stdout, stderr, *jsonOutput, "missing required --db")
 	}
 
 	resolvedDBPath, err := expandHome(*dbPath)
@@ -131,6 +129,7 @@ func runSearch(args []string, stdout, stderr io.Writer) int {
 	embedModel := fs.String("embed-model", "", "embedding model name for the provider")
 	ollamaURL := fs.String("ollama-url", "", "Ollama base URL (default http://localhost:11434)")
 
+	jsonWanted := jsonFlagRequested(args)
 	normalizedArgs, err := normalizeBundleArgs(args, map[string]struct{}{"json": {}}, map[string]struct{}{
 		"limit":        {},
 		"bundle":       {},
@@ -144,15 +143,13 @@ func runSearch(args []string, stdout, stderr io.Writer) int {
 		"ollama-url":   {},
 	})
 	if err != nil {
-		_, _ = fmt.Fprintln(stderr, err)
-		return 2
+		return writeUsageError(stdout, stderr, jsonWanted, err.Error())
 	}
-	if err := fs.Parse(normalizedArgs); err != nil {
-		return 2
+	if err := parseFlagsJSON(fs, normalizedArgs, jsonWanted); err != nil {
+		return writeUsageError(stdout, stderr, jsonWanted, err.Error())
 	}
 	if fs.NArg() < 2 {
-		_, _ = fmt.Fprintln(stderr, "usage: vidtrace search /path/to/evidence.veclite QUERY [--mode keyword|semantic|hybrid] [--embed ollama --embed-model MODEL] [--limit N] [--bundle DIR] [--source-video PATH] [--source SOURCE] [--min-time SECONDS] [--max-time SECONDS] [--json]")
-		return 2
+		return writeUsageError(stdout, stderr, *jsonOutput, "usage: vidtrace search /path/to/evidence.veclite QUERY [--mode keyword|semantic|hybrid] [--embed ollama --embed-model MODEL] [--limit N] [--bundle DIR] [--source-video PATH] [--source SOURCE] [--min-time SECONDS] [--max-time SECONDS] [--json]")
 	}
 
 	resolvedDBPath, err := expandHome(fs.Arg(0))
@@ -244,17 +241,16 @@ func runMigrateEvidence(args []string, stdout, stderr io.Writer) int {
 	fs.SetOutput(stderr)
 	jsonOutput := fs.Bool("json", false, "print machine-readable JSON")
 
+	jsonWanted := jsonFlagRequested(args)
 	normalizedArgs, err := normalizeBundleArgs(args, map[string]struct{}{"json": {}}, map[string]struct{}{})
 	if err != nil {
-		_, _ = fmt.Fprintln(stderr, err)
-		return 2
+		return writeUsageError(stdout, stderr, jsonWanted, err.Error())
 	}
-	if err := fs.Parse(normalizedArgs); err != nil {
-		return 2
+	if err := parseFlagsJSON(fs, normalizedArgs, jsonWanted); err != nil {
+		return writeUsageError(stdout, stderr, jsonWanted, err.Error())
 	}
 	if fs.NArg() != 1 {
-		_, _ = fmt.Fprintln(stderr, "usage: vidtrace migrate-evidence /path/to/evidence.veclite [--json]")
-		return 2
+		return writeUsageError(stdout, stderr, *jsonOutput, "usage: vidtrace migrate-evidence /path/to/evidence.veclite [--json]")
 	}
 
 	resolvedDBPath, err := expandHome(fs.Arg(0))

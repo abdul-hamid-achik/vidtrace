@@ -30,7 +30,8 @@ export default defineConfig({
           { text: "Install", link: "/install" },
           { text: "Usage", link: "/usage" },
           { text: "Analysis", link: "/analysis" },
-          { text: "Studio", link: "/studio" }
+          { text: "Studio", link: "/studio" },
+          { text: "Clip", link: "/clip" }
         ]
       },
       {

@@ -24,6 +24,7 @@ External tools own:
 - speech transcription via `whisper`
 - bundle stashing and cross-stash search via `fcheap` (optional)
 - codebase search via `vecgrep` through `fcheap connect` (optional)
+- structural code graph queries via `codemap` (optional)
 
 ## Component Map
 
@@ -36,6 +37,8 @@ cmd/vidtrace
     ├── internal/evidence
     ├── internal/embed
     ├── internal/fcheap
+    ├── internal/clip
+    ├── internal/codemap
     ├── internal/investigate
     ├── internal/studio
     ├── internal/pipeline
@@ -75,9 +78,11 @@ Human extraction progress is intentionally coarse and step-based. It should help
 
 Evidence search is optional and separate from extraction. `internal/evidence` reads validated bundles and writes a local VecLite database for BM25 keyword search over timeline entries. Source-code search stays outside the core pipeline and should use vecgrep as the companion tool.
 
-`internal/investigate` builds on evidence search to create a compact handoff: timestamped video evidence, suggested code-search queries, and vecgrep command suggestions when a codebase path is provided. With `--connect`, it runs `fcheap connect` (vecgrep) to return real `file:line` code matches. With `--stash`, it restores a stashed bundle from the fcheap vault before investigation.
+`internal/investigate` builds on evidence search to create a compact handoff: timestamped video evidence, suggested code-search queries, and vecgrep command suggestions when a codebase path is provided. With `--connect`, it runs `fcheap connect` (vecgrep) to return real `file:line` code matches. With `--codemap`, it resolves those matches onto the code graph via `internal/codemap` (symbol-at, callers, impact) and can pin `source="vidtrace"` annotations. With `--stash`, it restores a stashed bundle from the fcheap vault before investigation.
 
 `internal/fcheap` wraps the fcheap CLI for bundle stashing (`Save`, `Restore`), vault search (`List`, `Info`, `Search`), and codebase connect (`Connect`). It mirrors the `internal/ffmpeg`/`internal/tesseract`/`internal/whisper` pattern of shelling out to external CLI tools.
+
+`internal/clip` wraps `internal/ffmpeg` for cutting sub-clips, making GIFs, and stitching clips from timestamp ranges. It parses and validates timestamps (`SS`, `MM:SS`, `HH:MM:SS`) and writes a `clips.json` manifest to each output directory. Clip works on source videos and clip files, not on extracted artifact bundles.
 
 ## Documentation Site
 

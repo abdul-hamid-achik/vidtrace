@@ -8,6 +8,7 @@
 - [Usage](usage.md): run human and agent workflows.
 - [Analysis](analysis.md): compare tickets with extracted video evidence.
 - [Studio](studio.md): inspect a generated bundle in the terminal Studio.
+- [Clip](clip.md): cut clips, make GIFs, and stitch videos from timestamp ranges.
 
 ## Reference
 

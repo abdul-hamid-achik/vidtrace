@@ -25,6 +25,7 @@ func runInvestigate(args []string, stdout, stderr io.Writer) int {
 	codemapAnnotate := fs.Bool("codemap-annotate", false, "pin vidtrace evidence findings to resolved codemap symbols")
 	jsonOutput := fs.Bool("json", false, "print machine-readable JSON")
 
+	jsonWanted := jsonFlagRequested(args)
 	normalizedArgs, err := normalizeBundleArgs(args, map[string]struct{}{"json": {}, "connect": {}}, map[string]struct{}{
 		"query":         {},
 		"db":            {},
@@ -36,25 +37,21 @@ func runInvestigate(args []string, stdout, stderr io.Writer) int {
 		"codemap-depth": {},
 	})
 	if err != nil {
-		_, _ = fmt.Fprintln(stderr, err)
-		return 2
+		return writeUsageError(stdout, stderr, jsonWanted, err.Error())
 	}
-	if err := fs.Parse(normalizedArgs); err != nil {
-		return 2
+	if err := parseFlagsJSON(fs, normalizedArgs, jsonWanted); err != nil {
+		return writeUsageError(stdout, stderr, jsonWanted, err.Error())
 	}
 	if strings.TrimSpace(*query) == "" {
-		_, _ = fmt.Fprintln(stderr, "missing required --query")
-		return 2
+		return writeUsageError(stdout, stderr, *jsonOutput, "missing required --query")
 	}
 
 	if *connect && strings.TrimSpace(*codebaseDir) == "" {
-		_, _ = fmt.Fprintln(stderr, "--connect requires --codebase")
-		return 2
+		return writeUsageError(stdout, stderr, *jsonOutput, "--connect requires --codebase")
 	}
 
 	if *codemap && !*connect {
-		_, _ = fmt.Fprintln(stderr, "--codemap requires --connect")
-		return 2
+		return writeUsageError(stdout, stderr, *jsonOutput, "--codemap requires --connect")
 	}
 
 	resolvedStashID := strings.TrimSpace(*stashID)
@@ -65,8 +62,7 @@ func runInvestigate(args []string, stdout, stderr io.Writer) int {
 			return writeInvestigateFailure(stdout, stderr, *jsonOutput, fmt.Errorf("resolve bundle path: %w", err))
 		}
 	} else if resolvedStashID == "" {
-		_, _ = fmt.Fprintln(stderr, "usage: vidtrace investigate /path/to/bundle --query TEXT [--codebase /path/to/repo] [--connect] [--codemap] [--stash ID] [--json]")
-		return 2
+		return writeUsageError(stdout, stderr, *jsonOutput, "usage: vidtrace investigate /path/to/bundle --query TEXT [--codebase /path/to/repo] [--connect] [--codemap] [--stash ID] [--json]")
 	}
 
 	resolvedDBPath := strings.TrimSpace(*dbPath)

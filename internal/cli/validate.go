@@ -13,18 +13,17 @@ func runValidate(args []string, stdout, stderr io.Writer) int {
 	fs.SetOutput(stderr)
 	jsonOutput := fs.Bool("json", false, "print machine-readable JSON")
 
+	jsonWanted := jsonFlagRequested(args)
 	normalizedArgs, err := normalizeBundleArgs(args, map[string]struct{}{"json": {}}, nil)
 	if err != nil {
-		_, _ = fmt.Fprintln(stderr, err)
-		return 2
+		return writeUsageError(stdout, stderr, jsonWanted, err.Error())
 	}
 
-	if err := fs.Parse(normalizedArgs); err != nil {
-		return 2
+	if err := parseFlagsJSON(fs, normalizedArgs, jsonWanted); err != nil {
+		return writeUsageError(stdout, stderr, jsonWanted, err.Error())
 	}
 	if fs.NArg() != 1 {
-		_, _ = fmt.Fprintln(stderr, "usage: vidtrace validate [flags] /path/to/bundle")
-		return 2
+		return writeUsageError(stdout, stderr, *jsonOutput, "usage: vidtrace validate [flags] /path/to/bundle")
 	}
 
 	report := bundle.Validate(fs.Arg(0))

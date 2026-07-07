@@ -84,8 +84,8 @@ func runDoctor(args []string, stdout, stderr io.Writer) int {
 	fs.SetOutput(stderr)
 	jsonOutput := fs.Bool("json", false, "print machine-readable JSON")
 
-	if err := fs.Parse(args); err != nil {
-		return 2
+	if err := parseFlagsJSON(fs, args, jsonFlagRequested(args)); err != nil {
+		return writeUsageError(stdout, stderr, jsonFlagRequested(args), err.Error())
 	}
 
 	result := doctor.Check()
@@ -119,18 +119,17 @@ func runExtract(args []string, stdout, stderr io.Writer) int {
 	concurrency := fs.Int("concurrency", 0, "parallel OCR workers (0 = auto, capped to 8)")
 	jsonOutput := fs.Bool("json", false, "print machine-readable JSON")
 
+	jsonWanted := jsonFlagRequested(args)
 	normalizedArgs, err := normalizeExtractArgs(args)
 	if err != nil {
-		_, _ = fmt.Fprintln(stderr, err)
-		return 2
+		return writeUsageError(stdout, stderr, jsonWanted, err.Error())
 	}
 
-	if err := fs.Parse(normalizedArgs); err != nil {
-		return 2
+	if err := parseFlagsJSON(fs, normalizedArgs, jsonWanted); err != nil {
+		return writeUsageError(stdout, stderr, jsonWanted, err.Error())
 	}
 	if fs.NArg() != 1 {
-		_, _ = fmt.Fprintln(stderr, "usage: vidtrace extract [flags] /path/to/video.mp4")
-		return 2
+		return writeUsageError(stdout, stderr, *jsonOutput, "usage: vidtrace extract [flags] /path/to/video.mp4")
 	}
 
 	resolvedOutputDir, err := expandHome(*outputDir)
@@ -251,6 +250,53 @@ func writeJSON(w io.Writer, value any) error {
 	encoder := json.NewEncoder(w)
 	encoder.SetIndent("", "  ")
 	return encoder.Encode(value)
+}
+
+// jsonFlagRequested reports whether the args set the -json/--json flag. It
+// scans args directly so it works even when flag parsing fails before the
+// -json flag is bound (for example an unknown flag appearing before -json).
+// A bare -json or -json=true counts; -json=false does not.
+func jsonFlagRequested(args []string) bool {
+	for _, a := range args {
+		if !strings.HasPrefix(a, "-") || a == "-" {
+			continue
+		}
+		name := strings.TrimLeft(a, "-")
+		if before, _, ok := strings.Cut(name, "="); ok {
+			if before == "json" {
+				return !strings.HasSuffix(a, "=false")
+			}
+			continue
+		}
+		if name == "json" {
+			return true
+		}
+	}
+	return false
+}
+
+// writeUsageError emits a usage/validation error in the format matching the
+// active output mode and returns exit code 2. When jsonOutput is set the
+// error is written to stdout as {"ok":false,"error":<msg>} (never bare
+// text under -json); otherwise it is written to stderr as plain text.
+func writeUsageError(stdout, stderr io.Writer, jsonOutput bool, message string) int {
+	if jsonOutput {
+		_ = writeJSON(stdout, map[string]any{"ok": false, "error": message})
+	} else {
+		_, _ = fmt.Fprintln(stderr, message)
+	}
+	return 2
+}
+
+// parseFlagsJSON parses fs against args. When jsonOutput is requested it
+// suppresses the flag package's own stderr usage output so the caller can
+// emit a structured {ok:false,error} via writeUsageError instead. Returns
+// the parse error (never prints on its own when jsonOutput is set).
+func parseFlagsJSON(fs *flag.FlagSet, args []string, jsonOutput bool) error {
+	if jsonOutput {
+		fs.SetOutput(io.Discard)
+	}
+	return fs.Parse(args)
 }
 
 func defaultOutputDir() string {

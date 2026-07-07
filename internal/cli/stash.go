@@ -12,7 +12,11 @@ import (
 )
 
 func runStash(args []string, stdout, stderr io.Writer) int {
+	jsonWanted := jsonFlagRequested(args)
 	if len(args) == 0 {
+		if jsonWanted {
+			return writeUsageError(stdout, stderr, true, "usage: vidtrace stash [save|list|restore|info|search] [flags] /path/to/bundle")
+		}
 		printStashHelp(stderr)
 		return 2
 	}
@@ -35,9 +39,7 @@ func runStash(args []string, stdout, stderr io.Writer) int {
 		printStashHelp(stdout)
 		return 0
 	default:
-		_, _ = fmt.Fprintf(stderr, "unknown stash subcommand: %s\n\n", sub)
-		printStashHelp(stderr)
-		return 2
+		return writeUsageError(stdout, stderr, jsonWanted, fmt.Sprintf("unknown stash subcommand: %s", sub))
 	}
 }
 
@@ -49,20 +51,19 @@ func runStashSave(args []string, stdout, stderr io.Writer) int {
 	jsonOutput := fs.Bool("json", false, "print machine-readable JSON")
 
 	var tags []string
+	jsonWanted := jsonFlagRequested(args)
 	normalizedArgs, err := normalizeStashArgs(args, map[string]struct{}{"json": {}}, map[string]struct{}{
 		"name": {},
 		"tool": {},
 	}, &tags)
 	if err != nil {
-		_, _ = fmt.Fprintln(stderr, err)
-		return 2
+		return writeUsageError(stdout, stderr, jsonWanted, err.Error())
 	}
-	if err := fs.Parse(normalizedArgs); err != nil {
-		return 2
+	if err := parseFlagsJSON(fs, normalizedArgs, jsonWanted); err != nil {
+		return writeUsageError(stdout, stderr, jsonWanted, err.Error())
 	}
 	if fs.NArg() != 1 {
-		_, _ = fmt.Fprintln(stderr, "usage: vidtrace stash save [flags] /path/to/bundle")
-		return 2
+		return writeUsageError(stdout, stderr, *jsonOutput, "usage: vidtrace stash save [flags] /path/to/bundle")
 	}
 
 	if !fcheap.Available() {
@@ -104,16 +105,16 @@ func runStashList(args []string, stdout, stderr io.Writer) int {
 	tag := fs.String("tag", "", "filter by tag")
 	jsonOutput := fs.Bool("json", false, "print machine-readable JSON")
 
+	jsonWanted := jsonFlagRequested(args)
 	normalizedArgs, err := normalizeStashArgs(args, map[string]struct{}{"json": {}}, map[string]struct{}{
 		"tool": {},
 		"tag":  {},
 	}, nil)
 	if err != nil {
-		_, _ = fmt.Fprintln(stderr, err)
-		return 2
+		return writeUsageError(stdout, stderr, jsonWanted, err.Error())
 	}
-	if err := fs.Parse(normalizedArgs); err != nil {
-		return 2
+	if err := parseFlagsJSON(fs, normalizedArgs, jsonWanted); err != nil {
+		return writeUsageError(stdout, stderr, jsonWanted, err.Error())
 	}
 
 	if !fcheap.Available() {
@@ -151,19 +152,18 @@ func runStashRestore(args []string, stdout, stderr io.Writer) int {
 	target := fs.String("to", "", "target directory (default: fresh temp dir)")
 	jsonOutput := fs.Bool("json", false, "print machine-readable JSON")
 
+	jsonWanted := jsonFlagRequested(args)
 	normalizedArgs, err := normalizeStashArgs(args, map[string]struct{}{"json": {}}, map[string]struct{}{
 		"to": {},
 	}, nil)
 	if err != nil {
-		_, _ = fmt.Fprintln(stderr, err)
-		return 2
+		return writeUsageError(stdout, stderr, jsonWanted, err.Error())
 	}
-	if err := fs.Parse(normalizedArgs); err != nil {
-		return 2
+	if err := parseFlagsJSON(fs, normalizedArgs, jsonWanted); err != nil {
+		return writeUsageError(stdout, stderr, jsonWanted, err.Error())
 	}
 	if fs.NArg() != 1 {
-		_, _ = fmt.Fprintln(stderr, "usage: vidtrace stash restore [flags] <stash-id>")
-		return 2
+		return writeUsageError(stdout, stderr, *jsonOutput, "usage: vidtrace stash restore [flags] <stash-id>")
 	}
 
 	if !fcheap.Available() {
@@ -202,17 +202,16 @@ func runStashInfo(args []string, stdout, stderr io.Writer) int {
 	fs.SetOutput(stderr)
 	jsonOutput := fs.Bool("json", false, "print machine-readable JSON")
 
+	jsonWanted := jsonFlagRequested(args)
 	normalizedArgs, err := normalizeStashArgs(args, map[string]struct{}{"json": {}}, nil, nil)
 	if err != nil {
-		_, _ = fmt.Fprintln(stderr, err)
-		return 2
+		return writeUsageError(stdout, stderr, jsonWanted, err.Error())
 	}
-	if err := fs.Parse(normalizedArgs); err != nil {
-		return 2
+	if err := parseFlagsJSON(fs, normalizedArgs, jsonWanted); err != nil {
+		return writeUsageError(stdout, stderr, jsonWanted, err.Error())
 	}
 	if fs.NArg() != 1 {
-		_, _ = fmt.Fprintln(stderr, "usage: vidtrace stash info <stash-id>")
-		return 2
+		return writeUsageError(stdout, stderr, *jsonOutput, "usage: vidtrace stash info <stash-id>")
 	}
 
 	if !fcheap.Available() {
@@ -253,20 +252,19 @@ func runStashSearch(args []string, stdout, stderr io.Writer) int {
 	limit := fs.Int("limit", 20, "maximum results")
 	jsonOutput := fs.Bool("json", false, "print machine-readable JSON")
 
+	jsonWanted := jsonFlagRequested(args)
 	normalizedArgs, err := normalizeStashArgs(args, map[string]struct{}{"json": {}}, map[string]struct{}{
 		"mode":  {},
 		"limit": {},
 	}, nil)
 	if err != nil {
-		_, _ = fmt.Fprintln(stderr, err)
-		return 2
+		return writeUsageError(stdout, stderr, jsonWanted, err.Error())
 	}
-	if err := fs.Parse(normalizedArgs); err != nil {
-		return 2
+	if err := parseFlagsJSON(fs, normalizedArgs, jsonWanted); err != nil {
+		return writeUsageError(stdout, stderr, jsonWanted, err.Error())
 	}
 	if fs.NArg() != 1 {
-		_, _ = fmt.Fprintln(stderr, "usage: vidtrace stash search [flags] <query>")
-		return 2
+		return writeUsageError(stdout, stderr, *jsonOutput, "usage: vidtrace stash search [flags] <query>")
 	}
 
 	if !fcheap.Available() {

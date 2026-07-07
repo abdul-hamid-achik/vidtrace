@@ -30,6 +30,8 @@ With `--json`, stdout contains JSON only. Agents should read `output_dir` from t
 - `transcript/*.json`
 - selected `frames/frame_*.png`
 
+Under `--json`, every non-zero exit — including usage and validation errors (exit 2) — writes `{"ok":false,"error":"..."}` to stdout and leaves stderr empty. Always decode stdout, not stderr, to recover the failure reason. The `output_dir` field is the entry-point for every downstream command (`validate`, `index`, `investigate`, `compare`, `analyze`, `studio`).
+
 Validate the bundle before deeper analysis:
 
 ```bash
@@ -92,6 +94,19 @@ vidtrace investigate "$output_dir" \
   --json
 ```
 
+Resolve code matches onto the code graph with `codemap` for symbol resolution, callers, and blast radius:
+
+```bash
+vidtrace investigate "$output_dir" \
+  --query "clicking a ticket does not work" \
+  --codebase /path/to/app \
+  --connect \
+  --codemap \
+  --json
+```
+
+Add `--codemap-annotate` to pin a `source="vidtrace"` annotation on each resolved symbol so later code-graph queries can join back to the evidence. `--codemap` requires `--connect` and degrades gracefully when `codemap` is not installed (the failure is recorded in `codemap_error`).
+
 Stash a bundle to the fcheap vault for sharing or archival:
 
 ```bash
@@ -113,7 +128,7 @@ Investigate a stashed bundle without a local copy:
 vidtrace investigate --stash <stash-id> --query "clicking a ticket does not work" --json
 ```
 
-`vidtrace doctor` reports whether `fcheap` and `vecgrep` are installed. All stash and connect features degrade gracefully with a clear error when the tools are missing.
+`vidtrace doctor` reports whether `fcheap`, `vecgrep`, and `codemap` are installed. All stash, connect, and codemap features degrade gracefully with a clear error when the tools are missing.
 
 Cut clips, make GIFs, and stitch videos from timestamp ranges:
 
@@ -123,7 +138,7 @@ vidtrace clip gif /path/to/video.mp4 --label "issue1=0:18-3:40" --fps 10 --width
 vidtrace clip stitch clip1.mp4 clip2.mp4 --name summary --json
 ```
 
-Timestamps support `SS`, `MM:SS`, and `HH:MM:SS`. Use `--range` for unnamed clips or `--label LABEL=START-END` for named clips. Add `--stash --tag intel` to stash clips to fcheap after cutting. A `clips.json` manifest is written to each output directory.
+Timestamps support `SS`, `MM:SS`, and `HH:MM:SS`. Use `--range` for unnamed clips or `--label LABEL=START-END` for named clips. Add `--stash --tag intel` to stash clips to fcheap after cutting. A `clips.json` manifest is written to each output directory. See [Clip](clip.md) for the full subcommand reference.
 
 Then compare the ticket with extracted evidence:
 
@@ -138,7 +153,7 @@ Open a bundle in the studio:
 vidtrace studio "$output_dir"
 ```
 
-Use `up`/`down` or `k`/`j` to move through timeline entries. Press `m` for metadata, `o` to open the selected frame, `r` to reveal it in Finder on macOS, and `c` to copy a concise evidence summary when clipboard tooling is available. Press `q` to exit. See `docs/STUDIO.md` for the review workflow.
+Use `up`/`down` or `k`/`j` to move through timeline entries. Press `m` for metadata, `o` to open the selected frame, `r` to reveal it in Finder on macOS, and `c` to copy a concise evidence summary when clipboard tooling is available. Press `q` to exit. See [Studio](studio.md) for the review workflow.
 
 Studio is compact by default. It shows timeline and selected evidence side by side when the terminal is wide enough, and stacks them on narrow terminals.
 
