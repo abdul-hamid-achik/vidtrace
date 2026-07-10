@@ -117,6 +117,7 @@ func runExtract(args []string, stdout, stderr io.Writer) int {
 	outputDir := fs.String("out", defaultOutputDir(), "parent output directory")
 	bundleName := fs.String("name", "", "artifact bundle name prefix")
 	concurrency := fs.Int("concurrency", 0, "parallel OCR workers (0 = auto, capped to 8)")
+	resume := fs.Bool("resume", false, "skip already-completed stages (frames/OCR/transcript) (SPEC §8.4)")
 	jsonOutput := fs.Bool("json", false, "print machine-readable JSON")
 
 	jsonWanted := jsonFlagRequested(args)
@@ -158,6 +159,7 @@ func runExtract(args []string, stdout, stderr io.Writer) int {
 		Progress:        progress,
 		Interactive:     interactive,
 		Concurrency:     *concurrency,
+		Resume:          *resume,
 	})
 	if err != nil {
 		return writeExtractFailure(stdout, stderr, *jsonOutput, err)
@@ -176,7 +178,8 @@ func runExtract(args []string, stdout, stderr io.Writer) int {
 
 func normalizeExtractArgs(args []string) ([]string, error) {
 	boolFlags := map[string]struct{}{
-		"json": {},
+		"json":   {},
+		"resume": {},
 	}
 	valueFlags := map[string]struct{}{
 		"fps":          {},

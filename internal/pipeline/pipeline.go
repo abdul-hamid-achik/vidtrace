@@ -36,6 +36,7 @@ type Options struct {
 	// progress is emitted as plain one-line-per-step output suitable for logs and
 	// non-interactive callers.
 	Interactive bool
+	Resume      bool // skip already-completed stages (SPEC §8.4)
 	Now         func() time.Time
 	// Concurrency caps the number of parallel OCR workers. When zero or negative,
 	// it defaults to the number of available CPUs (capped to 8). OCR frames are
@@ -164,13 +165,21 @@ func Run(ctx context.Context, opts Options) (Summary, error) {
 		return Summary{}, fmt.Errorf("write metadata.json: %w", err)
 	}
 
-	reporter.step(3, "frames", "extracting at "+formatFloat(opts.FPS)+" fps")
 	framesPattern := filepath.Join(bundleDir, "frames", "frame_%04d.png")
-	if err := ffmpeg.ExtractFrames(ctx, sourceVideo, opts.FPS, framesPattern); err != nil {
-		return Summary{}, err
+	framePaths, _ := filepath.Glob(filepath.Join(bundleDir, "frames", "frame_*.png"))
+	if opts.Resume && len(framePaths) > 0 {
+		sort.Strings(framePaths)
+		reporter.step(3, "frames", fmt.Sprintf("resume: %d frames already extracted", len(framePaths)))
+	} else {
+		reporter.step(3, "frames", "extracting at "+formatFloat(opts.FPS)+" fps")
+		if err := ffmpeg.ExtractFrames(ctx, sourceVideo, opts.FPS, framesPattern); err != nil {
+			return Summary{}, err
+		}
+		framePaths, err = filepath.Glob(filepath.Join(bundleDir, "frames", "frame_*.png"))
+		if err != nil {
+			return Summary{}, err
+		}
 	}
-
-	framePaths, err := filepath.Glob(filepath.Join(bundleDir, "frames", "frame_*.png"))
 	if err != nil {
 		return Summary{}, err
 	}
@@ -251,18 +260,25 @@ func Run(ctx context.Context, opts Options) (Summary, error) {
 		}
 	})
 
-	reporter.step(5, "transcript", "transcribing audio with Whisper "+opts.WhisperModel)
-	group.Go(func() error {
-		if err := whisper.Transcribe(groupCtx, sourceVideo, transcriptDir, opts.WhisperModel, opts.WhisperLanguage); err != nil {
-			return err
-		}
-		files, err := whisper.TranscriptFiles(transcriptDir)
-		if err != nil {
-			return err
-		}
-		transcriptFiles = files
-		return nil
-	})
+	// Resume: skip Whisper if transcript files already exist (SPEC §8.4).
+	existingTranscripts, _ := whisper.TranscriptFiles(transcriptDir)
+	if opts.Resume && len(existingTranscripts) > 0 {
+		reporter.step(5, "transcript", fmt.Sprintf("resume: %d transcript files already exist", len(existingTranscripts)))
+		transcriptFiles = existingTranscripts
+	} else {
+		reporter.step(5, "transcript", "transcribing audio with Whisper "+opts.WhisperModel)
+		group.Go(func() error {
+			if err := whisper.Transcribe(groupCtx, sourceVideo, transcriptDir, opts.WhisperModel, opts.WhisperLanguage); err != nil {
+				return err
+			}
+			files, err := whisper.TranscriptFiles(transcriptDir)
+			if err != nil {
+				return err
+			}
+			transcriptFiles = files
+			return nil
+		})
+	}
 
 	if err := group.Wait(); err != nil {
 		// errgroup returns the first non-nil error. If it is context.Canceled it
