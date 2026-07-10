@@ -66,4 +66,10 @@ func printValidationReport(w io.Writer, report bundle.ValidationReport) {
 			_, _ = fmt.Fprintf(w, "  - [%s] %s (%s): %s\n", marker, check.Name, check.Path, check.Message)
 		}
 	}
+	if len(report.Repairs) > 0 {
+		_, _ = fmt.Fprintln(w, "Repairs:")
+		for _, repair := range report.Repairs {
+			_, _ = fmt.Fprintf(w, "  - %s: %s; %s %q\n", repair.Stage, repair.Reason, repair.Command, repair.Args)
+		}
+	}
 }
