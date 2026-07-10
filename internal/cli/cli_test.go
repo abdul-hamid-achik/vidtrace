@@ -240,7 +240,7 @@ func TestCompareJSON(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
 		t.Fatalf("expected valid JSON, got %q: %v", stdout.String(), err)
 	}
-	if !result.OK || result.Status != "match" {
+	if !result.OK || result.Status != "supported" {
 		t.Fatalf("unexpected result: %#v", result)
 	}
 	if result.Confidence == "" || len(result.MatchedTerms) == 0 || len(result.TermHits) == 0 {
@@ -278,7 +278,7 @@ func TestAnalyzeMarkdown(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("expected exit code 0, got %d stderr=%q", code, stderr.String())
 	}
-	for _, want := range []string{"## Summary", "Status: match", "frames/frame_0001.png"} {
+	for _, want := range []string{"## Summary", "Status: supported", "frames/frame_0001.png"} {
 		if !strings.Contains(stdout.String(), want) {
 			t.Fatalf("expected output to contain %q, got %q", want, stdout.String())
 		}

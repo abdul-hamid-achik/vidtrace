@@ -20,8 +20,8 @@ func TestCompareMatch(t *testing.T) {
 		t.Fatalf("Compare() failed: %v", err)
 	}
 
-	if result.Status != "match" {
-		t.Fatalf("Status = %q, want match; result=%#v", result.Status, result)
+	if result.Status != "supported" {
+		t.Fatalf("Status = %q, want supported; result=%#v", result.Status, result)
 	}
 	if len(result.Evidence) == 0 {
 		t.Fatalf("expected evidence")
@@ -72,8 +72,8 @@ func TestCompareMismatch(t *testing.T) {
 		t.Fatalf("Compare() failed: %v", err)
 	}
 
-	if result.Status != "mismatch" {
-		t.Fatalf("Status = %q, want mismatch; result=%#v", result.Status, result)
+	if result.Status != "no_observation" {
+		t.Fatalf("Status = %q, want no_observation; result=%#v", result.Status, result)
 	}
 	if len(result.Evidence) != 0 {
 		t.Fatalf("expected no evidence, got %#v", result.Evidence)
@@ -88,7 +88,7 @@ func TestMarkdown(t *testing.T) {
 
 	result := Result{
 		OK:           true,
-		Status:       "match",
+		Status:       "supported",
 		Confidence:   "medium",
 		Score:        0.5,
 		MatchedTerms: []string{"login"},
@@ -109,7 +109,7 @@ func TestMarkdown(t *testing.T) {
 	}
 
 	report := Markdown(result)
-	for _, want := range []string{"## Summary", "Status: match", "frames/frame_0001.png", "Verify frame visually."} {
+	for _, want := range []string{"## Summary", "Status: supported", "frames/frame_0001.png", "Verify frame visually."} {
 		if !strings.Contains(report, want) {
 			t.Fatalf("expected report to contain %q, got %q", want, report)
 		}

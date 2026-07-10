@@ -19,18 +19,22 @@ type Options struct {
 }
 
 type Result struct {
-	OK           bool          `json:"ok"`
-	Status       string        `json:"status"`
-	Confidence   string        `json:"confidence"`
-	Score        float64       `json:"score"`
-	BundleDir    string        `json:"bundle_dir"`
-	TicketPath   string        `json:"ticket_path"`
-	MatchedTerms []string      `json:"matched_terms"`
-	MissingTerms []string      `json:"missing_terms"`
-	TermHits     []TermHit     `json:"term_hits"`
-	Evidence     []EvidenceRef `json:"evidence"`
-	Summary      string        `json:"summary"`
-	Gaps         []string      `json:"gaps"`
+	OK              bool          `json:"ok"`
+	Status          string        `json:"status"`
+	Coverage        string        `json:"coverage"` // unknown|no_observation|inconclusive|supported|contradicted (SPEC §8.4)
+	Confidence      string        `json:"confidence"`
+	Score           float64       `json:"score"`
+	BundleDir       string        `json:"bundle_dir"`
+	TicketPath      string        `json:"ticket_path"`
+	MatchedTerms    []string      `json:"matched_terms"`
+	MissingTerms    []string      `json:"missing_terms"`
+	TermHits        []TermHit     `json:"term_hits"`
+	Evidence        []EvidenceRef `json:"evidence"`
+	Summary         string        `json:"summary"`
+	Gaps            []string      `json:"gaps"`
+	Degraded        bool          `json:"degraded,omitempty"`
+	Hint            string        `json:"hint,omitempty"`
+	SuggestedAction string        `json:"suggested_action,omitempty"`
 }
 
 type EvidenceRef struct {
@@ -94,18 +98,22 @@ func Compare(opts Options) (Result, error) {
 	gapList := gaps(status, terms, evidence)
 
 	result := Result{
-		OK:           true,
-		Status:       status,
-		Confidence:   confidence,
-		Score:        math.Round(score*1000) / 1000,
-		BundleDir:    doc.Dir,
-		TicketPath:   ticketPath,
-		MatchedTerms: nonNilStrings(matched),
-		MissingTerms: nonNilStrings(missing),
-		TermHits:     nonNilTermHits(termHits),
-		Evidence:     nonNilEvidence(evidence),
-		Summary:      summary(status, confidence, matched, missing, evidence),
-		Gaps:         nonNilStrings(gapList),
+		OK:              true,
+		Status:          status,
+		Coverage:        status,
+		Confidence:      confidence,
+		Score:           math.Round(score*1000) / 1000,
+		BundleDir:       doc.Dir,
+		TicketPath:      ticketPath,
+		MatchedTerms:    nonNilStrings(matched),
+		MissingTerms:    nonNilStrings(missing),
+		TermHits:        nonNilTermHits(termHits),
+		Evidence:        nonNilEvidence(evidence),
+		Summary:         summary(status, confidence, matched, missing, evidence),
+		Degraded:        status == "unknown" || status == "no_observation",
+		Hint:            hintForStatus(status),
+		SuggestedAction: actionForStatus(status),
+		Gaps:            nonNilStrings(gapList),
 	}
 	return result, nil
 }
@@ -184,14 +192,51 @@ var stopWords = map[string]struct{}{
 	"una": {}, "con": {}, "del": {}, "los": {}, "las": {}, "para": {}, "por": {}, "que": {},
 }
 
+// classify returns a coverage-aware evidence status (SPEC §8.4):
+//   unknown        — no evidence was collected (no terms to search for).
+//   no_observation — evidence was collected but the terms don't appear.
+//   inconclusive   — some terms matched but below the support threshold.
+//   supported      — enough terms matched to support the claim.
+//   contradicted   — evidence contradicts the claim (set by a future heuristic).
+
+// hintForStatus returns a human-readable hint for the coverage status.
+func hintForStatus(status string) string {
+	switch status {
+	case "unknown":
+		return "no usable evidence was collected — the OCR/transcript pipeline may not have run or produced no text. Run vidtrace extract on the video bundle to generate evidence."
+	case "no_observation":
+		return "evidence was collected but none of the ticket terms appear in the OCR or transcript. The bug may not be visible in this recording, or the terms may need broadening."
+	case "inconclusive":
+		return "some terms matched but not enough to support the claim. Review the partial matches + consider whether the ticket description is accurate."
+	case "contradicted":
+		return "the evidence appears to contradict the claim. Review the matched evidence carefully — it may show the opposite of what the ticket describes."
+	default:
+		return ""
+	}
+}
+
+// actionForStatus returns a suggested action for the coverage status.
+func actionForStatus(status string) string {
+	switch status {
+	case "unknown":
+		return "vidtrace extract <bundle> --json"
+	case "no_observation":
+		return "vidtrace analyze <bundle> --ticket <ticket> --broaden"
+	case "inconclusive":
+		return "review the partial term_hits + evidence fields, then decide whether to investigate further or close the ticket."
+	default:
+		return ""
+	}
+}
+
 func classify(totalTerms, matchedTerms int, score float64) string {
 	switch {
 	case totalTerms == 0:
-		return "inconclusive"
+		return "unknown"
 	case matchedTerms == 0:
-		return "mismatch"
+		return "no_observation"
 	case matchedTerms >= 3 || score >= 0.35:
-		return "match"
+		return "supported"
 	default:
 		return "inconclusive"
 	}
@@ -199,12 +244,16 @@ func classify(totalTerms, matchedTerms int, score float64) string {
 
 func classifyConfidence(status string, score float64, termHits int) string {
 	switch {
-	case status == "match" && score >= 0.6 && termHits >= 2:
+	case status == "supported" && score >= 0.6 && termHits >= 2:
 		return "high"
-	case status == "match":
+	case status == "supported":
 		return "medium"
-	case termHits > 0:
+	case status == "inconclusive" && termHits > 0:
 		return "low"
+	case status == "no_observation":
+		return "low"
+	case status == "unknown":
+		return "none"
 	default:
 		return "low"
 	}
