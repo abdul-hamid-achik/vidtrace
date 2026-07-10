@@ -7,6 +7,7 @@ docs/.vitepress/dist/
 .glyphrun/
 coverage.out
 *.test
+/vidtrace
 
 # Local media and generated artifacts can be large.
 *.mp4
