@@ -1,6 +1,8 @@
 package artifacts
 
 import (
+	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -98,5 +100,43 @@ func TestBundlePathUniqueAppendsSuffixOnCollision(t *testing.T) {
 	want = filepath.Join(parent, "bug_artifacts_20260621_120000_3")
 	if got != want {
 		t.Fatalf("BundlePathUnique() on second collision = %q, want %q", got, want)
+	}
+}
+
+func TestWriteAtomicPreservesPreviousArtifactOnFailure(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "timeline.json")
+	if err := os.WriteFile(path, []byte("previous"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	boom := errors.New("interrupted")
+	err := WriteAtomic(path, func(w io.Writer) error {
+		if _, writeErr := io.WriteString(w, "partial"); writeErr != nil {
+			return writeErr
+		}
+		return boom
+	})
+	if !errors.Is(err, boom) {
+		t.Fatalf("WriteAtomic error = %v, want interrupted", err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "previous" {
+		t.Fatalf("failed replacement changed the final artifact: %q", data)
+	}
+	if err := WriteAtomic(path, func(w io.Writer) error {
+		_, writeErr := io.WriteString(w, "complete")
+		return writeErr
+	}); err != nil {
+		t.Fatal(err)
+	}
+	data, err = os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "complete" {
+		t.Fatalf("successful replacement = %q, want complete", data)
 	}
 }

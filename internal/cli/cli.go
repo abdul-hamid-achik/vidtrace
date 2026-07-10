@@ -118,6 +118,7 @@ func runExtract(args []string, stdout, stderr io.Writer) int {
 	bundleName := fs.String("name", "", "artifact bundle name prefix")
 	concurrency := fs.Int("concurrency", 0, "parallel OCR workers (0 = auto, capped to 8)")
 	resume := fs.Bool("resume", false, "skip already-completed stages (frames/OCR/transcript) (SPEC §8.4)")
+	resumeFrom := fs.String("resume-from", "", "resume an existing artifact bundle")
 	jsonOutput := fs.Bool("json", false, "print machine-readable JSON")
 
 	jsonWanted := jsonFlagRequested(args)
@@ -136,6 +137,13 @@ func runExtract(args []string, stdout, stderr io.Writer) int {
 	resolvedOutputDir, err := expandHome(*outputDir)
 	if err != nil {
 		return writeExtractFailure(stdout, stderr, *jsonOutput, err)
+	}
+	resolvedResumeFrom := ""
+	if strings.TrimSpace(*resumeFrom) != "" {
+		resolvedResumeFrom, err = expandHome(*resumeFrom)
+		if err != nil {
+			return writeExtractFailure(stdout, stderr, *jsonOutput, err)
+		}
 	}
 
 	progress := stdout
@@ -159,7 +167,8 @@ func runExtract(args []string, stdout, stderr io.Writer) int {
 		Progress:        progress,
 		Interactive:     interactive,
 		Concurrency:     *concurrency,
-		Resume:          *resume,
+		Resume:          *resume || resolvedResumeFrom != "",
+		ResumeFrom:      resolvedResumeFrom,
 	})
 	if err != nil {
 		return writeExtractFailure(stdout, stderr, *jsonOutput, err)
@@ -188,6 +197,8 @@ func normalizeExtractArgs(args []string) ([]string, error) {
 		"model":        {},
 		"out":          {},
 		"name":         {},
+		"concurrency":  {},
+		"resume-from":  {},
 	}
 
 	var flags []string

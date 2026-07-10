@@ -9,7 +9,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/abdul-hamid-achik/vidtrace/internal/artifacts"
 	"github.com/abdul-hamid-achik/vidtrace/internal/evidence"
 )
 
@@ -309,6 +311,74 @@ func TestValidateJSON(t *testing.T) {
 	}
 	if !report.OK || report.TimelineEntries != 1 {
 		t.Fatalf("unexpected report: %#v", report)
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("expected empty stderr, got %q", stderr.String())
+	}
+}
+
+func TestValidateJSONIncludesStructuredRepairArgv(t *testing.T) {
+	bundleDir := writeCLIBundle(t)
+	mustWrite(t, filepath.Join(bundleDir, "frames", "frame_0001.png"), "fake frame")
+	mustWrite(t, filepath.Join(bundleDir, "ocr", "frame_0001.txt"), "Login failed")
+	sourcePath := filepath.Join(bundleDir, "source video.mp4")
+	mustWrite(t, sourcePath, "video bytes")
+	metadata, err := json.Marshal(map[string]any{
+		"schema_version": "1", "source_video": sourcePath, "duration_seconds": 1,
+		"extract_fps": 1, "ocr_languages": []string{"eng"},
+		"whisper_language": "en", "whisper_model": "small",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mustWrite(t, filepath.Join(bundleDir, "metadata.json"), string(metadata))
+	mustWrite(t, filepath.Join(bundleDir, "README.txt"), "complete bundle\n")
+	for _, extension := range []string{".json", ".srt", ".tsv", ".txt", ".vtt"} {
+		value := ""
+		if extension == ".json" {
+			value = `{"segments":[]}`
+		}
+		mustWrite(t, filepath.Join(bundleDir, "transcript", "source video"+extension), value)
+	}
+	options := artifacts.NormalizeManifestOptions(1, []string{"eng"}, "en", "small")
+	source, fingerprint, err := artifacts.FingerprintSource(sourcePath, options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest := artifacts.NewStageManifest(source, options, fingerprint, time.Now())
+	for _, stageName := range artifacts.StageOrder {
+		manifest.Stages[stageName] = artifacts.ManifestStage{Status: artifacts.StageComplete, ArtifactCount: 1}
+	}
+	manifest.Stages[artifacts.StageOCR] = artifacts.ManifestStage{
+		Status: artifacts.StageComplete, ArtifactCount: 1, TotalFrames: 1, CompletedFrameIDs: []string{"frame_0001"},
+	}
+	manifest.Stages[artifacts.StageTranscript] = artifacts.ManifestStage{Status: artifacts.StageComplete, ArtifactCount: 5}
+	manifest.Stages[artifacts.StageTimeline] = artifacts.ManifestStage{Status: artifacts.StagePending}
+	store := artifacts.NewManifestStore(filepath.Join(bundleDir, artifacts.StageManifestName), nil)
+	if err := store.Initialize(manifest); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"validate", bundleDir, "--json"}, &stdout, &stderr, "test")
+	if code != 1 {
+		t.Fatalf("expected incomplete manifest to fail validation, got %d: %s", code, stdout.String())
+	}
+	var report struct {
+		Repairs []struct {
+			Stage   string   `json:"stage"`
+			Command string   `json:"command"`
+			Args    []string `json:"args"`
+		} `json:"repairs"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &report); err != nil {
+		t.Fatalf("invalid validation JSON: %v: %s", err, stdout.String())
+	}
+	if len(report.Repairs) != 1 || report.Repairs[0].Stage != artifacts.StageTimeline || report.Repairs[0].Command != "vidtrace" {
+		t.Fatalf("unexpected repair JSON: %#v", report.Repairs)
+	}
+	if len(report.Repairs[0].Args) == 0 || report.Repairs[0].Args[0] != "extract" {
+		t.Fatalf("repair command was not encoded as argv: %#v", report.Repairs[0])
 	}
 	if stderr.Len() != 0 {
 		t.Fatalf("expected empty stderr, got %q", stderr.String())
@@ -1068,6 +1138,21 @@ func TestNormalizeExtractArgsAllowsFlagsAfterPath(t *testing.T) {
 	}
 
 	want := []string{"--fps", "2", "--json", "--out=/tmp/out", "/tmp/bug.mp4"}
+	if strings.Join(args, "\x00") != strings.Join(want, "\x00") {
+		t.Fatalf("unexpected args: got %v want %v", args, want)
+	}
+}
+
+func TestNormalizeExtractArgsPreservesResumeSelection(t *testing.T) {
+	args, err := normalizeExtractArgs([]string{
+		"/tmp/bug.mp4", "--resume-from", "/tmp/existing bundle", "--concurrency", "3", "--resume",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := []string{
+		"--resume-from", "/tmp/existing bundle", "--concurrency", "3", "--resume", "/tmp/bug.mp4",
+	}
 	if strings.Join(args, "\x00") != strings.Join(want, "\x00") {
 		t.Fatalf("unexpected args: got %v want %v", args, want)
 	}

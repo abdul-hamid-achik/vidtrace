@@ -2,13 +2,10 @@ package pipeline
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -16,11 +13,6 @@ import (
 
 	"charm.land/bubbles/v2/progress"
 	"github.com/abdul-hamid-achik/vidtrace/internal/artifacts"
-	"github.com/abdul-hamid-achik/vidtrace/internal/ffmpeg"
-	"github.com/abdul-hamid-achik/vidtrace/internal/tesseract"
-	"github.com/abdul-hamid-achik/vidtrace/internal/timeline"
-	"github.com/abdul-hamid-achik/vidtrace/internal/whisper"
-	"golang.org/x/sync/errgroup"
 )
 
 type Options struct {
@@ -36,7 +28,8 @@ type Options struct {
 	// progress is emitted as plain one-line-per-step output suitable for logs and
 	// non-interactive callers.
 	Interactive bool
-	Resume      bool // skip already-completed stages (SPEC §8.4)
+	Resume      bool   // discover and resume one compatible incomplete bundle
+	ResumeFrom  string // explicitly resume this existing bundle
 	Now         func() time.Time
 	// Concurrency caps the number of parallel OCR workers. When zero or negative,
 	// it defaults to the number of available CPUs (capped to 8). OCR frames are
@@ -74,261 +67,7 @@ type MetadataDocument struct {
 }
 
 func Run(ctx context.Context, opts Options) (Summary, error) {
-	if opts.FPS <= 0 {
-		return Summary{}, fmt.Errorf("fps must be greater than 0")
-	}
-	if strings.TrimSpace(opts.OCRLanguage) == "" {
-		return Summary{}, fmt.Errorf("ocr language is required")
-	}
-	if strings.TrimSpace(opts.WhisperModel) == "" {
-		return Summary{}, fmt.Errorf("whisper model is required")
-	}
-
-	sourceVideo, err := filepath.Abs(opts.SourceVideo)
-	if err != nil {
-		return Summary{}, fmt.Errorf("resolve source video: %w", err)
-	}
-	if info, err := os.Stat(sourceVideo); err != nil {
-		return Summary{}, fmt.Errorf("source video not found: %s", sourceVideo)
-	} else if info.IsDir() {
-		return Summary{}, fmt.Errorf("source video is a directory: %s", sourceVideo)
-	}
-
-	// Fail fast when a requested OCR language is not installed, before creating a
-	// bundle or extracting frames, so the user fixes language data up front
-	// instead of after a long extraction. This runs after the cheaper input
-	// checks so an invalid path still reports the clearer error first.
-	requestedLanguages := tesseract.SplitLanguages(opts.OCRLanguage)
-	availableLanguages, err := tesseract.AvailableLanguages(ctx)
-	if err != nil {
-		if errors.Is(err, exec.ErrNotFound) {
-			return Summary{}, fmt.Errorf("tesseract is not installed; install it and any OCR language data (see docs/INSTALL.md), then run vidtrace doctor")
-		}
-		return Summary{}, err
-	}
-	if missing := tesseract.MissingLanguages(requestedLanguages, availableLanguages); len(missing) > 0 {
-		return Summary{}, fmt.Errorf("OCR language data not installed: %s; install the tesseract language pack(s) (see docs/INSTALL.md) or change --ocr-lang", strings.Join(missing, ", "))
-	}
-
-	outputParentDir := opts.OutputParentDir
-	if outputParentDir == "" {
-		outputParentDir = "."
-	}
-	outputParentDir, err = filepath.Abs(outputParentDir)
-	if err != nil {
-		return Summary{}, fmt.Errorf("resolve output directory: %w", err)
-	}
-	if err := os.MkdirAll(outputParentDir, 0o755); err != nil {
-		return Summary{}, fmt.Errorf("create output directory: %w", err)
-	}
-
-	now := time.Now
-	if opts.Now != nil {
-		now = opts.Now
-	}
-
-	bundleName := artifacts.SafeBundleName(sourceVideo, opts.BundleName)
-	bundleDir := artifacts.BundlePathUnique(outputParentDir, bundleName, now())
-	if err := artifacts.EnsureBundleDirs(bundleDir); err != nil {
-		return Summary{}, fmt.Errorf("create artifact bundle: %w", err)
-	}
-
-	const totalSteps = 7
-
-	reporter := newProgressReporter(opts.Progress, opts.Interactive, totalSteps)
-
-	reporter.step(1, "bundle", "created "+bundleDir)
-
-	reporter.step(2, "metadata", "capturing video metadata")
-	mediaMetadata, err := ffmpeg.Probe(ctx, sourceVideo)
-	if err != nil {
-		return Summary{}, err
-	}
-
-	metadataDoc := MetadataDocument{
-		SchemaVersion:   artifacts.SchemaVersion,
-		SourceVideo:     sourceVideo,
-		GeneratedAt:     now().UTC().Format(time.RFC3339),
-		DurationSeconds: mediaMetadata.DurationSeconds,
-		Width:           mediaMetadata.Width,
-		Height:          mediaMetadata.Height,
-		VideoCodec:      mediaMetadata.VideoCodec,
-		AudioCodec:      mediaMetadata.AudioCodec,
-		FrameRate:       mediaMetadata.FrameRate,
-		ExtractFPS:      opts.FPS,
-		OCRLanguages:    tesseract.SplitLanguages(opts.OCRLanguage),
-		WhisperLanguage: opts.WhisperLanguage,
-		WhisperModel:    opts.WhisperModel,
-	}
-	metadataPath := filepath.Join(bundleDir, "metadata.json")
-	if err := artifacts.WriteJSON(metadataPath, metadataDoc); err != nil {
-		return Summary{}, fmt.Errorf("write metadata.json: %w", err)
-	}
-
-	framesPattern := filepath.Join(bundleDir, "frames", "frame_%04d.png")
-	framePaths, _ := filepath.Glob(filepath.Join(bundleDir, "frames", "frame_*.png"))
-	if opts.Resume && len(framePaths) > 0 {
-		sort.Strings(framePaths)
-		reporter.step(3, "frames", fmt.Sprintf("resume: %d frames already extracted", len(framePaths)))
-	} else {
-		reporter.step(3, "frames", "extracting at "+formatFloat(opts.FPS)+" fps")
-		if err := ffmpeg.ExtractFrames(ctx, sourceVideo, opts.FPS, framesPattern); err != nil {
-			return Summary{}, err
-		}
-		framePaths, err = filepath.Glob(filepath.Join(bundleDir, "frames", "frame_*.png"))
-		if err != nil {
-			return Summary{}, err
-		}
-	}
-	if err != nil {
-		return Summary{}, err
-	}
-	sort.Strings(framePaths)
-	if len(framePaths) == 0 {
-		return Summary{}, fmt.Errorf("no frames generated")
-	}
-
-	// OCR (step 4) and Whisper transcription (step 5) are independent: OCR only
-	// needs the extracted frames and Whisper only needs the source video. Run
-	// them concurrently to cut wall-clock time on long videos. OCR is further
-	// parallelized across frames with a bounded worker pool, while Whisper runs
-	// as a single external process (its model is already CPU/GPU-bound).
-	workers := opts.Concurrency
-	if workers <= 0 {
-		workers = runtime.NumCPU()
-		if workers > 8 {
-			workers = 8
-		}
-	}
-	if workers > len(framePaths) {
-		workers = len(framePaths)
-	}
-
-	transcriptDir := filepath.Join(bundleDir, "transcript")
-	var (
-		ocrPaths        []string
-		transcriptFiles []string
-	)
-
-	group, groupCtx := errgroup.WithContext(ctx)
-
-	reporter.startItems(4, "ocr", fmt.Sprintf("running OCR on %d frames (%d workers)", len(framePaths), workers))
-	group.Go(func() error {
-		defer reporter.finishItems()
-
-		sem := make(chan struct{}, workers)
-		var perFrame sync.WaitGroup
-		// errCh captures the first per-frame error; it is buffered so a single
-		// writer never blocks, even if other workers are still in flight.
-		errCh := make(chan error, 1)
-		done := uint64(0)
-		var doneMu sync.Mutex
-
-		for _, framePath := range framePaths {
-			if err := groupCtx.Err(); err != nil {
-				break
-			}
-			sem <- struct{}{}
-			perFrame.Add(1)
-			go func(framePath string) {
-				defer perFrame.Done()
-				defer func() { <-sem }()
-
-				base := strings.TrimSuffix(filepath.Base(framePath), filepath.Ext(framePath))
-				outputBase := filepath.Join(bundleDir, "ocr", base)
-				if err := tesseract.OCR(groupCtx, framePath, outputBase, opts.OCRLanguage); err != nil {
-					select {
-					case errCh <- err:
-					default:
-					}
-					return
-				}
-
-				doneMu.Lock()
-				done++
-				reporter.item(4, "ocr", int(done), len(framePaths), filepath.Base(framePath))
-				doneMu.Unlock()
-			}(framePath)
-		}
-		perFrame.Wait()
-
-		select {
-		case err := <-errCh:
-			return err
-		default:
-			return groupCtx.Err()
-		}
-	})
-
-	// Resume: skip Whisper if transcript files already exist (SPEC §8.4).
-	existingTranscripts, _ := whisper.TranscriptFiles(transcriptDir)
-	if opts.Resume && len(existingTranscripts) > 0 {
-		reporter.step(5, "transcript", fmt.Sprintf("resume: %d transcript files already exist", len(existingTranscripts)))
-		transcriptFiles = existingTranscripts
-	} else {
-		reporter.step(5, "transcript", "transcribing audio with Whisper "+opts.WhisperModel)
-		group.Go(func() error {
-			if err := whisper.Transcribe(groupCtx, sourceVideo, transcriptDir, opts.WhisperModel, opts.WhisperLanguage); err != nil {
-				return err
-			}
-			files, err := whisper.TranscriptFiles(transcriptDir)
-			if err != nil {
-				return err
-			}
-			transcriptFiles = files
-			return nil
-		})
-	}
-
-	if err := group.Wait(); err != nil {
-		// errgroup returns the first non-nil error. If it is context.Canceled it
-		// may mask a real tesseract/whisper failure, so prefer the original error
-		// when available by re-checking ctx.
-		if ctx.Err() != nil && err == context.Canceled {
-			return Summary{}, ctx.Err()
-		}
-		return Summary{}, err
-	}
-
-	ocrPaths, err = filepath.Glob(filepath.Join(bundleDir, "ocr", "frame_*.txt"))
-	if err != nil {
-		return Summary{}, err
-	}
-	sort.Strings(ocrPaths)
-	combinedOCRPath := filepath.Join(bundleDir, "ocr", "ocr_all_frames.txt")
-	if err := writeCombinedOCR(combinedOCRPath, sourceVideo, ocrPaths, now().UTC()); err != nil {
-		return Summary{}, err
-	}
-
-	reporter.step(6, "timeline", "writing timeline.json")
-	timelineDoc, err := timeline.Build(bundleDir, framePaths, opts.FPS, whisper.JSONPath(transcriptDir, sourceVideo))
-	if err != nil {
-		return Summary{}, err
-	}
-	timelinePath := filepath.Join(bundleDir, "timeline.json")
-	if err := artifacts.WriteJSON(timelinePath, timelineDoc); err != nil {
-		return Summary{}, fmt.Errorf("write timeline.json: %w", err)
-	}
-
-	summary := Summary{
-		OK:              true,
-		SourceVideo:     sourceVideo,
-		OutputDir:       bundleDir,
-		Frames:          len(framePaths),
-		OCRFiles:        len(ocrPaths),
-		TranscriptFiles: relFiles(bundleDir, transcriptFiles),
-		MetadataPath:    artifacts.RelSlash(bundleDir, metadataPath),
-		TimelinePath:    artifacts.RelSlash(bundleDir, timelinePath),
-		CombinedOCRPath: artifacts.RelSlash(bundleDir, combinedOCRPath),
-		DurationSeconds: mediaMetadata.DurationSeconds,
-	}
-
-	if err := writeReadme(filepath.Join(bundleDir, "README.txt"), summary); err != nil {
-		return Summary{}, err
-	}
-
-	reporter.step(7, "done", bundleDir)
-	return summary, nil
+	return run(ctx, opts)
 }
 
 func PrintHuman(w io.Writer, summary Summary) {
@@ -347,87 +86,71 @@ func PrintHuman(w io.Writer, summary Summary) {
 	}
 }
 
-func writeCombinedOCR(path, sourceVideo string, ocrPaths []string, generatedAt time.Time) (err error) {
-	file, err := os.Create(path)
-	if err != nil {
-		return fmt.Errorf("create combined OCR: %w", err)
-	}
-	defer func() {
-		if closeErr := file.Close(); err == nil {
-			err = closeErr
-		}
-	}()
-
-	if _, err := fmt.Fprintf(file, "Video: %s\n", sourceVideo); err != nil {
-		return err
-	}
-	if _, err := fmt.Fprintf(file, "Generated: %s\n\n", generatedAt.Format(time.RFC3339)); err != nil {
-		return err
-	}
-	for _, ocrPath := range ocrPaths {
-		data, err := os.ReadFile(ocrPath)
-		if err != nil {
-			return fmt.Errorf("read OCR file: %w", err)
-		}
-		if _, err := fmt.Fprintf(file, "===== %s =====\n", filepath.Base(ocrPath)); err != nil {
+func writeCombinedOCR(path, sourceVideo string, ocrPaths []string, generatedAt time.Time) error {
+	return artifacts.WriteAtomic(path, func(file io.Writer) error {
+		if _, err := fmt.Fprintf(file, "Video: %s\n", sourceVideo); err != nil {
 			return err
 		}
-		if _, err := fmt.Fprint(file, string(data)); err != nil {
+		if _, err := fmt.Fprintf(file, "Generated: %s\n\n", generatedAt.Format(time.RFC3339)); err != nil {
 			return err
 		}
-		if len(data) == 0 || data[len(data)-1] != '\n' {
+		for _, ocrPath := range ocrPaths {
+			data, err := os.ReadFile(ocrPath)
+			if err != nil {
+				return fmt.Errorf("read OCR file: %w", err)
+			}
+			if _, err := fmt.Fprintf(file, "===== %s =====\n", filepath.Base(ocrPath)); err != nil {
+				return err
+			}
+			if _, err := fmt.Fprint(file, string(data)); err != nil {
+				return err
+			}
+			if len(data) == 0 || data[len(data)-1] != '\n' {
+				if _, err := fmt.Fprintln(file); err != nil {
+					return err
+				}
+			}
 			if _, err := fmt.Fprintln(file); err != nil {
 				return err
 			}
 		}
-		if _, err := fmt.Fprintln(file); err != nil {
-			return err
-		}
-	}
-	return nil
+		return nil
+	})
 }
 
-func writeReadme(path string, summary Summary) (err error) {
-	file, err := os.Create(path)
-	if err != nil {
-		return fmt.Errorf("create bundle README: %w", err)
-	}
-	defer func() {
-		if closeErr := file.Close(); err == nil {
-			err = closeErr
-		}
-	}()
-
-	if _, err := fmt.Fprintf(file, "Output folder: %s\n", summary.OutputDir); err != nil {
-		return err
-	}
-	if _, err := fmt.Fprintf(file, "Source video: %s\n", summary.SourceVideo); err != nil {
-		return err
-	}
-	if _, err := fmt.Fprintf(file, "Frames: %d\n", summary.Frames); err != nil {
-		return err
-	}
-	if _, err := fmt.Fprintf(file, "OCR frame txt files: %d\n", summary.OCRFiles); err != nil {
-		return err
-	}
-	if _, err := fmt.Fprintf(file, "Combined OCR: %s\n", summary.CombinedOCRPath); err != nil {
-		return err
-	}
-	if _, err := fmt.Fprintf(file, "Metadata: %s\n", summary.MetadataPath); err != nil {
-		return err
-	}
-	if _, err := fmt.Fprintf(file, "Timeline: %s\n", summary.TimelinePath); err != nil {
-		return err
-	}
-	if _, err := fmt.Fprintln(file, "Transcript files:"); err != nil {
-		return err
-	}
-	for _, path := range summary.TranscriptFiles {
-		if _, err := fmt.Fprintf(file, "- %s\n", path); err != nil {
+func writeReadme(path string, summary Summary) error {
+	return artifacts.WriteAtomic(path, func(file io.Writer) error {
+		if _, err := fmt.Fprintf(file, "Output folder: %s\n", summary.OutputDir); err != nil {
 			return err
 		}
-	}
-	return nil
+		if _, err := fmt.Fprintf(file, "Source video: %s\n", summary.SourceVideo); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintf(file, "Frames: %d\n", summary.Frames); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintf(file, "OCR frame txt files: %d\n", summary.OCRFiles); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintf(file, "Combined OCR: %s\n", summary.CombinedOCRPath); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintf(file, "Metadata: %s\n", summary.MetadataPath); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintf(file, "Timeline: %s\n", summary.TimelinePath); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintln(file, "Transcript files:"); err != nil {
+			return err
+		}
+		for _, transcriptPath := range summary.TranscriptFiles {
+			if _, err := fmt.Fprintf(file, "- %s\n", transcriptPath); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 func relFiles(bundleDir string, paths []string) []string {

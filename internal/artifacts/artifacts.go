@@ -3,6 +3,7 @@ package artifacts
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -60,20 +61,53 @@ func EnsureBundleDirs(bundleDir string) error {
 	return nil
 }
 
-func WriteJSON(path string, value any) (err error) {
-	file, err := os.Create(path)
+func WriteJSON(path string, value any) error {
+	return WriteAtomic(path, func(w io.Writer) error {
+		encoder := json.NewEncoder(w)
+		encoder.SetIndent("", "  ")
+		return encoder.Encode(value)
+	})
+}
+
+// WriteAtomic replaces one bundle artifact only after its complete contents
+// are durable in a same-directory temporary file.
+func WriteAtomic(path string, write func(io.Writer) error) (err error) {
+	dir := filepath.Dir(path)
+	temp, err := os.CreateTemp(dir, "."+filepath.Base(path)+"-*.tmp")
 	if err != nil {
 		return err
 	}
+	tempPath := temp.Name()
 	defer func() {
-		if closeErr := file.Close(); err == nil {
-			err = closeErr
+		_ = temp.Close()
+		if err != nil {
+			_ = os.Remove(tempPath)
 		}
 	}()
-
-	encoder := json.NewEncoder(file)
-	encoder.SetIndent("", "  ")
-	return encoder.Encode(value)
+	if err = temp.Chmod(0o644); err != nil {
+		return err
+	}
+	if err = write(temp); err != nil {
+		return err
+	}
+	if err = temp.Sync(); err != nil {
+		return err
+	}
+	if err = temp.Close(); err != nil {
+		return err
+	}
+	if err = os.Rename(tempPath, path); err != nil {
+		return err
+	}
+	directory, err := os.Open(dir)
+	if err != nil {
+		return err
+	}
+	if err = directory.Sync(); err != nil {
+		_ = directory.Close()
+		return err
+	}
+	return directory.Close()
 }
 
 func RelSlash(baseDir, path string) string {
