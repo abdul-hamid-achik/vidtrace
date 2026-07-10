@@ -18,8 +18,8 @@ import (
 )
 
 const (
-	StageManifestVersion = "1"
-	StageManifestName    = "stage_manifest.json"
+	StageManifestVersion  = "1"
+	StageManifestName     = "stage_manifest.json"
 	StageManifestLockName = ".stage_manifest.lock"
 
 	StageMetadata    = "metadata"
@@ -47,13 +47,13 @@ var StageOrder = []string{
 }
 
 type StageManifest struct {
-	SchemaVersion string                    `json:"schema_version"`
-	Source        ManifestSource            `json:"source"`
-	Options       ManifestOptions           `json:"options"`
-	Fingerprint   string                    `json:"fingerprint"`
-	CreatedAt     time.Time                 `json:"created_at"`
-	UpdatedAt     time.Time                 `json:"updated_at"`
-	Stages        map[string]ManifestStage  `json:"stages"`
+	SchemaVersion string                   `json:"schema_version"`
+	Source        ManifestSource           `json:"source"`
+	Options       ManifestOptions          `json:"options"`
+	Fingerprint   string                   `json:"fingerprint"`
+	CreatedAt     time.Time                `json:"created_at"`
+	UpdatedAt     time.Time                `json:"updated_at"`
+	Stages        map[string]ManifestStage `json:"stages"`
 }
 
 type ManifestSource struct {

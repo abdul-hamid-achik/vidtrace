@@ -764,15 +764,6 @@ func filterValidOCRIDs(bundleDir string, frameIDs, completed []string) []string 
 	return sortedUnique(valid)
 }
 
-func validOCRIDs(bundleDir string, ids []string) bool {
-	for _, id := range ids {
-		if !regularFile(filepath.Join(bundleDir, "ocr", id+".txt")) {
-			return false
-		}
-	}
-	return true
-}
-
 func readMetadataDocument(path string) (MetadataDocument, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -797,34 +788,6 @@ func allRegularFiles(paths []string) bool {
 func regularFile(path string) bool {
 	info, err := os.Stat(path)
 	return err == nil && info.Mode().IsRegular()
-}
-
-func allNonEmptyRegularFiles(paths []string) bool {
-	for _, path := range paths {
-		if !nonEmptyRegularFile(path) {
-			return false
-		}
-	}
-	return true
-}
-
-func nonEmptyRegularFile(path string) bool {
-	info, err := os.Stat(path)
-	return err == nil && info.Mode().IsRegular() && info.Size() > 0
-}
-
-func validTranscriptSet(paths []string) bool {
-	if !allRegularFiles(paths) {
-		return false
-	}
-	for _, path := range paths {
-		if filepath.Ext(path) != ".json" {
-			continue
-		}
-		data, err := os.ReadFile(path)
-		return err == nil && json.Valid(data)
-	}
-	return false
 }
 
 func removeMatches(paths []string) error {
