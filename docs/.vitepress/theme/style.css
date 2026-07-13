@@ -1,6 +1,11 @@
 /**
  * vidtrace brand theme.
  * Palette derived from the logo gradient: #0F766E -> #06B6C4 on #0F172A.
+ *
+ * Dark cards (terminal, CTA, install snippet) use CSS variables that adapt:
+ * - Light mode: deep navy #0f172a pops against the white page.
+ * - Dark mode: elevated navy #1e2438 sits above VitePress's #1b1b1f page bg,
+ *   with stronger cyan borders and cyan-tinted glows instead of dark shadows.
  */
 
 :root {
@@ -18,6 +23,35 @@
   --vp-button-brand-bg: #0f766e;
   --vp-button-brand-hover-bg: #06b6d4;
   --vp-button-brand-active-bg: #0891b2;
+
+  /* Dark-surface variables (terminal, CTA, install snippet). */
+  --vt-surface: #0f172a;
+  --vt-surface-2: #1e293b;
+  --vt-border-cyan: rgba(6, 182, 212, 0.2);
+  --vt-border-cyan-strong: rgba(6, 182, 212, 0.25);
+  --vt-shadow: 0 16px 50px rgba(15, 23, 42, 0.35);
+  --vt-glow-opacity: 0.08;
+  --vt-terminal-file: #0f766e;
+  --vt-terminal-text: #cbd5e1;
+  --vt-terminal-dim: #64748b;
+  --vt-terminal-step: #94a3b8;
+  --vt-cta-heading: #e2e8f0;
+  --vt-cta-body: #94a3b8;
+}
+
+.dark {
+  --vt-surface: #1e2438;
+  --vt-surface-2: #283046;
+  --vt-border-cyan: rgba(6, 182, 212, 0.3);
+  --vt-border-cyan-strong: rgba(6, 182, 212, 0.4);
+  --vt-shadow: 0 8px 40px rgba(6, 182, 212, 0.05);
+  --vt-glow-opacity: 0.12;
+  --vt-terminal-file: #2dd4bf;
+  --vt-terminal-text: #d1d5db;
+  --vt-terminal-dim: #6b7280;
+  --vt-terminal-step: #9ca3af;
+  --vt-cta-heading: #f1f5f9;
+  --vt-cta-body: #94a3b8;
 }
 
 /* ---------- Scroll reveal ---------- */
@@ -57,7 +91,7 @@
   transform: translateX(-50%);
   width: 800px;
   height: 600px;
-  background: radial-gradient(ellipse at center, rgba(6, 182, 212, 0.08) 0%, transparent 70%);
+  background: radial-gradient(ellipse at center, rgba(6, 182, 212, var(--vt-glow-opacity)) 0%, transparent 70%);
   pointer-events: none;
   z-index: 0;
 }
@@ -150,8 +184,8 @@
   gap: 10px;
   padding: 12px 20px;
   border-radius: 8px;
-  background: #0f172a;
-  border: 1px solid rgba(6, 182, 212, 0.25);
+  background: var(--vt-surface);
+  border: 1px solid var(--vt-border-cyan-strong);
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 14px;
   color: #e2e8f0;
@@ -161,7 +195,7 @@
 }
 
 .vt-install-code:hover {
-  border-color: rgba(6, 182, 212, 0.5);
+  border-color: rgba(6, 182, 212, 0.6);
   box-shadow: 0 4px 20px rgba(6, 182, 212, 0.1);
 }
 
@@ -170,7 +204,7 @@
 }
 
 .vt-install-code .vt-install-copy {
-  color: #64748b;
+  color: var(--vt-terminal-dim);
   font-size: 12px;
   margin-left: 8px;
   user-select: none;
@@ -181,9 +215,9 @@
 .vt-terminal {
   border-radius: 12px;
   overflow: hidden;
-  box-shadow: 0 16px 50px rgba(15, 23, 42, 0.35);
-  border: 1px solid rgba(6, 182, 212, 0.2);
-  background: #0f172a;
+  box-shadow: var(--vt-shadow);
+  border: 1px solid var(--vt-border-cyan);
+  background: var(--vt-surface);
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 13px;
   line-height: 1.7;
@@ -196,8 +230,8 @@
   align-items: center;
   gap: 6px;
   padding: 10px 14px;
-  background: #1e293b;
-  border-bottom: 1px solid rgba(6, 182, 212, 0.15);
+  background: var(--vt-surface-2);
+  border-bottom: 1px solid var(--vt-border-cyan);
 }
 
 .vt-terminal-dot {
@@ -212,14 +246,14 @@
 
 .vt-terminal-title {
   margin-left: 8px;
-  color: #64748b;
+  color: var(--vt-terminal-dim);
   font-size: 12px;
 }
 
 .vt-terminal-replay {
   margin-left: auto;
   background: transparent;
-  border: 1px solid rgba(6, 182, 212, 0.3);
+  border: 1px solid var(--vt-border-cyan);
   color: #06b6d4;
   border-radius: 4px;
   padding: 2px 10px;
@@ -231,21 +265,21 @@
 
 .vt-terminal-replay:hover {
   background: rgba(6, 182, 212, 0.1);
-  border-color: rgba(6, 182, 212, 0.5);
+  border-color: rgba(6, 182, 212, 0.6);
 }
 
 .vt-terminal-body {
   padding: 18px 20px;
-  color: #cbd5e1;
+  color: var(--vt-terminal-text);
   min-height: 240px;
 }
 
 .vt-terminal-prompt { color: #06b6d4; }
 .vt-terminal-cmd { color: #e2e8f0; }
-.vt-terminal-out { color: #64748b; }
+.vt-terminal-out { color: var(--vt-terminal-dim); }
 .vt-terminal-ok { color: #22c55e; }
-.vt-terminal-file { color: #0f766e; }
-.vt-terminal-step { color: #94a3b8; }
+.vt-terminal-file { color: var(--vt-terminal-file); }
+.vt-terminal-step { color: var(--vt-terminal-step); }
 .vt-terminal-cursor {
   display: inline-block;
   width: 8px;
@@ -529,8 +563,8 @@
   text-align: center;
   padding: 56px 24px;
   border-radius: 16px;
-  background: var(--vt-brand-dark);
-  border: 1px solid rgba(6, 182, 212, 0.25);
+  background: var(--vt-surface);
+  border: 1px solid var(--vt-border-cyan-strong);
   max-width: 800px;
   margin: 0 auto 48px;
   position: relative;
@@ -545,7 +579,7 @@
   transform: translateX(-50%);
   width: 500px;
   height: 400px;
-  background: radial-gradient(ellipse at center, rgba(6, 182, 212, 0.12) 0%, transparent 70%);
+  background: radial-gradient(ellipse at center, rgba(6, 182, 212, var(--vt-glow-opacity)) 0%, transparent 70%);
   pointer-events: none;
 }
 
@@ -555,14 +589,14 @@
 }
 
 .vt-cta h2 {
-  color: #e2e8f0;
+  color: var(--vt-cta-heading);
   font-size: 26px;
   margin: 0 0 8px;
   letter-spacing: -0.02em;
 }
 
 .vt-cta p {
-  color: #94a3b8;
+  color: var(--vt-cta-body);
   margin: 0 0 24px;
   font-size: 15px;
 }
