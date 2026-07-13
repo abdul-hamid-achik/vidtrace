@@ -1,3 +1,7 @@
+---
+title: CLI Contract
+description: "Full vidtrace command surface: every command, flag, exit code, and stable JSON output contract for automation and coding agents."
+---
 # CLI Contract
 
 This document describes the intended stable command surface for `vidtrace`.

@@ -1,3 +1,7 @@
+---
+title: Usage
+description: "Run human and agent workflows with vidtrace: extract, validate, index, search, investigate, stash, clip, compare, and studio."
+---
 # Usage
 
 ## Human Workflow

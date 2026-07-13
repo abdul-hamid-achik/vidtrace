@@ -1,3 +1,7 @@
+---
+title: Clip
+description: Cut video clips, make animated GIFs, and stitch videos from timestamp ranges with vidtrace clip. Supports labeled ranges and fcheap stashing.
+---
 # Clip
 
 `vidtrace clip` cuts video clips, makes animated GIFs, and stitches clips from timestamp ranges. It runs entirely on `ffmpeg` and works on a source video or existing clip files, not on an extracted artifact bundle.

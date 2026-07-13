@@ -1,3 +1,7 @@
+---
+title: Install
+description: "Install vidtrace via Homebrew cask, Linux .deb/.rpm packages, or source build. Runtime dependencies: ffmpeg, tesseract, whisper."
+---
 # Install
 
 ## Runtime Requirements

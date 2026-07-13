@@ -1,3 +1,7 @@
+---
+title: Testing
+description: "Layered test strategy for vidtrace: Go unit tests, golangci-lint, synthetic smoke extraction, glyphrun E2E specs, and CI."
+---
 # Testing
 
 `vidtrace` uses layered tests because the product is both a Go codebase and a CLI that orchestrates external media tools.

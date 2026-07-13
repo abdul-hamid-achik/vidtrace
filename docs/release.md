@@ -1,3 +1,7 @@
+---
+title: Release
+description: "vidtrace release process: GitHub Actions CI, GoReleaser tagged releases, Homebrew tap publishing, and macOS signing roadmap."
+---
 # Release
 
 `vidtrace` uses GitHub Actions and GoReleaser for tagged releases.

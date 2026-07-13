@@ -1,3 +1,7 @@
+---
+title: Artifact Schema
+description: Generated bundle layout, metadata.json and timeline.json schemas, frame time calculation, and transcript matching model.
+---
 # Artifact Schema
 
 The artifact bundle is the product surface that agents and humans consume.

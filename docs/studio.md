@@ -1,3 +1,7 @@
+---
+title: Studio
+description: Terminal Studio for browsing timeline entries, OCR text, transcripts, and frame paths in a keyboard-first interface with open, reveal, and copy actions.
+---
 # Studio
 
 `vidtrace studio` opens an artifact bundle in a terminal review interface.

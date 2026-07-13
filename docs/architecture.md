@@ -1,3 +1,7 @@
+---
+title: Architecture
+description: vidtrace component boundaries, pipeline shape, and internal Go package structure for orchestrating ffmpeg, tesseract, and whisper.
+---
 # Architecture
 
 ## Overview

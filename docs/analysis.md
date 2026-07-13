@@ -1,3 +1,7 @@
+---
+title: Analysis and Comparison
+description: Compare a ticket description against extracted video evidence with confidence scores, term hits, and Markdown analysis reports.
+---
 # Analysis and Comparison
 
 `vidtrace analyze` and `vidtrace compare` help agents and reviewers connect a ticket description to extracted video evidence.
