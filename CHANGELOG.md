@@ -4,6 +4,47 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.19.0] - 2026-07-17
+
+### Added
+
+- `vidtrace investigate --video <path>` one-shot path: extract a bug video, then search evidence (and optional `--connect` / `--codemap`) in a single command. Pair with `--extract-out`, `--extract-name`, and `--extract-fps`.
+- `vidtrace investigate --mode keyword|semantic|hybrid` with optional `--embed` / `--embed-model` / `--ollama-url` for semantic evidence ranking during investigation.
+- `vidtrace investigate --format github-issue` for a paste-ready GitHub issue body (Markdown remains the default human format).
+- `vidtrace extract --index <db>` and `vidtrace extract --stash` to index and/or vault-stash a bundle immediately after extraction.
+- `vidtrace clip from-evidence --db <db> --query TEXT` cuts clips (or `--gif`) around evidence-search hits with `--pad` seconds of context.
+- Studio: `/` filter (OCR/transcript substring), `:` jump to 1-based entry index, `g`/`G` first/last visible entry; timeline marks frames with notable `visual_delta`.
+- Timeline entries may include `visual_delta` (0–1 mean absolute pixel difference vs previous frame) to surface UI change moments.
+- `vidtrace compare` / `analyze --mode hybrid` ranks ticket text against a temporary evidence index while keeping classic term hits.
+- Compare coverage can report `contradicted` when a failure-oriented ticket is paired with success-only evidence language.
+- MCP tools: `doctor`, `timeline`, and `frame` (read-only). `investigate` accepts `video_path`, `mode`, and embed fields.
+
+### Fixed
+
+- Suggested action for `no_observation` no longer references a non-existent `--broaden` flag.
+
+### Changed
+
+- Empty unused packages `internal/site` and `internal/tui` removed.
+
+## [0.18.0] - 2026-07-10
+
+### Added
+
+- Resumable stage manifests for extraction: `stage_manifest.json` tracks metadata/frames/OCR/transcript/timeline completion with fingerprinting, bundle locking, and `--resume` / `--resume-from` recovery after partial failures.
+
+## [0.17.0] - 2026-07-10
+
+### Added
+
+- `vidtrace extract --resume` skips already-completed extraction stages when a compatible incomplete bundle is present.
+
+## [0.16.0] - 2026-07-10
+
+### Added
+
+- Coverage-aware ticket comparison statuses: `unknown`, `no_observation`, `inconclusive`, `supported` (plus structured `hint` and `suggested_action` fields).
+
 ## [0.15.0] - 2026-07-07
 
 ### Added

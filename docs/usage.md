@@ -18,7 +18,11 @@ Progress is shown as numbered steps with bars for bundle creation, metadata, fra
 
 ```bash
 vidtrace extract /path/to/bug.mp4 --json
+vidtrace extract /path/to/bug.mp4 --resume --json
+vidtrace extract /path/to/bug.mp4 --index /tmp/vidtrace-evidence.veclite --stash --json
 ```
+
+Use `--resume` / `--resume-from` to continue a partial extraction. Use `--index` and `--stash` to wire the new bundle into evidence search or the fcheap vault in the same run.
 
 Agents can print the built-in operating guide before extraction:
 
@@ -47,6 +51,17 @@ Index and search timestamped evidence:
 ```bash
 vidtrace index "$output_dir" --db /tmp/vidtrace-evidence.veclite --json
 vidtrace search /tmp/vidtrace-evidence.veclite "clicking a ticket does not work" --json
+vidtrace clip from-evidence --db /tmp/vidtrace-evidence.veclite --query "clicking a ticket does not work" --pad 2 --json
+```
+
+One-shot investigate from a raw video:
+
+```bash
+vidtrace investigate --video /path/to/bug.mp4 \
+  --query "clicking a ticket does not work" \
+  --codebase /path/to/app \
+  --connect \
+  --json
 ```
 
 Index several bundles into one database (a shell glob expands to multiple paths):

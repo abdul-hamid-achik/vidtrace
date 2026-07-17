@@ -13,8 +13,9 @@ func runAnalyze(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("analyze", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	ticketPath := fs.String("ticket", "", "ticket markdown or text file")
+	mode := fs.String("mode", "keyword", "comparison mode: keyword or hybrid")
 
-	normalizedArgs, err := normalizeBundleArgs(args, map[string]struct{}{}, map[string]struct{}{"ticket": {}})
+	normalizedArgs, err := normalizeBundleArgs(args, map[string]struct{}{}, map[string]struct{}{"ticket": {}, "mode": {}})
 	if err != nil {
 		_, _ = fmt.Fprintln(stderr, err)
 		return 2
@@ -31,6 +32,7 @@ func runAnalyze(args []string, stdout, stderr io.Writer) int {
 	result, err := analysis.Compare(analysis.Options{
 		BundleDir:  fs.Arg(0),
 		TicketPath: *ticketPath,
+		Mode:       *mode,
 	})
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "analyze failed: %v\n", err)
@@ -45,10 +47,11 @@ func runCompare(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("compare", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	ticketPath := fs.String("ticket", "", "ticket markdown or text file")
+	mode := fs.String("mode", "keyword", "comparison mode: keyword or hybrid")
 	jsonOutput := fs.Bool("json", false, "print machine-readable JSON")
 
 	jsonWanted := jsonFlagRequested(args)
-	normalizedArgs, err := normalizeBundleArgs(args, map[string]struct{}{"json": {}}, map[string]struct{}{"ticket": {}})
+	normalizedArgs, err := normalizeBundleArgs(args, map[string]struct{}{"json": {}}, map[string]struct{}{"ticket": {}, "mode": {}})
 	if err != nil {
 		return writeUsageError(stdout, stderr, jsonWanted, err.Error())
 	}
@@ -63,6 +66,7 @@ func runCompare(args []string, stdout, stderr io.Writer) int {
 	result, err := analysis.Compare(analysis.Options{
 		BundleDir:  fs.Arg(0),
 		TicketPath: *ticketPath,
+		Mode:       *mode,
 	})
 	if err != nil {
 		if *jsonOutput {

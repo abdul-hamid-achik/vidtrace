@@ -75,6 +75,9 @@ Studio keys:
 | Key | Behavior |
 |---|---|
 | `up`/`down`, `k`/`j` | Move through timeline entries |
+| `g` / `G` | Jump to first / last visible entry |
+| `/` | Filter entries by OCR/transcript substring |
+| `:` | Jump to a 1-based entry number |
 | `m` | Toggle bundle metadata/details |
 | `o` | Open the selected frame with the OS default opener when possible |
 | `r` | Reveal the selected frame in Finder on macOS |
@@ -295,9 +298,11 @@ vidtrace investigate /path/to/bug_artifacts_YYYYMMDD_HHMMSS --query "checkout bu
 vidtrace investigate /path/to/bug_artifacts_YYYYMMDD_HHMMSS --query "checkout button error" --codebase /path/to/app --json
 vidtrace investigate /path/to/bug_artifacts_YYYYMMDD_HHMMSS --query "checkout button error" --codebase /path/to/app --connect --json
 vidtrace investigate --stash fcheap_stash_id --query "checkout button error" --json
+vidtrace investigate --video /path/to/bug.mp4 --query "checkout button error" --codebase /path/to/app --connect --json
+vidtrace investigate /path/to/bundle --query "checkout button error" --format github-issue
 ```
 
-The command indexes/searches the bundle evidence using the BM25 evidence-search path, then returns:
+The command indexes/searches the bundle evidence (keyword by default; semantic/hybrid when configured), then returns:
 
 - timestamped video evidence
 - suggested code-search queries
@@ -315,6 +320,13 @@ Flags:
 | Flag | Default | Meaning |
 |---|---|---|
 | `--query` | (required) | Bug or evidence query |
+| `--video` | none | Extract this video first, then investigate (one-shot; cannot combine with a bundle path or `--stash`) |
+| `--extract-out` | temp | Parent output directory for `--video` extraction |
+| `--extract-name` | none | Bundle name prefix for `--video` extraction |
+| `--extract-fps` | `1` | Frame rate for `--video` extraction |
+| `--mode` | `keyword` | Evidence search mode: `keyword`, `semantic`, or `hybrid` |
+| `--embed` / `--embed-model` / `--ollama-url` | none | Embedding config for semantic/hybrid modes |
+| `--format` | `markdown` | Human output format: `markdown` or `github-issue` (ignored with `--json`) |
 | `--codebase` | none | Optional codebase path for vecgrep command suggestions |
 | `--db` | none (temp) | Optional reusable evidence database path |
 | `--limit` | `5` | Maximum evidence results |
@@ -475,9 +487,16 @@ Flags:
 | `--model` | `small` | Whisper model |
 | `--out` | `~/Downloads` | Parent output directory |
 | `--name` | input basename | Artifact bundle name prefix |
+| `--concurrency` | `0` (auto) | Parallel OCR workers (capped to 8) |
+| `--resume` | `false` | Resume a compatible incomplete bundle under `--out` |
+| `--resume-from` | none | Resume a specific existing bundle directory |
+| `--index` | none | After extract, index the bundle into this evidence DB |
+| `--stash` | `false` | After extract, stash the bundle to fcheap |
+| `--stash-name` | bundle basename | Name for the fcheap stash |
+| `--stash-tool` | `vidtrace` | Tool tag for the fcheap stash |
 | `--json` | `false` | Emit machine-readable run summary |
 
-Human output is progress-oriented and readable, with numbered step progress bars. JSON output writes only JSON to stdout. The `output_dir` field is the entry-point for downstream tools: feed it straight into `vidtrace validate`, `vidtrace index`, `vidtrace investigate`, `vidtrace compare`, `vidtrace analyze`, or `vidtrace studio` without further parsing.
+Human output is progress-oriented and readable, with numbered step progress bars. JSON output writes only JSON to stdout. The `output_dir` field is the entry-point for downstream tools: feed it straight into `vidtrace validate`, `vidtrace index`, `vidtrace investigate`, `vidtrace compare`, `vidtrace analyze`, or `vidtrace studio` without further parsing. With `--index` / `--stash`, JSON may also include `index` / `stash` objects (or `index_error` / `stash_error`).
 
 Example success JSON:
 
@@ -579,6 +598,8 @@ Cuts video clips, makes GIFs, and stitches clips from timestamp ranges. Requires
 vidtrace clip cut /path/to/video.mp4 --label "issue1=0:18-3:40" --json
 vidtrace clip gif /path/to/video.mp4 --label "issue1=0:18-3:40" --fps 10 --width 480 --json
 vidtrace clip stitch clip1.mp4 clip2.mp4 --name summary --json
+vidtrace clip from-evidence --db /tmp/evidence.veclite --query "login failed" --pad 2 --json
+vidtrace clip from-evidence --db /tmp/evidence.veclite --query "login failed" --gif --json
 ```
 
 Subcommands:
@@ -588,6 +609,7 @@ Subcommands:
 | `cut` | Cut one or more clips from a video at timestamp ranges |
 | `gif` | Create animated GIF(s) from timestamp ranges |
 | `stitch` | Join multiple clips into one concatenated video |
+| `from-evidence` | Cut clips (or GIFs) around evidence-search hits |
 | `help` | Show clip help |
 
 Timestamp formats:
@@ -675,7 +697,10 @@ It exposes these read-only tools, whose inputs and structured outputs mirror the
 | `search` | Search an evidence database (`db_path`, `query`, optional `mode`, filters, and `embed`/`embed_model`/`ollama_url`). |
 | `compare` | Structured ticket-vs-bundle comparison (`bundle_dir`, `ticket_path`). |
 | `analyze` | Markdown evidence report (`bundle_dir`, `ticket_path`). |
-| `investigate` | Video-evidence to code-search handoff (`bundle_dir` or `stash_id`, `query`, optional `codebase_dir`, `connect`, `connect_mode`, `connect_limit`, `codemap`, `codemap_depth`, `codemap_annotate`). |
+| `investigate` | Video-evidence to code-search handoff (`bundle_dir`, `stash_id`, or `video_path`; optional `mode`/`embed`, `connect`, `codemap`, …). |
+| `doctor` | Check required/optional local tools. |
+| `timeline` | Read timeline entries (`bundle_dir`, optional `limit`/`offset`). |
+| `frame` | Read one timeline entry by 0-based `index`. |
 | `stash_list` | List fcheap stashes (`tool`, `tag`). |
 | `stash_info` | Get stash metadata (`stash_id`). |
 | `stash_search` | Search across stashes (`query`, `mode`, `limit`). |
@@ -687,7 +712,7 @@ It exposes these read-only tools, whose inputs and structured outputs mirror the
 | `codemap_find` | Find symbols by name or FQN substring (`query`, optional `top_k`). |
 | `codemap_context` | Everything about a `symbol` in one call: definition, callers, callees, tests, annotations (optional `depth`). |
 
-No tool mutates source videos or generated artifact bundles. `stash_save` is intentionally excluded from MCP to respect the read-only constraint. Tool failures are returned as MCP tool errors (visible to the model), not protocol errors. A client disconnect (stdin EOF) is a clean shutdown.
+Most tools are read-only. `investigate` with `video_path` creates a new bundle under a temp directory (the only intentional write path). `stash_save` is intentionally excluded from MCP. Tool failures are returned as MCP tool errors (visible to the model), not protocol errors. A client disconnect (stdin EOF) is a clean shutdown.
 The `codemap_*` tools and the `codemap`/`codemap_annotate` options on `investigate` require the optional `codemap` CLI; they return a clear error when it is not installed, so a missing `codemap` never breaks the MCP server or the other tools. `vidtrace doctor` reports whether `codemap` is installed.
 
 Example client registration (Claude Desktop / MCP client config):

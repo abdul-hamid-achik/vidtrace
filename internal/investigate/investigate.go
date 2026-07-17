@@ -13,8 +13,10 @@ import (
 	"time"
 
 	"github.com/abdul-hamid-achik/vidtrace/internal/codemap"
+	"github.com/abdul-hamid-achik/vidtrace/internal/embed"
 	"github.com/abdul-hamid-achik/vidtrace/internal/evidence"
 	"github.com/abdul-hamid-achik/vidtrace/internal/fcheap"
+	"github.com/abdul-hamid-achik/vidtrace/internal/pipeline"
 )
 
 type Options struct {
@@ -44,6 +46,21 @@ type Options struct {
 	// CodemapAnnotate pins vidtrace evidence findings to resolved symbols
 	// as persistent codemap annotations (source="vidtrace").
 	CodemapAnnotate bool
+	// VideoPath, when set, runs extract first and investigates the resulting
+	// bundle. BundleDir is ignored unless extract is skipped via an existing
+	// ResumeFrom-compatible flow (not exposed here).
+	VideoPath string
+	// ExtractOut is the parent directory for one-shot extraction (default: system temp).
+	ExtractOut string
+	// ExtractName is the optional bundle name prefix for one-shot extraction.
+	ExtractName string
+	// ExtractFPS controls one-shot extraction frame rate (default 1).
+	ExtractFPS float64
+	// Mode selects keyword (default), semantic, or hybrid evidence search.
+	// Semantic and hybrid require Embedder and a matching semantic index.
+	Mode string
+	// Embedder builds/searches the semantic index when Mode is semantic or hybrid.
+	Embedder embed.Embedder
 }
 
 type Report struct {
@@ -63,6 +80,10 @@ type Report struct {
 	ConnectError     string                  `json:"connect_error,omitempty"`
 	CodemapExpansion *CodemapExpansion       `json:"codemap_expansion,omitempty"`
 	CodemapError     string                  `json:"codemap_error,omitempty"`
+	// SourceVideo is set when investigation started from --video.
+	SourceVideo string `json:"source_video,omitempty"`
+	// Extracted is true when a one-shot extract ran as part of this investigation.
+	Extracted bool `json:"extracted,omitempty"`
 }
 
 // CodemapExpansion holds the structural code graph results for code matches
@@ -99,7 +120,60 @@ func Run(opts Options) (Report, error) {
 	}
 
 	var stashID string
+	var sourceVideo string
+	extracted := false
 	bundleDir := strings.TrimSpace(opts.BundleDir)
+
+	// One-shot path: extract from a video, then investigate the new bundle.
+	if videoPath := strings.TrimSpace(opts.VideoPath); videoPath != "" {
+		if strings.TrimSpace(opts.StashID) != "" {
+			return Report{}, fmt.Errorf("--video cannot be combined with --stash")
+		}
+		if bundleDir != "" {
+			return Report{}, fmt.Errorf("--video cannot be combined with a bundle path")
+		}
+		absVideo, err := filepath.Abs(videoPath)
+		if err != nil {
+			return Report{}, fmt.Errorf("resolve video: %w", err)
+		}
+		if _, err := os.Stat(absVideo); err != nil {
+			return Report{}, fmt.Errorf("video not found: %s", absVideo)
+		}
+		outDir := strings.TrimSpace(opts.ExtractOut)
+		if outDir == "" {
+			tmpDir, err := os.MkdirTemp("", "vidtrace-investigate-extract-*")
+			if err != nil {
+				return Report{}, fmt.Errorf("create extract output directory: %w", err)
+			}
+			outDir = tmpDir
+		} else {
+			outDir, err = filepath.Abs(outDir)
+			if err != nil {
+				return Report{}, fmt.Errorf("resolve extract output directory: %w", err)
+			}
+		}
+		fps := opts.ExtractFPS
+		if fps <= 0 {
+			fps = 1
+		}
+		extractCtx, extractCancel := context.WithCancel(context.Background())
+		defer extractCancel()
+		summary, err := pipeline.Run(extractCtx, pipeline.Options{
+			SourceVideo:     absVideo,
+			FPS:             fps,
+			OCRLanguage:     "eng",
+			WhisperLanguage: "en",
+			WhisperModel:    "small",
+			OutputParentDir: outDir,
+			BundleName:      opts.ExtractName,
+		})
+		if err != nil {
+			return Report{}, fmt.Errorf("extract video: %w", err)
+		}
+		bundleDir = summary.OutputDir
+		sourceVideo = absVideo
+		extracted = true
+	}
 
 	// If a stash ID is provided, restore the bundle from fcheap first.
 	if strings.TrimSpace(opts.StashID) != "" {
@@ -117,7 +191,7 @@ func Run(opts Options) (Report, error) {
 	}
 
 	if bundleDir == "" {
-		return Report{}, fmt.Errorf("bundle path is required")
+		return Report{}, fmt.Errorf("bundle path, --video, or --stash is required")
 	}
 
 	absBundleDir, err := filepath.Abs(bundleDir)
@@ -144,18 +218,26 @@ func Run(opts Options) (Report, error) {
 		}
 	}
 
+	mode := strings.TrimSpace(opts.Mode)
+	if mode == "" {
+		mode = evidence.ModeKeyword
+	}
+
 	indexReport, err := evidence.IndexBundle(evidence.IndexOptions{
 		BundleDir: absBundleDir,
 		DBPath:    dbPath,
+		Embedder:  opts.Embedder,
 	})
 	if err != nil {
 		return Report{}, err
 	}
 
 	searchReport, err := evidence.Search(evidence.SearchOptions{
-		DBPath: dbPath,
-		Query:  query,
-		Limit:  limit,
+		DBPath:   dbPath,
+		Query:    query,
+		Limit:    limit,
+		Mode:     mode,
+		Embedder: opts.Embedder,
 	})
 	if err != nil {
 		return Report{}, err
@@ -209,9 +291,96 @@ func Run(opts Options) (Report, error) {
 		ConnectError:     connectError,
 		CodemapExpansion: codemapExpansion,
 		CodemapError:     codemapError,
+		SourceVideo:      sourceVideo,
+		Extracted:        extracted,
 	}
 
 	return report, nil
+}
+
+// FormatMarkdown renders the investigation report. format is "markdown"
+// (default) or "github-issue" for a paste-ready GitHub issue body.
+func FormatMarkdown(report Report, format string) string {
+	switch strings.ToLower(strings.TrimSpace(format)) {
+	case "github-issue", "github", "issue":
+		return GitHubIssue(report)
+	default:
+		return Markdown(report)
+	}
+}
+
+// GitHubIssue renders a paste-ready GitHub issue body from an investigation report.
+func GitHubIssue(report Report) string {
+	var b strings.Builder
+	writef(&b, "## Bug evidence (vidtrace)\n\n")
+	writef(&b, "%s\n\n", report.Summary)
+	writef(&b, "**Query:** `%s`\n\n", report.Query)
+	if report.SourceVideo != "" {
+		writef(&b, "**Source video:** `%s`\n\n", report.SourceVideo)
+	}
+	if report.BundleDir != "" {
+		writef(&b, "**Bundle:** `%s`\n\n", report.BundleDir)
+	}
+
+	writef(&b, "### Timestamped evidence\n\n")
+	if len(report.Evidence) == 0 {
+		writef(&b, "_No matching timestamped evidence found._\n\n")
+	} else {
+		for _, item := range report.Evidence {
+			text := firstNonEmpty(item.Transcript, item.OCR, item.Frame)
+			writef(&b, "- **%.2fs** — `%s`\n", item.TimeSeconds, item.Frame)
+			writef(&b, "  - %s\n", truncate(text, 200))
+			if item.OCRPath != "" {
+				writef(&b, "  - OCR: `%s`\n", item.OCRPath)
+			}
+		}
+		writef(&b, "\n")
+	}
+
+	if len(report.CodeMatches) > 0 {
+		writef(&b, "### Code matches\n\n")
+		for _, match := range report.CodeMatches {
+			location := match.File
+			if match.Line > 0 {
+				location = fmt.Sprintf("%s:%d", match.File, match.Line)
+			}
+			if match.Symbol != "" {
+				writef(&b, "- `%s` (`%s`)\n", location, match.Symbol)
+			} else {
+				writef(&b, "- `%s`\n", location)
+			}
+			writef(&b, "  - %s\n", truncate(match.Text, 140))
+		}
+		writef(&b, "\n")
+	}
+
+	if report.CodemapExpansion != nil && len(report.CodemapExpansion.Symbols) > 0 {
+		writef(&b, "### Code graph\n\n")
+		for _, sym := range report.CodemapExpansion.Symbols {
+			writef(&b, "- **`%s`** at `%s:%d`", sym.Symbol, sym.File, sym.Line)
+			if len(sym.Callers) > 0 {
+				writef(&b, " — %d caller(s)", len(sym.Callers))
+			}
+			if len(sym.BlastRadius) > 0 {
+				writef(&b, ", blast radius %d", len(sym.BlastRadius))
+			}
+			writef(&b, "\n")
+		}
+		writef(&b, "\n")
+	}
+
+	if len(report.SuggestedQueries) > 0 {
+		writef(&b, "### Suggested code searches\n\n")
+		for _, q := range report.SuggestedQueries {
+			writef(&b, "- `%s`\n", q)
+		}
+		writef(&b, "\n")
+	}
+
+	writef(&b, "### Notes\n\n")
+	writef(&b, "- Inspect cited frames before changing code.\n")
+	writef(&b, "- Generated by `vidtrace investigate`.\n")
+	return b.String()
 }
 
 // runConnect calls fcheap connect to run vecgrep over the codebase using the

@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -25,6 +26,76 @@ type ClipSpec struct {
 	Label    string  // human-readable name, used in the filename
 	StartSec float64 // start time in seconds
 	EndSec   float64 // end time in seconds
+}
+
+// EvidenceHit is a minimal timestamped evidence point used to build clip ranges.
+type EvidenceHit struct {
+	TimeSeconds float64
+	Label       string
+}
+
+// SpecsFromEvidence builds clip ranges centered on evidence timestamps.
+// pad is added before and after each hit; duration is the base window when pad
+// alone would be too short (defaults to 4s of total window when pad is 0).
+// Adjacent overlapping ranges are merged.
+func SpecsFromEvidence(hits []EvidenceHit, pad float64) []ClipSpec {
+	if pad < 0 {
+		pad = 0
+	}
+	type span struct {
+		start, end float64
+		label      string
+	}
+	var spans []span
+	for i, hit := range hits {
+		start := hit.TimeSeconds - pad
+		if start < 0 {
+			start = 0
+		}
+		end := hit.TimeSeconds + pad
+		if pad == 0 {
+			// Default 2s before/after when pad is zero so a single frame still
+			// produces a usable clip.
+			start = hit.TimeSeconds - 2
+			if start < 0 {
+				start = 0
+			}
+			end = hit.TimeSeconds + 2
+		}
+		if end <= start {
+			end = start + 1
+		}
+		label := strings.TrimSpace(hit.Label)
+		if label == "" {
+			label = DefaultLabel(i + 1)
+		}
+		spans = append(spans, span{start: start, end: end, label: label})
+	}
+	if len(spans) == 0 {
+		return nil
+	}
+	// Sort by start time and merge overlaps.
+	sort.SliceStable(spans, func(i, j int) bool { return spans[i].start < spans[j].start })
+	merged := []span{spans[0]}
+	for _, s := range spans[1:] {
+		last := &merged[len(merged)-1]
+		if s.start <= last.end {
+			if s.end > last.end {
+				last.end = s.end
+			}
+			continue
+		}
+		merged = append(merged, s)
+	}
+	specs := make([]ClipSpec, 0, len(merged))
+	for i, s := range merged {
+		label := s.label
+		if i > 0 && label == merged[0].label {
+			label = DefaultLabel(i + 1)
+		}
+		specs = append(specs, ClipSpec{Label: SafeLabel(label), StartSec: s.start, EndSec: s.end})
+	}
+	return specs
 }
 
 // CutResult is the outcome of cutting one clip.

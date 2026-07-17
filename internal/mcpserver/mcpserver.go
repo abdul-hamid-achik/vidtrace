@@ -7,18 +7,23 @@ package mcpserver
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"strings"
 
 	mcp "github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"path/filepath"
+
 	"github.com/abdul-hamid-achik/vidtrace/internal/analysis"
 	"github.com/abdul-hamid-achik/vidtrace/internal/bundle"
 	"github.com/abdul-hamid-achik/vidtrace/internal/codemap"
+	"github.com/abdul-hamid-achik/vidtrace/internal/doctor"
 	"github.com/abdul-hamid-achik/vidtrace/internal/embed"
 	"github.com/abdul-hamid-achik/vidtrace/internal/evidence"
 	"github.com/abdul-hamid-achik/vidtrace/internal/fcheap"
 	"github.com/abdul-hamid-achik/vidtrace/internal/investigate"
+	"github.com/abdul-hamid-achik/vidtrace/internal/timeline"
 )
 
 // New builds the vidtrace MCP server with read-only evidence tools registered.
@@ -106,6 +111,21 @@ func New(version string) *mcp.Server {
 		Description: "Everything about a symbol in one call: definition, callers, callees, tests, and annotations.",
 	}, codemapContextTool)
 
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "doctor",
+		Description: "Check required and optional local tools (ffmpeg, ffprobe, tesseract, whisper, ollama, fcheap, vecgrep, codemap).",
+	}, doctorTool)
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "timeline",
+		Description: "Read a bundle's timeline entries (timestamp, frame, OCR, transcript, visual_delta).",
+	}, timelineTool)
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "frame",
+		Description: "Read one timeline entry from a bundle by 0-based index, with absolute frame path and OCR/transcript text.",
+	}, frameTool)
+
 	return server
 }
 
@@ -132,7 +152,133 @@ func isCleanShutdown(err error) bool {
 
 // ToolNames lists the registered tool names, for documentation and tests.
 func ToolNames() []string {
-	return []string{"validate", "search", "compare", "analyze", "investigate", "stash_list", "stash_info", "stash_search", "stash_connect", "codemap_symbol_at", "codemap_callers", "codemap_impact", "codemap_semantic", "codemap_find", "codemap_context"}
+	return []string{
+		"validate", "search", "compare", "analyze", "investigate",
+		"stash_list", "stash_info", "stash_search", "stash_connect",
+		"codemap_symbol_at", "codemap_callers", "codemap_impact", "codemap_semantic", "codemap_find", "codemap_context",
+		"doctor", "timeline", "frame",
+	}
+}
+
+// DoctorInput is empty; doctor inspects the local environment.
+type DoctorInput struct{}
+
+func doctorTool(_ context.Context, _ *mcp.CallToolRequest, _ DoctorInput) (*mcp.CallToolResult, doctor.Result, error) {
+	return nil, doctor.Check(), nil
+}
+
+// TimelineInput selects a bundle and optional limit/offset for timeline entries.
+type TimelineInput struct {
+	BundleDir string `json:"bundle_dir" jsonschema:"path to the artifact bundle directory"`
+	Limit     int    `json:"limit,omitempty" jsonschema:"maximum entries to return (0 = all)"`
+	Offset    int    `json:"offset,omitempty" jsonschema:"0-based entry offset"`
+}
+
+// TimelineOutput is a compact timeline view for agents.
+type TimelineOutput struct {
+	OK        bool                `json:"ok"`
+	BundleDir string              `json:"bundle_dir"`
+	Count     int                 `json:"count"`
+	Total     int                 `json:"total"`
+	Entries   []TimelineEntryView `json:"entries"`
+}
+
+// TimelineEntryView is one timeline entry with agent-friendly fields.
+type TimelineEntryView struct {
+	Index       int      `json:"index"`
+	TimeSeconds float64  `json:"time_seconds"`
+	Frame       string   `json:"frame"`
+	FramePath   string   `json:"frame_path"`
+	OCRPath     string   `json:"ocr_path,omitempty"`
+	OCR         string   `json:"ocr,omitempty"`
+	Transcript  string   `json:"transcript,omitempty"`
+	VisualDelta *float64 `json:"visual_delta,omitempty"`
+}
+
+func timelineTool(_ context.Context, _ *mcp.CallToolRequest, in TimelineInput) (*mcp.CallToolResult, TimelineOutput, error) {
+	if strings.TrimSpace(in.BundleDir) == "" {
+		return toolError[TimelineOutput]("bundle_dir is required")
+	}
+	doc, err := bundle.Load(in.BundleDir)
+	if err != nil {
+		return toolError[TimelineOutput](err.Error())
+	}
+	total := len(doc.Timeline.Entries)
+	offset := in.Offset
+	if offset < 0 {
+		offset = 0
+	}
+	if offset > total {
+		offset = total
+	}
+	end := total
+	if in.Limit > 0 && offset+in.Limit < end {
+		end = offset + in.Limit
+	}
+	entries := make([]TimelineEntryView, 0, end-offset)
+	for i := offset; i < end; i++ {
+		entries = append(entries, viewEntry(doc, i))
+	}
+	return nil, TimelineOutput{
+		OK:        true,
+		BundleDir: doc.Dir,
+		Count:     len(entries),
+		Total:     total,
+		Entries:   entries,
+	}, nil
+}
+
+// FrameInput selects one timeline entry by 0-based index.
+type FrameInput struct {
+	BundleDir string `json:"bundle_dir" jsonschema:"path to the artifact bundle directory"`
+	Index     int    `json:"index" jsonschema:"0-based timeline entry index"`
+}
+
+// FrameOutput is a single timeline entry for agent inspection.
+type FrameOutput struct {
+	OK    bool              `json:"ok"`
+	Entry TimelineEntryView `json:"entry"`
+}
+
+func frameTool(_ context.Context, _ *mcp.CallToolRequest, in FrameInput) (*mcp.CallToolResult, FrameOutput, error) {
+	if strings.TrimSpace(in.BundleDir) == "" {
+		return toolError[FrameOutput]("bundle_dir is required")
+	}
+	doc, err := bundle.Load(in.BundleDir)
+	if err != nil {
+		return toolError[FrameOutput](err.Error())
+	}
+	if in.Index < 0 || in.Index >= len(doc.Timeline.Entries) {
+		return toolError[FrameOutput](fmt.Sprintf("index %d out of range (0-%d)", in.Index, len(doc.Timeline.Entries)-1))
+	}
+	return nil, FrameOutput{OK: true, Entry: viewEntry(doc, in.Index)}, nil
+}
+
+func viewEntry(doc bundle.Bundle, index int) TimelineEntryView {
+	entry := doc.Timeline.Entries[index]
+	return TimelineEntryView{
+		Index:       index,
+		TimeSeconds: entry.TimeSeconds,
+		Frame:       entry.Frame,
+		FramePath:   filepath.Join(doc.Dir, filepath.FromSlash(entry.Frame)),
+		OCRPath:     entry.OCR.Path,
+		OCR:         entry.OCR.Text,
+		Transcript:  transcriptLine(entry),
+		VisualDelta: entry.VisualDelta,
+	}
+}
+
+func transcriptLine(entry timeline.Entry) string {
+	if len(entry.Transcript) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(entry.Transcript))
+	for _, seg := range entry.Transcript {
+		if t := strings.TrimSpace(seg.Text); t != "" {
+			parts = append(parts, t)
+		}
+	}
+	return strings.Join(parts, " ")
 }
 
 // ValidateInput selects the bundle to validate.
@@ -225,8 +371,10 @@ func analyzeTool(_ context.Context, _ *mcp.CallToolRequest, in AnalyzeInput) (*m
 // InvestigateInput mirrors the `vidtrace investigate` flags. DBPath is
 // intentionally omitted so investigation always uses an ephemeral temp database
 // and can never point indexing at a persistent, user-writable location.
+// Video extraction via VideoPath is allowed (creates a new bundle under a temp
+// directory) and remains the only write path on this tool.
 type InvestigateInput struct {
-	BundleDir    string `json:"bundle_dir,omitempty" jsonschema:"path to the artifact bundle directory (optional if stash_id is set)"`
+	BundleDir    string `json:"bundle_dir,omitempty" jsonschema:"path to the artifact bundle directory (optional if stash_id or video_path is set)"`
 	Query        string `json:"query" jsonschema:"bug or evidence query"`
 	CodebaseDir  string `json:"codebase_dir,omitempty" jsonschema:"optional codebase path for vecgrep command suggestions"`
 	Limit        int    `json:"limit,omitempty" jsonschema:"maximum evidence results (default 5)"`
@@ -240,21 +388,34 @@ type InvestigateInput struct {
 	// CodemapDepth controls the blast radius depth (default 3).
 	CodemapDepth int `json:"codemap_depth,omitempty" jsonschema:"max hops for codemap blast radius (default 3)"`
 	// CodemapAnnotate pins vidtrace evidence findings to resolved symbols.
+	// Note: annotate mutates the codemap annotation store; keep disabled for pure read-only agents.
 	CodemapAnnotate bool `json:"codemap_annotate,omitempty" jsonschema:"pin vidtrace evidence findings to resolved codemap symbols"`
+	// VideoPath runs extract first (one-shot) then investigates the new bundle.
+	VideoPath string `json:"video_path,omitempty" jsonschema:"path to a bug video; extract then investigate in one call"`
+	// Mode selects keyword (default), semantic, or hybrid evidence search.
+	Mode string `json:"mode,omitempty" jsonschema:"evidence search mode: keyword, semantic, or hybrid"`
+	// Embed / EmbedModel / OllamaURL configure semantic/hybrid indexing and search.
+	Embed      string `json:"embed,omitempty" jsonschema:"embedding provider for semantic/hybrid mode (ollama)"`
+	EmbedModel string `json:"embed_model,omitempty" jsonschema:"embedding model name for the provider"`
+	OllamaURL  string `json:"ollama_url,omitempty" jsonschema:"Ollama base URL (default http://localhost:11434)"`
 }
 
 func investigateTool(_ context.Context, _ *mcp.CallToolRequest, in InvestigateInput) (*mcp.CallToolResult, investigate.Report, error) {
 	if strings.TrimSpace(in.Query) == "" {
 		return toolError[investigate.Report]("query is required")
 	}
-	if strings.TrimSpace(in.BundleDir) == "" && strings.TrimSpace(in.StashID) == "" {
-		return toolError[investigate.Report]("bundle_dir or stash_id is required")
+	if strings.TrimSpace(in.BundleDir) == "" && strings.TrimSpace(in.StashID) == "" && strings.TrimSpace(in.VideoPath) == "" {
+		return toolError[investigate.Report]("bundle_dir, stash_id, or video_path is required")
 	}
 	if in.Connect && strings.TrimSpace(in.CodebaseDir) == "" {
 		return toolError[investigate.Report]("connect requires codebase_dir")
 	}
 	if in.Codemap && !in.Connect {
 		return toolError[investigate.Report]("codemap requires connect")
+	}
+	embedder, err := embed.Build(in.Embed, in.EmbedModel, in.OllamaURL)
+	if err != nil {
+		return toolError[investigate.Report](err.Error())
 	}
 	report, err := investigate.Run(investigate.Options{
 		BundleDir:       in.BundleDir,
@@ -268,6 +429,9 @@ func investigateTool(_ context.Context, _ *mcp.CallToolRequest, in InvestigateIn
 		Codemap:         in.Codemap,
 		CodemapDepth:    in.CodemapDepth,
 		CodemapAnnotate: in.CodemapAnnotate,
+		VideoPath:       in.VideoPath,
+		Mode:            in.Mode,
+		Embedder:        embedder,
 	})
 	if err != nil {
 		return toolError[investigate.Report](err.Error())

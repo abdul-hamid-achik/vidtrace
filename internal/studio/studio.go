@@ -33,6 +33,15 @@ type model struct {
 	height    int
 	metadata  bool
 	action    string
+	// filterMode is true while the user is typing a / filter query.
+	filterMode bool
+	// filter is the active case-insensitive OCR/transcript substring filter.
+	filter string
+	// filterDraft is the in-progress filter text while filterMode is active.
+	filterDraft string
+	// jumpMode is true while the user is typing a : frame index jump.
+	jumpMode  bool
+	jumpDraft string
 }
 
 type actionResultMsg struct {
@@ -85,17 +94,40 @@ func (m model) Init() tea.Cmd {
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyPressMsg:
-		switch msg.String() {
+		key := msg.String()
+		if m.filterMode {
+			return m.updateFilterMode(key)
+		}
+		if m.jumpMode {
+			return m.updateJumpMode(key)
+		}
+		switch key {
 		case "q", "esc", "ctrl+c":
 			return m, tea.Quit
 		case "down", "j":
-			if m.cursor < len(m.bundle.Timeline.Entries)-1 {
-				m.cursor++
-			}
+			m.moveCursor(1)
 		case "up", "k":
-			if m.cursor > 0 {
-				m.cursor--
+			m.moveCursor(-1)
+		case "g":
+			idxs := m.visibleIndexes()
+			if len(idxs) > 0 {
+				m.cursor = idxs[0]
+				m.action = fmt.Sprintf("jumped to entry %d/%d", m.cursor+1, len(m.bundle.Timeline.Entries))
 			}
+		case "G":
+			idxs := m.visibleIndexes()
+			if len(idxs) > 0 {
+				m.cursor = idxs[len(idxs)-1]
+				m.action = fmt.Sprintf("jumped to entry %d/%d", m.cursor+1, len(m.bundle.Timeline.Entries))
+			}
+		case "/":
+			m.filterMode = true
+			m.filterDraft = m.filter
+			m.action = "filter: type OCR/transcript text, enter to apply, esc to cancel"
+		case ":":
+			m.jumpMode = true
+			m.jumpDraft = ""
+			m.action = "jump: type 1-based entry number, enter to go"
 		case "m":
 			m.metadata = !m.metadata
 			if m.metadata {
@@ -126,6 +158,141 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
+func (m model) updateFilterMode(key string) (tea.Model, tea.Cmd) {
+	switch key {
+	case "esc", "ctrl+c":
+		m.filterMode = false
+		m.filterDraft = m.filter
+		m.action = "filter cancelled"
+	case "enter":
+		m.filter = strings.TrimSpace(m.filterDraft)
+		m.filterMode = false
+		idxs := m.visibleIndexes()
+		if len(idxs) == 0 {
+			m.action = "filter: no matching entries"
+		} else {
+			// Keep cursor on a visible entry when possible.
+			if !containsIndex(idxs, m.cursor) {
+				m.cursor = idxs[0]
+			}
+			if m.filter == "" {
+				m.action = "filter cleared"
+			} else {
+				m.action = fmt.Sprintf("filter %q: %d match(es)", m.filter, len(idxs))
+			}
+		}
+	case "backspace":
+		if m.filterDraft != "" {
+			m.filterDraft = m.filterDraft[:len(m.filterDraft)-1]
+		}
+	default:
+		if len(key) == 1 && key[0] >= 32 && key[0] < 127 {
+			m.filterDraft += key
+		}
+	}
+	return m, nil
+}
+
+func (m model) updateJumpMode(key string) (tea.Model, tea.Cmd) {
+	switch key {
+	case "esc", "ctrl+c":
+		m.jumpMode = false
+		m.jumpDraft = ""
+		m.action = "jump cancelled"
+	case "enter":
+		m.jumpMode = false
+		n, err := parsePositiveInt(m.jumpDraft)
+		m.jumpDraft = ""
+		if err != nil || n < 1 || n > len(m.bundle.Timeline.Entries) {
+			m.action = "jump failed: enter a 1-based entry number"
+			return m, nil
+		}
+		m.cursor = n - 1
+		m.action = fmt.Sprintf("jumped to entry %d/%d", n, len(m.bundle.Timeline.Entries))
+	case "backspace":
+		if m.jumpDraft != "" {
+			m.jumpDraft = m.jumpDraft[:len(m.jumpDraft)-1]
+		}
+	default:
+		if len(key) == 1 && key[0] >= '0' && key[0] <= '9' {
+			m.jumpDraft += key
+		}
+	}
+	return m, nil
+}
+
+func (m *model) moveCursor(delta int) {
+	idxs := m.visibleIndexes()
+	if len(idxs) == 0 {
+		return
+	}
+	pos := indexOf(idxs, m.cursor)
+	if pos < 0 {
+		if delta > 0 {
+			m.cursor = idxs[0]
+		} else {
+			m.cursor = idxs[len(idxs)-1]
+		}
+		return
+	}
+	pos += delta
+	if pos < 0 {
+		pos = 0
+	}
+	if pos >= len(idxs) {
+		pos = len(idxs) - 1
+	}
+	m.cursor = idxs[pos]
+}
+
+func (m model) visibleIndexes() []int {
+	entries := m.bundle.Timeline.Entries
+	if m.filter == "" {
+		idxs := make([]int, len(entries))
+		for i := range entries {
+			idxs[i] = i
+		}
+		return idxs
+	}
+	needle := strings.ToLower(m.filter)
+	var idxs []int
+	for i, entry := range entries {
+		hay := strings.ToLower(entry.OCR.Text + " " + transcriptLine(entry))
+		if strings.Contains(hay, needle) {
+			idxs = append(idxs, i)
+		}
+	}
+	return idxs
+}
+
+func containsIndex(idxs []int, target int) bool {
+	return indexOf(idxs, target) >= 0
+}
+
+func indexOf(idxs []int, target int) int {
+	for i, v := range idxs {
+		if v == target {
+			return i
+		}
+	}
+	return -1
+}
+
+func parsePositiveInt(s string) (int, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return 0, fmt.Errorf("empty")
+	}
+	n := 0
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return 0, fmt.Errorf("not a number")
+		}
+		n = n*10 + int(r-'0')
+	}
+	return n, nil
+}
+
 func (m model) View() tea.View {
 	title := lipgloss.NewStyle().
 		Bold(true).
@@ -140,9 +307,17 @@ func (m model) View() tea.View {
 		Foreground(lipgloss.Color("244")).
 		Render(fmt.Sprintf("status: %s %s", m.spinner.View(), m.statusLine()))
 
+	helpText := "keys: up/k down/j navigate | g/G first/last | / filter | : jump | m metadata | o open | r reveal | c copy | q quit"
+	if m.filterMode {
+		helpText = fmt.Sprintf("filter> %s█  (enter apply, esc cancel)", m.filterDraft)
+	} else if m.jumpMode {
+		helpText = fmt.Sprintf("jump> %s█  (enter go, esc cancel)", m.jumpDraft)
+	} else if m.filter != "" {
+		helpText = fmt.Sprintf("filter active: %q | %s", m.filter, helpText)
+	}
 	help := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("244")).
-		Render("keys: up/k down/j navigate | m metadata | o open | r reveal | c copy | q quit")
+		Render(helpText)
 
 	content := lipgloss.JoinVertical(
 		lipgloss.Left,
@@ -251,34 +426,53 @@ func (m model) detailView(width int) string {
 
 func (m model) timelineList(width int) string {
 	entries := m.bundle.Timeline.Entries
+	idxs := m.visibleIndexes()
 	rows := m.timelineRows()
+	// Map cursor to position within the filtered list for scrolling.
+	cursorPos := indexOf(idxs, m.cursor)
+	if cursorPos < 0 && len(idxs) > 0 {
+		cursorPos = 0
+	}
 	start := 0
-	if m.cursor > rows/2 {
-		start = m.cursor - rows/2
+	if cursorPos > rows/2 {
+		start = cursorPos - rows/2
 	}
-	if start+rows > len(entries) {
-		start = max(0, len(entries)-rows)
+	if start+rows > len(idxs) {
+		start = max(0, len(idxs)-rows)
 	}
-	end := min(start+rows, len(entries))
+	end := min(start+rows, len(idxs))
 
 	pathLimit := max(12, width-8)
 	entryLimit := max(16, width-13)
 
+	totalLabel := fmt.Sprintf("%d", len(entries))
+	if m.filter != "" {
+		totalLabel = fmt.Sprintf("%d filtered / %d", len(idxs), len(entries))
+	}
 	lines := []string{
 		fmt.Sprintf("Bundle: %s", shortPath(m.bundle.Dir, pathLimit)),
 		fmt.Sprintf("Source: %s", shortPath(m.bundle.Metadata.SourceVideo, pathLimit)),
-		fmt.Sprintf("Duration: %.2fs  Entries: %d", m.bundle.Metadata.DurationSeconds, len(entries)),
+		fmt.Sprintf("Duration: %.2fs  Entries: %s", m.bundle.Metadata.DurationSeconds, totalLabel),
 		"",
-		fmt.Sprintf("Timeline (%d-%d of %d)", start+1, end, len(entries)),
+		fmt.Sprintf("Timeline (%d-%d of %s)  cursor %d/%d", start+1, end, totalLabel, m.cursor+1, len(entries)),
 	}
-	for i := start; i < end; i++ {
+	if len(idxs) == 0 {
+		lines = append(lines, "  (no matching entries)")
+		return strings.Join(lines, "\n")
+	}
+	for pos := start; pos < end; pos++ {
+		i := idxs[pos]
 		entry := entries[i]
 		prefix := "  "
 		if i == m.cursor {
 			prefix = "> "
 		}
 		text := firstNonEmpty(entry.OCR.Text, transcriptLine(entry))
-		lines = append(lines, fmt.Sprintf("%s%6.2fs  %s", prefix, entry.TimeSeconds, truncate(text, entryLimit)))
+		delta := ""
+		if entry.VisualDelta != nil && *entry.VisualDelta >= 0.08 {
+			delta = " ~"
+		}
+		lines = append(lines, fmt.Sprintf("%s%6.2fs%s %s", prefix, entry.TimeSeconds, delta, truncate(text, entryLimit)))
 	}
 	return strings.Join(lines, "\n")
 }
@@ -291,20 +485,28 @@ func (m model) timelineRows() int {
 }
 
 func (m model) entryDetail(width int) string {
+	if m.cursor < 0 || m.cursor >= len(m.bundle.Timeline.Entries) {
+		return "No entry selected."
+	}
 	entry := m.bundle.Timeline.Entries[m.cursor]
 	textLimit := max(20, width-2)
 	lines := []string{
 		"Selected evidence",
-		fmt.Sprintf("Time: %.2fs", entry.TimeSeconds),
+		fmt.Sprintf("Time: %.2fs  (#%d/%d)", entry.TimeSeconds, m.cursor+1, len(m.bundle.Timeline.Entries)),
 		fmt.Sprintf("Frame: %s", shortPath(entry.Frame, max(12, width-7))),
 		fmt.Sprintf("OCR: %s", shortPath(entry.OCR.Path, max(12, width-5))),
+	}
+	if entry.VisualDelta != nil {
+		lines = append(lines, fmt.Sprintf("Visual delta: %.3f", *entry.VisualDelta))
+	}
+	lines = append(lines,
 		"",
 		"OCR text:",
 		indentOrNoneWidth(entry.OCR.Text, textLimit),
 		"",
 		"Transcript:",
 		indentOrNoneWidth(transcriptLine(entry), textLimit),
-	}
+	)
 	return strings.Join(lines, "\n")
 }
 

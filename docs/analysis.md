@@ -32,12 +32,15 @@ vidtrace compare /path/to/bug_artifacts_YYYYMMDD_HHMMSS --ticket ticket.md
 vidtrace compare /path/to/bug_artifacts_YYYYMMDD_HHMMSS --ticket ticket.md --json
 ```
 
-`compare` returns one of:
+`compare` returns a coverage-aware status:
 
-- `match`: enough ticket terms appear in OCR/transcript evidence
-- `mismatch`: no meaningful ticket terms appear in OCR/transcript evidence
+- `supported`: enough ticket terms appear in OCR/transcript evidence
+- `no_observation`: evidence exists but ticket terms do not appear
 - `inconclusive`: some terms match, but not enough for confidence
+- `contradicted`: the ticket claims a failure, but evidence mostly shows success language
+- `unknown`: no usable terms or evidence were available
 
+Pass `--mode hybrid` to also rank the full ticket text against a temporary evidence index (BM25). Classic term hits still appear; hybrid mainly reorders evidence and can lift thin inconclusive cases when the ticket text finds strong timeline hits.
 `confidence` explains how much support the heuristic found:
 
 - `high`: a match with broad term coverage and multiple term-level hits
@@ -49,7 +52,8 @@ The JSON output is intended for agents:
 ```json
 {
   "ok": true,
-  "status": "match",
+  "status": "supported",
+  "coverage": "supported",
   "confidence": "medium",
   "score": 0.5,
   "matched_terms": ["login", "submit"],

@@ -3,6 +3,8 @@ package timeline
 import (
 	"encoding/json"
 	"fmt"
+	"image"
+	_ "image/png"
 	"math"
 	"os"
 	"path/filepath"
@@ -22,6 +24,10 @@ type Entry struct {
 	Frame       string    `json:"frame"`
 	OCR         OCR       `json:"ocr"`
 	Transcript  []Segment `json:"transcript"`
+	// VisualDelta is the mean absolute pixel difference versus the previous
+	// frame on a downscaled grayscale grid (0–1). Omitted on the first frame
+	// and when image comparison is unavailable. Higher values mark UI changes.
+	VisualDelta *float64 `json:"visual_delta,omitempty"`
 }
 
 type OCR struct {
@@ -96,11 +102,82 @@ func Build(bundleDir string, framePaths []string, fps float64, transcriptJSONPat
 	}
 
 	assignSegments(entries, frameTimes, segments)
+	attachVisualDeltas(bundleDir, entries)
 
 	return Document{
 		SchemaVersion: artifacts.SchemaVersion,
 		Entries:       entries,
 	}, nil
+}
+
+// attachVisualDeltas fills Entry.VisualDelta by comparing each frame to the
+// previous one. Failures are ignored so timeline generation never fails on
+// image decode issues.
+func attachVisualDeltas(bundleDir string, entries []Entry) {
+	var prev []byte
+	const grid = 16
+	for i := range entries {
+		path := filepath.Join(bundleDir, filepath.FromSlash(entries[i].Frame))
+		sample, err := sampleFrameGray(path, grid)
+		if err != nil || len(sample) == 0 {
+			prev = nil
+			continue
+		}
+		if prev != nil && len(prev) == len(sample) {
+			delta := meanAbsDiff(prev, sample)
+			entries[i].VisualDelta = &delta
+		}
+		prev = sample
+	}
+}
+
+func sampleFrameGray(path string, grid int) ([]byte, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = f.Close() }()
+
+	img, _, err := image.Decode(f)
+	if err != nil {
+		return nil, err
+	}
+	bounds := img.Bounds()
+	w, h := bounds.Dx(), bounds.Dy()
+	if w <= 0 || h <= 0 || grid <= 0 {
+		return nil, fmt.Errorf("invalid image bounds")
+	}
+
+	samples := make([]byte, grid*grid)
+	for y := 0; y < grid; y++ {
+		for x := 0; x < grid; x++ {
+			px := bounds.Min.X + (x*w)/grid
+			py := bounds.Min.Y + (y*h)/grid
+			r, g, b, _ := img.At(px, py).RGBA()
+			// Approximate luminance from 16-bit channels.
+			gray := (299*r + 587*g + 114*b) / 1000 / 256
+			if gray > 255 {
+				gray = 255
+			}
+			samples[y*grid+x] = byte(gray)
+		}
+	}
+	return samples, nil
+}
+
+func meanAbsDiff(a, b []byte) float64 {
+	if len(a) == 0 || len(a) != len(b) {
+		return 0
+	}
+	var sum float64
+	for i := range a {
+		d := int(a[i]) - int(b[i])
+		if d < 0 {
+			d = -d
+		}
+		sum += float64(d)
+	}
+	return sum / float64(len(a)) / 255.0
 }
 
 // assignSegments attaches transcript segments to frames. Each frame owns the

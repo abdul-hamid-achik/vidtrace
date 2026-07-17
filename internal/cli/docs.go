@@ -50,20 +50,22 @@ Primary output:
 
 Common workflows:
   - Run "vidtrace doctor" before extraction.
-  - Run "vidtrace extract VIDEO --json" for automation.
+  - Run "vidtrace extract VIDEO --json" for automation (add --resume, --index DB, or --stash as needed).
   - Run "vidtrace validate BUNDLE --json" before trusting a generated bundle.
   - Run "vidtrace index BUNDLE --db evidence.veclite --json" to make timeline evidence searchable.
   - Run "vidtrace search evidence.veclite QUERY --json" to find timestamped evidence.
   - Run "vidtrace investigate BUNDLE --query QUERY --codebase REPO --json" for code-search handoff.
-  - Run "vidtrace investigate BUNDLE --query QUERY --codebase REPO --connect --json" for real code matches via fcheap.
+  - Run "vidtrace investigate --video VIDEO --query QUERY --codebase REPO --connect --json" for one-shot extract+investigate.
+  - Run "vidtrace investigate BUNDLE --query QUERY --format github-issue" for a paste-ready GitHub issue body.
   - Run "vidtrace investigate BUNDLE --query QUERY --codebase REPO --connect --codemap --json" for symbol resolution and blast radius via codemap.
   - Run "vidtrace stash save BUNDLE --json" to save a bundle to the fcheap vault.
   - Run "vidtrace clip cut VIDEO --label ISSUE=START-END --json" to cut clips from a video.
+  - Run "vidtrace clip from-evidence --db DB --query QUERY --pad 2 --json" to cut clips around evidence hits.
   - Run "vidtrace clip gif VIDEO --label ISSUE=START-END --json" to make GIFs from a video.
   - Run "vidtrace clip stitch clip1.mp4 clip2.mp4 --json" to join clips into one video.
-  - Run "vidtrace compare BUNDLE --ticket TICKET --json" to compare a ticket with evidence.
+  - Run "vidtrace compare BUNDLE --ticket TICKET --json" to compare a ticket with evidence (--mode hybrid optional).
   - Run "vidtrace docs agent" when an agent needs the operating contract.
-  - Run "vidtrace studio BUNDLE" to inspect timeline, OCR, transcript, and frame paths.
+  - Run "vidtrace studio BUNDLE" to inspect timeline, OCR, transcript, and frame paths (/, :, g/G keys).
   - Read docs/SITE.md for the VitePress documentation site and Vercel deployment.
 
 More topics:
@@ -121,24 +123,24 @@ Commands:
   vidtrace analyze BUNDLE --ticket TICKET
       Write a Markdown report that compares ticket text with extracted evidence.
 
-  vidtrace compare BUNDLE --ticket TICKET [--json]
-      Print match, mismatch, or inconclusive based on OCR/transcript evidence.
+  vidtrace compare BUNDLE --ticket TICKET [--mode keyword|hybrid] [--json]
+      Print coverage status (supported, no_observation, inconclusive, contradicted, unknown) based on OCR/transcript evidence.
 
   vidtrace doctor [-json]
       Check ffmpeg, ffprobe, tesseract, whisper, OCR languages, and cached Whisper models.
 
   vidtrace extract VIDEO [flags]
-      Generate frames, OCR, transcript, metadata, and timeline artifacts.
+      Generate frames, OCR, transcript, metadata, and timeline artifacts. Supports --resume, --index DB, and --stash.
 
   vidtrace index BUNDLE --db DB [--json]
       Index timeline evidence into a local VecLite database.
 
-  vidtrace investigate BUNDLE --query TEXT [--codebase REPO] [--connect] [--codemap] [--stash ID] [--db DB] [--json]
+  vidtrace investigate [BUNDLE] --query TEXT [--video VIDEO] [--codebase REPO] [--connect] [--codemap] [--stash ID] [--mode keyword|semantic|hybrid] [--format markdown|github-issue] [--db DB] [--json]
       Return video evidence, code-search queries, vecgrep command suggestions, and real code matches (--connect).
-      With --codemap, resolve code matches to enclosing symbols, list callers, and compute blast radius.
+      With --video, extract first then investigate. With --codemap, resolve symbols/callers/blast radius.
 
-  vidtrace clip cut|gif|stitch ...
-      Cut clips, make GIFs, or stitch videos from timestamp ranges.
+  vidtrace clip cut|gif|stitch|from-evidence ...
+      Cut clips, make GIFs, stitch videos, or cut around evidence-search hits.
 
   vidtrace stash save|list|restore|info|search ...
       Manage artifact bundles in the fcheap vault (save, list, restore, info, search).
@@ -166,9 +168,14 @@ Important extract flags:
   --ocr-lang LANG     Tesseract language list, for example eng or eng+spa
   --whisper-lang LANG Whisper language
   --model NAME        Whisper model
+  --resume            resume a compatible incomplete bundle under --out
+  --resume-from DIR   resume a specific existing bundle directory
+  --index DB          index the bundle into an evidence database after extract
+  --stash             stash the bundle to fcheap after extract
 
 Analyze and compare flags:
   --ticket PATH       ticket markdown or text file
+  --mode MODE         keyword (default) or hybrid
   --json              emit machine-readable compare result
 
 Validate flags:
@@ -181,6 +188,10 @@ Evidence search flags:
 
 Investigate flags:
   --query TEXT        required bug or evidence query
+  --video PATH        extract this video first, then investigate (one-shot)
+  --extract-out DIR   parent output directory for --video extraction
+  --mode MODE         evidence search mode: keyword, semantic, or hybrid
+  --format FORMAT     human output: markdown (default) or github-issue
   --codebase PATH     optional codebase path for vecgrep command suggestions
   --db PATH           optional reusable evidence database path
   --limit N           maximum evidence results, default 5
@@ -204,6 +215,7 @@ Clip subcommands:
   vidtrace clip cut VIDEO [--range RANGE] [--label LABEL=RANGE] [--out DIR] [--name NAME] [--reencode] [--stash] [--tag TAG] [--json]
   vidtrace clip gif VIDEO [--range RANGE] [--label LABEL=RANGE] [--out DIR] [--name NAME] [--fps N] [--width N] [--stash] [--tag TAG] [--json]
   vidtrace clip stitch CLIP1 CLIP2 [...] [--out DIR] [--name NAME] [--json]
+  vidtrace clip from-evidence --db DB --query TEXT [--pad N] [--limit N] [--gif] [VIDEO] [--json]
 
 Timestamp formats:
   SS          seconds (e.g. 45)
@@ -257,6 +269,9 @@ Open a bundle:
 
 Keys:
   up/down or k/j      move through timeline entries
+  g / G               jump to first / last visible entry
+  /                   filter entries by OCR/transcript substring
+  :                   jump to a 1-based entry number
   m                   toggle bundle metadata/details
   o                   open the selected frame when possible
   r                   reveal the selected frame in Finder on macOS
@@ -266,9 +281,10 @@ Keys:
 Shows:
   - compact status header and action status line
   - bundle source video, duration, extraction FPS, OCR languages, and Whisper model
-  - timeline entry count
-  - selected timestamp
+  - timeline entry count (and filtered count when a filter is active)
+  - selected timestamp and entry index
   - selected frame path
+  - visual_delta when available (UI change signal)
   - OCR text for the selected frame
   - transcript segments that overlap the selected frame time
 

@@ -264,6 +264,26 @@ Acceptance criteria:
 
 ## Now
 
+### Workflow compression and evidence polish (in progress on main)
+
+As an agent or QA engineer, I want fewer commands between a bug video and a code handoff, plus tighter Studio/clip bridges.
+
+Acceptance criteria:
+
+- [x] `vidtrace investigate --video` one-shot extract + investigate.
+- [x] `vidtrace investigate --mode` keyword/semantic/hybrid + embed flags.
+- [x] `vidtrace investigate --format github-issue`.
+- [x] `vidtrace extract --index` / `--stash`.
+- [x] Studio `/` filter, `:` jump, `g`/`G`.
+- [x] `vidtrace clip from-evidence`.
+- [x] Compare `--mode hybrid` + `contradicted` coverage.
+- [x] Timeline `visual_delta` UI-change signal.
+- [x] MCP `doctor`, `timeline`, `frame`.
+- [x] Docs/version alignment (README, CHANGELOG 0.16–0.18, site badge).
+- [ ] E2E glyphrun coverage for new flags (investigate --video, clip from-evidence, extract --index).
+- [ ] Optional: batch extract / watch folder.
+- [ ] Optional: Apple notarization via rcodesign (see Later).
+
 ### Video Clip, GIF, and Stitch Feature
 
 As an agent or QA engineer, I can cut video clips, make GIFs, and stitch clips from timestamp ranges, so that I can produce per-issue clips and shareable GIFs from bug recordings without manual ffmpeg commands.
@@ -301,7 +321,7 @@ Acceptance criteria:
 - [x] All codemap features degrade gracefully when codemap is not installed.
 - [x] CLI docs, AGENTS.md, CLAUDE.md, and CHANGELOG.md updated.
 - [x] Unit tests cover codemap wrapper, doctor, investigate codemap expansion, and MCP tools.
-- [ ] E2E glyphrun spec for `investigate --connect --codemap`.
+- [x] E2E glyphrun spec for `investigate --connect --codemap`.
 - [x] `task check` and `task e2e` pass.
 
 ### fcheap + vecgrep Integration

@@ -453,13 +453,13 @@ func TestInvestigateToolValidatesInput(t *testing.T) {
 		t.Fatalf("expected query required error")
 	}
 
-	// Missing both bundle_dir and stash_id
+	// Missing bundle_dir, stash_id, and video_path
 	result, _, err = investigateTool(ctx, nil, InvestigateInput{Query: "test"})
 	if err != nil {
 		t.Fatalf("investigateTool error: %v", err)
 	}
-	if result == nil || !result.IsError || !strings.Contains(result.Content[0].(*mcp.TextContent).Text, "bundle_dir or stash_id is required") {
-		t.Fatalf("expected bundle_dir or stash_id required error")
+	if result == nil || !result.IsError || !strings.Contains(result.Content[0].(*mcp.TextContent).Text, "bundle_dir, stash_id, or video_path is required") {
+		t.Fatalf("expected bundle_dir, stash_id, or video_path required error")
 	}
 
 	// Connect without codebase_dir should be rejected

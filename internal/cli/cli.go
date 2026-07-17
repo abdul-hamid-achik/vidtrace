@@ -11,10 +11,12 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/charmbracelet/x/term"
 
 	"github.com/abdul-hamid-achik/vidtrace/internal/doctor"
+	"github.com/abdul-hamid-achik/vidtrace/internal/evidence"
 	"github.com/abdul-hamid-achik/vidtrace/internal/pipeline"
 	"github.com/abdul-hamid-achik/vidtrace/internal/studio"
 )
@@ -117,8 +119,12 @@ func runExtract(args []string, stdout, stderr io.Writer) int {
 	outputDir := fs.String("out", defaultOutputDir(), "parent output directory")
 	bundleName := fs.String("name", "", "artifact bundle name prefix")
 	concurrency := fs.Int("concurrency", 0, "parallel OCR workers (0 = auto, capped to 8)")
-	resume := fs.Bool("resume", false, "skip already-completed stages (frames/OCR/transcript) (SPEC §8.4)")
+	resume := fs.Bool("resume", false, "skip already-completed stages (frames/OCR/transcript)")
 	resumeFrom := fs.String("resume-from", "", "resume an existing artifact bundle")
+	indexDB := fs.String("index", "", "optional evidence database path to index after extraction")
+	stashBundle := fs.Bool("stash", false, "stash the bundle to fcheap after extraction")
+	stashName := fs.String("stash-name", "", "name for the fcheap stash (defaults to bundle name)")
+	stashTool := fs.String("stash-tool", "vidtrace", "tool tag for the fcheap stash")
 	jsonOutput := fs.Bool("json", false, "print machine-readable JSON")
 
 	jsonWanted := jsonFlagRequested(args)
@@ -141,6 +147,13 @@ func runExtract(args []string, stdout, stderr io.Writer) int {
 	resolvedResumeFrom := ""
 	if strings.TrimSpace(*resumeFrom) != "" {
 		resolvedResumeFrom, err = expandHome(*resumeFrom)
+		if err != nil {
+			return writeExtractFailure(stdout, stderr, *jsonOutput, err)
+		}
+	}
+	resolvedIndexDB := ""
+	if strings.TrimSpace(*indexDB) != "" {
+		resolvedIndexDB, err = expandHome(*indexDB)
 		if err != nil {
 			return writeExtractFailure(stdout, stderr, *jsonOutput, err)
 		}
@@ -174,21 +187,96 @@ func runExtract(args []string, stdout, stderr io.Writer) int {
 		return writeExtractFailure(stdout, stderr, *jsonOutput, err)
 	}
 
+	extended := extractReport{
+		Summary: summary,
+	}
+	if resolvedIndexDB != "" {
+		indexReport, indexErr := runPostExtractIndex(summary.OutputDir, resolvedIndexDB)
+		if indexErr != nil {
+			extended.IndexError = indexErr.Error()
+		} else {
+			extended.Index = indexReport
+		}
+	}
+	if *stashBundle {
+		name := strings.TrimSpace(*stashName)
+		if name == "" {
+			name = filepath.Base(summary.OutputDir)
+		}
+		stashCtx, stashCancel := context.WithTimeout(context.Background(), 60*time.Second)
+		stashResult := maybeStash(stashCtx, true, summary.OutputDir, name, *stashTool, nil)
+		stashCancel()
+		if stashResult != nil && stashResult.err != nil {
+			extended.StashError = stashResult.err.Error()
+		} else if stashResult != nil {
+			extended.Stash = &stashInfo{ID: stashResult.id, Name: stashResult.name}
+		}
+	}
+
 	if *jsonOutput {
-		if err := writeJSON(stdout, summary); err != nil {
+		if err := writeJSON(stdout, extended); err != nil {
 			_, _ = fmt.Fprintf(stderr, "extract json failed: %v\n", err)
 			return 1
 		}
 	} else {
 		pipeline.PrintHuman(stdout, summary)
+		if extended.Index != nil {
+			_, _ = fmt.Fprintf(stdout, "Indexed: %d entries → %s\n", extended.Index.IndexedEntries, extended.Index.DBPath)
+		}
+		if extended.IndexError != "" {
+			_, _ = fmt.Fprintf(stdout, "Index error: %s\n", extended.IndexError)
+		}
+		if extended.Stash != nil {
+			_, _ = fmt.Fprintf(stdout, "Stashed: %s (%s)\n", extended.Stash.ID, extended.Stash.Name)
+		}
+		if extended.StashError != "" {
+			_, _ = fmt.Fprintf(stdout, "Stash error: %s\n", extended.StashError)
+		}
 	}
 	return 0
+}
+
+// extractReport extends pipeline.Summary with optional post-extract actions.
+// When neither --index nor --stash is used, JSON still includes the summary
+// fields at the top level via embedding.
+type extractReport struct {
+	pipeline.Summary
+	Index      *indexSummary `json:"index,omitempty"`
+	IndexError string        `json:"index_error,omitempty"`
+	Stash      *stashInfo    `json:"stash,omitempty"`
+	StashError string        `json:"stash_error,omitempty"`
+}
+
+type indexSummary struct {
+	OK              bool   `json:"ok"`
+	DBPath          string `json:"db_path"`
+	IndexedEntries  int    `json:"indexed_entries"`
+	InsertedEntries int    `json:"inserted_entries"`
+	UpdatedEntries  int    `json:"updated_entries"`
+}
+
+func runPostExtractIndex(bundleDir, dbPath string) (*indexSummary, error) {
+	report, err := evidence.IndexBundle(evidence.IndexOptions{
+		BundleDir: bundleDir,
+		DBPath:    dbPath,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &indexSummary{
+		OK:              report.OK,
+		DBPath:          report.DBPath,
+		IndexedEntries:  report.IndexedEntries,
+		InsertedEntries: report.InsertedEntries,
+		UpdatedEntries:  report.UpdatedEntries,
+	}, nil
 }
 
 func normalizeExtractArgs(args []string) ([]string, error) {
 	boolFlags := map[string]struct{}{
 		"json":   {},
 		"resume": {},
+		"stash":  {},
 	}
 	valueFlags := map[string]struct{}{
 		"fps":          {},
@@ -199,6 +287,9 @@ func normalizeExtractArgs(args []string) ([]string, error) {
 		"name":         {},
 		"concurrency":  {},
 		"resume-from":  {},
+		"index":        {},
+		"stash-name":   {},
+		"stash-tool":   {},
 	}
 
 	var flags []string
@@ -367,15 +458,19 @@ Examples:
   vidtrace doctor -json
   vidtrace docs agent
   vidtrace extract /path/to/bug.mp4
-  vidtrace extract /path/to/bug.mp4 -json
+  vidtrace extract /path/to/bug.mp4 --resume --json
+  vidtrace extract /path/to/bug.mp4 --index /tmp/evidence.veclite --stash --json
   vidtrace index /path/to/bundle --db /tmp/evidence.veclite --json
   vidtrace search /tmp/evidence.veclite "ticket click does not work" --json
   vidtrace investigate /path/to/bundle --query "ticket click does not work" --codebase /path/to/app
+  vidtrace investigate --video /path/to/bug.mp4 --query "ticket click" --codebase /path/to/app --connect --json
+  vidtrace investigate /path/to/bundle --query "ticket click" --format github-issue
   vidtrace clip cut ~/Downloads/bug.mp4 --label "issue1=0:18-3:40" --json
+  vidtrace clip from-evidence --db /tmp/evidence.veclite --query "ticket click" --pad 2 --json
   vidtrace stash save /path/to/bundle --name "bug" --tag bug
   vidtrace stash list --tool vidtrace --json
   vidtrace analyze /path/to/bundle --ticket ticket.md
-  vidtrace compare /path/to/bundle --ticket ticket.md --json
+  vidtrace compare /path/to/bundle --ticket ticket.md --mode hybrid --json
   vidtrace validate /path/to/bundle --json
   vidtrace studio
 `)

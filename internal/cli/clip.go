@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/abdul-hamid-achik/vidtrace/internal/clip"
+	"github.com/abdul-hamid-achik/vidtrace/internal/evidence"
 	"github.com/abdul-hamid-achik/vidtrace/internal/fcheap"
 )
 
@@ -36,12 +37,158 @@ func runClip(args []string, stdout, stderr io.Writer) int {
 		return runClipGIF(rest, stdout, stderr)
 	case "stitch":
 		return runClipStitch(rest, stdout, stderr)
+	case "from-evidence":
+		return runClipFromEvidence(rest, stdout, stderr)
 	case "help", "-h", "--help":
 		printClipHelp(stdout)
 		return 0
 	default:
 		return writeUsageError(stdout, stderr, jsonWanted, fmt.Sprintf("unknown clip subcommand: %s", sub))
 	}
+}
+
+// runClipFromEvidence searches an evidence database and cuts clips around the
+// top matching timestamps.
+func runClipFromEvidence(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("clip from-evidence", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	dbPath := fs.String("db", "", "evidence database path")
+	query := fs.String("query", "", "evidence search query")
+	limit := fs.Int("limit", 3, "maximum evidence hits to turn into clips")
+	pad := fs.Float64("pad", 2, "seconds of padding before and after each hit")
+	outputDir := fs.String("out", defaultOutputDir(), "parent output directory")
+	name := fs.String("name", "", "prefix for clip filenames and output directory")
+	reencode := fs.Bool("reencode", false, "force re-encoding instead of stream copy")
+	gifMode := fs.Bool("gif", false, "create GIFs instead of video clips")
+	gifFPS := fs.Int("fps", 10, "GIF frame rate (with --gif)")
+	gifWidth := fs.Int("width", 480, "GIF width in pixels (with --gif)")
+	stash := fs.Bool("stash", false, "stash the output directory to fcheap")
+	tool := fs.String("tool", "vidtrace", "tool tag for the fcheap stash")
+	jsonOutput := fs.Bool("json", false, "print machine-readable JSON")
+
+	var tags []string
+	jsonWanted := jsonFlagRequested(args)
+	normalizedArgs, err := normalizeClipArgs(args, map[string]struct{}{
+		"json": {}, "reencode": {}, "stash": {}, "gif": {},
+	}, map[string]struct{}{
+		"db": {}, "query": {}, "limit": {}, "pad": {}, "out": {}, "name": {},
+		"tool": {}, "fps": {}, "width": {},
+	}, nil, nil, &tags)
+	if err != nil {
+		return writeUsageError(stdout, stderr, jsonWanted, err.Error())
+	}
+	if err := parseFlagsJSON(fs, normalizedArgs, jsonWanted); err != nil {
+		return writeUsageError(stdout, stderr, jsonWanted, err.Error())
+	}
+	if strings.TrimSpace(*dbPath) == "" || strings.TrimSpace(*query) == "" {
+		return writeUsageError(stdout, stderr, *jsonOutput, "usage: vidtrace clip from-evidence --db PATH --query TEXT [--pad 2] [--limit 3] [--gif] [/path/to/video.mp4]")
+	}
+
+	resolvedDB, err := expandHome(*dbPath)
+	if err != nil {
+		return writeClipFailure(stdout, stderr, *jsonOutput, fmt.Sprintf("resolve db path: %v", err))
+	}
+	searchReport, err := evidence.Search(evidence.SearchOptions{
+		DBPath: resolvedDB,
+		Query:  *query,
+		Limit:  *limit,
+	})
+	if err != nil {
+		return writeClipFailure(stdout, stderr, *jsonOutput, err.Error())
+	}
+	if len(searchReport.Results) == 0 {
+		return writeClipFailure(stdout, stderr, *jsonOutput, "no evidence hits for query")
+	}
+
+	videoPath := ""
+	if fs.NArg() == 1 {
+		videoPath, err = expandHome(fs.Arg(0))
+		if err != nil {
+			return writeClipFailure(stdout, stderr, *jsonOutput, fmt.Sprintf("resolve video path: %v", err))
+		}
+	} else {
+		videoPath = searchReport.Results[0].SourceVideo
+	}
+	if strings.TrimSpace(videoPath) == "" {
+		return writeClipFailure(stdout, stderr, *jsonOutput, "could not determine source video; pass the video path as an argument")
+	}
+	if _, err := os.Stat(videoPath); err != nil {
+		return writeClipFailure(stdout, stderr, *jsonOutput, fmt.Sprintf("video not found: %s", videoPath))
+	}
+
+	hits := make([]clip.EvidenceHit, 0, len(searchReport.Results))
+	for i, r := range searchReport.Results {
+		label := fmt.Sprintf("hit_%02d_%.0fs", i+1, r.TimeSeconds)
+		hits = append(hits, clip.EvidenceHit{TimeSeconds: r.TimeSeconds, Label: label})
+	}
+	specs := clip.SpecsFromEvidence(hits, *pad)
+	if len(specs) == 0 {
+		return writeClipFailure(stdout, stderr, *jsonOutput, "no clip ranges derived from evidence")
+	}
+
+	resolvedOutputDir, err := expandHome(*outputDir)
+	if err != nil {
+		return writeClipFailure(stdout, stderr, *jsonOutput, fmt.Sprintf("resolve output dir: %v", err))
+	}
+	namePrefix := strings.TrimSpace(*name)
+	if namePrefix == "" {
+		namePrefix = clipPrefixFromVideo(videoPath) + "-evidence"
+	}
+	clipOutputDir, err := clip.OutputDir(resolvedOutputDir, namePrefix)
+	if err != nil {
+		return writeClipFailure(stdout, stderr, *jsonOutput, err.Error())
+	}
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	if *gifMode {
+		gifReport, err := clip.MakeGIFs(ctx, videoPath, clipOutputDir, specs, *gifFPS, *gifWidth)
+		if err != nil {
+			return writeClipFailure(stdout, stderr, *jsonOutput, err.Error())
+		}
+		report := clipGIFReport{
+			OK:          gifReport.OK,
+			SourceVideo: gifReport.SourceVideo,
+			OutputDir:   gifReport.OutputDir,
+			GIFs:        gifReport.GIFs,
+		}
+		stashResult := maybeStash(ctx, *stash, clipOutputDir, namePrefix+"-gifs", *tool, tags)
+		if stashResult != nil && stashResult.err != nil {
+			report.StashError = stashResult.err.Error()
+		} else if stashResult != nil {
+			report.Stash = &stashInfo{ID: stashResult.id, Name: stashResult.name}
+		}
+		if *jsonOutput {
+			_ = writeJSON(stdout, report)
+		} else {
+			printGIFHuman(stdout, report)
+		}
+		return 0
+	}
+
+	cutReport, err := clip.CutClips(ctx, videoPath, clipOutputDir, specs, *reencode)
+	if err != nil {
+		return writeClipFailure(stdout, stderr, *jsonOutput, err.Error())
+	}
+	report := clipCutReport{
+		OK:          cutReport.OK,
+		SourceVideo: cutReport.SourceVideo,
+		OutputDir:   cutReport.OutputDir,
+		Clips:       cutReport.Clips,
+	}
+	stashResult := maybeStash(ctx, *stash, clipOutputDir, namePrefix+"-clips", *tool, tags)
+	if stashResult != nil && stashResult.err != nil {
+		report.StashError = stashResult.err.Error()
+	} else if stashResult != nil {
+		report.Stash = &stashInfo{ID: stashResult.id, Name: stashResult.name}
+	}
+	if *jsonOutput {
+		_ = writeJSON(stdout, report)
+	} else {
+		printCutHuman(stdout, report)
+	}
+	return 0
 }
 
 func runClipCut(args []string, stdout, stderr io.Writer) int {
@@ -434,16 +581,19 @@ Usage:
   vidtrace clip <subcommand> [flags] <args>
 
 Subcommands:
-  cut      Cut one or more clips from a video at timestamp ranges
-  gif      Create GIF(s) from timestamp ranges in a video
-  stitch   Join multiple clips into one concatenated video
-  help     Show this help
+  cut             Cut one or more clips from a video at timestamp ranges
+  gif             Create GIF(s) from timestamp ranges in a video
+  stitch          Join multiple clips into one concatenated video
+  from-evidence   Cut clips (or GIFs) around evidence-search hits
+  help            Show this help
 
 Examples:
   vidtrace clip cut ~/Downloads/bug.mp4 --range "0:18-3:40" --range "3:40-4:05" --json
   vidtrace clip cut ~/Downloads/bug.mp4 --label "issue1=0:18-3:40" --label "issue2=3:40-4:05" --stash --json
   vidtrace clip gif ~/Downloads/bug.mp4 --label "issue1=0:18-3:40" --fps 10 --width 480 --json
   vidtrace clip stitch clip1.mp4 clip2.mp4 clip3.mp4 --name summary --json
+  vidtrace clip from-evidence --db evidence.veclite --query "login failed" --pad 2 --json
+  vidtrace clip from-evidence --db evidence.veclite --query "login failed" --gif --json
 
 Timestamp formats:
   SS          seconds (e.g. 45)

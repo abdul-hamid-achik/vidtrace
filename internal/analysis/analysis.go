@@ -10,12 +10,18 @@ import (
 	"strings"
 
 	"github.com/abdul-hamid-achik/vidtrace/internal/bundle"
+	"github.com/abdul-hamid-achik/vidtrace/internal/evidence"
 	"github.com/abdul-hamid-achik/vidtrace/internal/timeline"
 )
 
 type Options struct {
 	BundleDir  string
 	TicketPath string
+	// Mode is "keyword" (default) for classic term matching, or "hybrid" to
+	// also rank ticket text against timeline evidence via a temporary VecLite
+	// index. Hybrid still reports term hits; semantic ranking only affects the
+	// ordered Evidence list and can raise confidence when strong hits exist.
+	Mode string
 }
 
 type Result struct {
@@ -75,8 +81,10 @@ func Compare(opts Options) (Result, error) {
 		return Result{}, fmt.Errorf("read ticket: %w", err)
 	}
 
-	terms := keywords(string(ticketData))
-	evidenceText := newTextIndex(doc.SearchableText())
+	ticketText := string(ticketData)
+	terms := keywords(ticketText)
+	searchable := doc.SearchableText()
+	evidenceText := newTextIndex(searchable)
 	var matched []string
 	var missing []string
 	for _, term := range terms {
@@ -92,8 +100,22 @@ func Compare(opts Options) (Result, error) {
 		score = float64(len(matched)) / float64(len(terms))
 	}
 	status := classify(len(terms), len(matched), score)
+	if status == "supported" && detectContradiction(ticketText, searchable) {
+		status = "contradicted"
+	}
 	termHits := findTermHits(doc, matched, 12)
 	evidence := findEvidence(doc, matched, 5)
+	if strings.EqualFold(strings.TrimSpace(opts.Mode), "hybrid") {
+		if hybridEvidence, ok := hybridEvidenceFromTicket(doc.Dir, ticketText, 5); ok && len(hybridEvidence) > 0 {
+			evidence = hybridEvidence
+			// A strong hybrid hit with at least one term match raises thin
+			// inconclusive results toward supported without inventing terms.
+			if status == "inconclusive" && len(matched) > 0 {
+				status = "supported"
+				score = math.Max(score, 0.4)
+			}
+		}
+	}
 	confidence := classifyConfidence(status, score, len(termHits))
 	gapList := gaps(status, terms, evidence)
 
@@ -116,6 +138,48 @@ func Compare(opts Options) (Result, error) {
 		Gaps:            nonNilStrings(gapList),
 	}
 	return result, nil
+}
+
+// hybridEvidenceFromTicket indexes the bundle into a temp DB and searches with
+// the full ticket text (keyword mode). Failures return ok=false so compare
+// still succeeds with classic term evidence.
+func hybridEvidenceFromTicket(bundleDir, ticketText string, limit int) ([]EvidenceRef, bool) {
+	tmpDir, err := os.MkdirTemp("", "vidtrace-compare-hybrid-*")
+	if err != nil {
+		return nil, false
+	}
+	defer func() { _ = os.RemoveAll(tmpDir) }()
+	dbPath := filepath.Join(tmpDir, "evidence.veclite")
+
+	if _, err := evidence.IndexBundle(evidence.IndexOptions{
+		BundleDir: bundleDir,
+		DBPath:    dbPath,
+	}); err != nil {
+		return nil, false
+	}
+	report, err := evidence.Search(evidence.SearchOptions{
+		DBPath: dbPath,
+		Query:  ticketText,
+		Limit:  limit,
+		Mode:   evidence.ModeKeyword,
+	})
+	if err != nil || len(report.Results) == 0 {
+		return nil, false
+	}
+	refs := make([]EvidenceRef, 0, len(report.Results))
+	for _, r := range report.Results {
+		text := strings.TrimSpace(r.Transcript)
+		if text == "" {
+			text = strings.TrimSpace(r.OCR)
+		}
+		refs = append(refs, EvidenceRef{
+			TimeSeconds: r.TimeSeconds,
+			Frame:       r.Frame,
+			OCRPath:     r.OCRPath,
+			Text:        truncateSingleLine(text, 180),
+		})
+	}
+	return refs, true
 }
 
 func Markdown(result Result) string {
@@ -219,11 +283,13 @@ func hintForStatus(status string) string {
 func actionForStatus(status string) string {
 	switch status {
 	case "unknown":
-		return "vidtrace extract <bundle> --json"
+		return "vidtrace extract <video.mp4> --json"
 	case "no_observation":
-		return "vidtrace analyze <bundle> --ticket <ticket> --broaden"
+		return "vidtrace investigate <bundle> --query \"<broader ticket terms>\" --json  (or search with --mode hybrid when a semantic index exists)"
 	case "inconclusive":
-		return "review the partial term_hits + evidence fields, then decide whether to investigate further or close the ticket."
+		return "review the partial term_hits + evidence fields, then decide whether to investigate further or close the ticket"
+	case "contradicted":
+		return "review the matched evidence carefully — the recording may show the opposite of the ticket claim"
 	default:
 		return ""
 	}
@@ -247,6 +313,8 @@ func classifyConfidence(status string, score float64, termHits int) string {
 	case status == "supported" && score >= 0.6 && termHits >= 2:
 		return "high"
 	case status == "supported":
+		return "medium"
+	case status == "contradicted":
 		return "medium"
 	case status == "inconclusive" && termHits > 0:
 		return "low"
@@ -368,10 +436,14 @@ func entryEvidenceText(entry timeline.Entry) string {
 
 func summary(status, confidence string, matched, missing []string, evidence []EvidenceRef) string {
 	switch status {
-	case "match":
+	case "supported":
 		return fmt.Sprintf("The ticket appears to match the video evidence with %s confidence. %d term(s) matched across OCR/transcript evidence.", confidence, len(matched))
-	case "mismatch":
+	case "contradicted":
+		return "The ticket claims a failure, but the extracted evidence mostly shows success states without matching failure language. Review frames carefully."
+	case "no_observation":
 		return "The ticket does not appear to match the extracted video evidence; no meaningful ticket terms were found."
+	case "unknown":
+		return "No usable ticket terms or evidence were available for comparison."
 	default:
 		if len(evidence) == 0 {
 			return "The ticket/video relationship is inconclusive; no direct timeline evidence matched the ticket terms."
@@ -388,10 +460,46 @@ func gaps(status string, terms []string, evidence []EvidenceRef) []string {
 	if len(evidence) == 0 {
 		gaps = append(gaps, "No direct timeline evidence matched the ticket terms.")
 	}
-	if status != "match" {
+	if status == "contradicted" {
+		gaps = append(gaps, "Failure language in the ticket is not reflected in OCR/transcript evidence.")
+	}
+	if status != "supported" {
 		gaps = append(gaps, "This is a heuristic text comparison; inspect referenced frames before closing the ticket.")
 	}
 	return gaps
+}
+
+var failureMarkers = []string{
+	"fail", "failed", "failure", "broken", "cannot", "can't", "does not", "doesn't",
+	"error", "bug", "crash", "stuck", "unable", "not working", "doesn't work", "does not work",
+}
+
+var successMarkers = []string{
+	"success", "successfully", "saved", "completed", "done", "works", "working", "submitted",
+}
+
+// detectContradiction reports when a failure-oriented ticket is paired with
+// success-oriented evidence that lacks those failure markers. Shared UI nouns
+// may still match, so this only fires after classify would otherwise say supported.
+func detectContradiction(ticket, evidence string) bool {
+	ticketLower := strings.ToLower(ticket)
+	evidenceLower := strings.ToLower(evidence)
+	if !containsAny(ticketLower, failureMarkers) {
+		return false
+	}
+	if !containsAny(evidenceLower, successMarkers) {
+		return false
+	}
+	return !containsAny(evidenceLower, failureMarkers)
+}
+
+func containsAny(text string, markers []string) bool {
+	for _, marker := range markers {
+		if strings.Contains(text, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 func listOrNone(values []string) string {

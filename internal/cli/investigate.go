@@ -6,6 +6,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/abdul-hamid-achik/vidtrace/internal/embed"
 	"github.com/abdul-hamid-achik/vidtrace/internal/investigate"
 )
 
@@ -23,10 +24,24 @@ func runInvestigate(args []string, stdout, stderr io.Writer) int {
 	codemap := fs.Bool("codemap", false, "run codemap expansion after --connect to resolve symbols, callers, and blast radius")
 	codemapDepth := fs.Int("codemap-depth", 3, "max hops for codemap blast radius")
 	codemapAnnotate := fs.Bool("codemap-annotate", false, "pin vidtrace evidence findings to resolved codemap symbols")
+	videoPath := fs.String("video", "", "extract this video first, then investigate the resulting bundle (one-shot)")
+	extractOut := fs.String("extract-out", "", "parent output directory for --video extraction")
+	extractName := fs.String("extract-name", "", "bundle name prefix for --video extraction")
+	extractFPS := fs.Float64("extract-fps", 1, "frame extraction rate for --video")
+	mode := fs.String("mode", "keyword", "evidence search mode: keyword, semantic, or hybrid")
+	embedProvider := fs.String("embed", "", "embedding provider for semantic/hybrid mode (e.g. ollama)")
+	embedModel := fs.String("embed-model", "", "embedding model name for the provider")
+	ollamaURL := fs.String("ollama-url", "", "Ollama base URL (default http://localhost:11434)")
+	format := fs.String("format", "markdown", "human output format: markdown or github-issue (ignored with --json)")
 	jsonOutput := fs.Bool("json", false, "print machine-readable JSON")
 
 	jsonWanted := jsonFlagRequested(args)
-	normalizedArgs, err := normalizeBundleArgs(args, map[string]struct{}{"json": {}, "connect": {}}, map[string]struct{}{
+	normalizedArgs, err := normalizeBundleArgs(args, map[string]struct{}{
+		"json":             {},
+		"connect":          {},
+		"codemap":          {},
+		"codemap-annotate": {},
+	}, map[string]struct{}{
 		"query":         {},
 		"db":            {},
 		"codebase":      {},
@@ -35,6 +50,15 @@ func runInvestigate(args []string, stdout, stderr io.Writer) int {
 		"connect-mode":  {},
 		"connect-limit": {},
 		"codemap-depth": {},
+		"video":         {},
+		"extract-out":   {},
+		"extract-name":  {},
+		"extract-fps":   {},
+		"mode":          {},
+		"embed":         {},
+		"embed-model":   {},
+		"ollama-url":    {},
+		"format":        {},
 	})
 	if err != nil {
 		return writeUsageError(stdout, stderr, jsonWanted, err.Error())
@@ -54,15 +78,26 @@ func runInvestigate(args []string, stdout, stderr io.Writer) int {
 		return writeUsageError(stdout, stderr, *jsonOutput, "--codemap requires --connect")
 	}
 
+	resolvedVideo := strings.TrimSpace(*videoPath)
 	resolvedStashID := strings.TrimSpace(*stashID)
 	bundleDir := ""
 	if fs.NArg() == 1 {
+		if resolvedVideo != "" {
+			return writeUsageError(stdout, stderr, *jsonOutput, "--video cannot be combined with a bundle path")
+		}
 		bundleDir, err = expandHome(fs.Arg(0))
 		if err != nil {
 			return writeInvestigateFailure(stdout, stderr, *jsonOutput, fmt.Errorf("resolve bundle path: %w", err))
 		}
-	} else if resolvedStashID == "" {
-		return writeUsageError(stdout, stderr, *jsonOutput, "usage: vidtrace investigate /path/to/bundle --query TEXT [--codebase /path/to/repo] [--connect] [--codemap] [--stash ID] [--json]")
+	} else if resolvedStashID == "" && resolvedVideo == "" {
+		return writeUsageError(stdout, stderr, *jsonOutput, "usage: vidtrace investigate [/path/to/bundle] --query TEXT [--video VIDEO] [--codebase /path/to/repo] [--connect] [--codemap] [--stash ID] [--mode keyword|semantic|hybrid] [--format markdown|github-issue] [--json]")
+	}
+
+	if resolvedVideo != "" {
+		resolvedVideo, err = expandHome(resolvedVideo)
+		if err != nil {
+			return writeInvestigateFailure(stdout, stderr, *jsonOutput, fmt.Errorf("resolve video path: %w", err))
+		}
 	}
 
 	resolvedDBPath := strings.TrimSpace(*dbPath)
@@ -79,6 +114,18 @@ func runInvestigate(args []string, stdout, stderr io.Writer) int {
 			return writeInvestigateFailure(stdout, stderr, *jsonOutput, fmt.Errorf("resolve codebase path: %w", err))
 		}
 	}
+	resolvedExtractOut := strings.TrimSpace(*extractOut)
+	if resolvedExtractOut != "" {
+		resolvedExtractOut, err = expandHome(resolvedExtractOut)
+		if err != nil {
+			return writeInvestigateFailure(stdout, stderr, *jsonOutput, fmt.Errorf("resolve extract-out path: %w", err))
+		}
+	}
+
+	embedder, err := embed.Build(*embedProvider, *embedModel, *ollamaURL)
+	if err != nil {
+		return writeInvestigateFailure(stdout, stderr, *jsonOutput, err)
+	}
 
 	report, err := investigate.Run(investigate.Options{
 		BundleDir:       bundleDir,
@@ -93,6 +140,12 @@ func runInvestigate(args []string, stdout, stderr io.Writer) int {
 		Codemap:         *codemap,
 		CodemapDepth:    *codemapDepth,
 		CodemapAnnotate: *codemapAnnotate,
+		VideoPath:       resolvedVideo,
+		ExtractOut:      resolvedExtractOut,
+		ExtractName:     strings.TrimSpace(*extractName),
+		ExtractFPS:      *extractFPS,
+		Mode:            strings.TrimSpace(*mode),
+		Embedder:        embedder,
 	})
 	if err != nil {
 		return writeInvestigateFailure(stdout, stderr, *jsonOutput, err)
@@ -105,7 +158,7 @@ func runInvestigate(args []string, stdout, stderr io.Writer) int {
 		}
 		return 0
 	}
-	_, _ = fmt.Fprint(stdout, investigate.Markdown(report))
+	_, _ = fmt.Fprint(stdout, investigate.FormatMarkdown(report, *format))
 	return 0
 }
 

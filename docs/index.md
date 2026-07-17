@@ -153,7 +153,7 @@ import ComparisonTable from "./.vitepress/components/ComparisonTable.vue";
 <div class="vt-section">
   <div class="vt-stats">
     <div class="vt-stat">
-      <div class="vt-stat-num">v0.15.0</div>
+      <div class="vt-stat-num">v0.19.0</div>
       <div class="vt-stat-label">Latest release</div>
     </div>
     <div class="vt-stat">

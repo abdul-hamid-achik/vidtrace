@@ -6,11 +6,11 @@ Turn bug videos into timestamped evidence bundles that humans and coding agents 
 
 ## Status
 
-`v0.10.0` is the latest release. The Go CLI extracts evidence bundles (with a live progress bar on a terminal and fail-fast OCR-language checks), emits stable JSON for automation, validates bundles, compares and analyzes a ticket against video evidence, opens a compact terminal Studio for human review (and refuses non-interactive callers so agents are never trapped in the TUI), searches bundle evidence (BM25 keyword plus optional semantic and hybrid search via Ollama) with bundle, source-video, evidence-source, and time-window filters across many bundles, stashes bundles to a fcheap vault for sharing and restoration (`vidtrace stash`), cuts clips, makes GIFs, and stitches videos from timestamp ranges with optional fcheap stashing (`vidtrace clip`), runs real codebase search via `fcheap connect` (vecgrep) alongside video evidence (`vidtrace investigate --connect`), and exposes read-only evidence and stash tools to agents over MCP (`vidtrace mcp`). It ships through GitHub Releases as cross-platform archives, Linux `.deb`/`.rpm` packages, and a Homebrew tap.
+`v0.19.0` is the latest release. The Go CLI extracts evidence bundles (live progress bar, resumable stages, fail-fast OCR-language checks), emits stable JSON for automation, validates bundles, compares and analyzes tickets against video evidence, opens a compact terminal Studio for human review (and refuses non-interactive callers), searches bundle evidence (BM25 plus optional semantic/hybrid via Ollama), stashes bundles via fcheap, cuts clips/GIFs (including from evidence hits), investigates video evidence against a codebase (`--connect` / `--codemap`, plus one-shot `--video`), and exposes read-only tools over MCP (`vidtrace mcp`). It ships through GitHub Releases as cross-platform archives, Linux `.deb`/`.rpm` packages, and a Homebrew tap.
 
-Extraction stays independent from the optional VecLite indexes and embedding providers. fcheap and vecgrep are optional external tools reported by `vidtrace doctor`.
+Extraction stays independent from optional VecLite indexes and embedding providers. fcheap, vecgrep, and codemap are optional external tools reported by `vidtrace doctor`.
 
-The project is still early. Treat `--json`, `metadata.json`, and `timeline.json` as the main contracts and change them deliberately.
+Treat `--json`, `metadata.json`, and `timeline.json` as the main contracts and change them deliberately.
 
 ## Who It Is For
 
@@ -143,6 +143,16 @@ vidtrace investigate /path/to/bug_artifacts_YYYYMMDD_HHMMSS \
   --json
 ```
 
+One-shot from a raw video (extract + investigate):
+
+```bash
+vidtrace investigate --video /path/to/bug.mp4 \
+  --query "clicking a ticket does not work" \
+  --codebase /path/to/app \
+  --connect \
+  --format github-issue
+```
+
 Stash a bundle to the fcheap vault and investigate from a stash:
 
 ```bash
@@ -151,7 +161,7 @@ vidtrace stash list --tool vidtrace --json
 vidtrace investigate --stash <stash-id> --query "clicking a ticket does not work" --json
 ```
 
-Cut clips, make GIFs, and stitch videos from timestamp ranges:
+Cut clips, make GIFs, stitch videos, or cut around evidence hits:
 
 ```bash
 vidtrace clip cut /path/to/video.mp4 \
@@ -160,6 +170,7 @@ vidtrace clip cut /path/to/video.mp4 \
   --stash --tag intel --json
 vidtrace clip gif /path/to/video.mp4 --label "issue1=0:18-3:40" --fps 10 --width 480 --json
 vidtrace clip stitch clip1.mp4 clip2.mp4 --name summary --json
+vidtrace clip from-evidence --db /tmp/vidtrace-evidence.veclite --query "login failed" --pad 2 --json
 ```
 
 Timestamps support `SS`, `MM:SS`, and `HH:MM:SS`. Each clips directory includes a `clips.json` manifest.
@@ -169,6 +180,7 @@ Compare a ticket with an artifact bundle:
 ```bash
 vidtrace analyze /path/to/bug_artifacts_YYYYMMDD_HHMMSS --ticket ticket.md
 vidtrace compare /path/to/bug_artifacts_YYYYMMDD_HHMMSS --ticket ticket.md --json
+vidtrace compare /path/to/bug_artifacts_YYYYMMDD_HHMMSS --ticket ticket.md --mode hybrid --json
 ```
 
 Open the studio browser:
@@ -177,8 +189,7 @@ Open the studio browser:
 vidtrace studio /path/to/bug_artifacts_YYYYMMDD_HHMMSS
 ```
 
-In Studio, use `up`/`down` or `k`/`j` to move through timeline entries, `m` to toggle metadata, `o` to open the selected frame, `r` to reveal it in Finder on macOS, and `c` to copy a concise evidence summary when clipboard tooling is available.
-
+In Studio, use `up`/`down` or `k`/`j` to move through timeline entries, `g`/`G` for first/last, `/` to filter OCR/transcript, `:` to jump by entry number, `m` to toggle metadata, `o` to open the selected frame, `r` to reveal it in Finder on macOS, and `c` to copy a concise evidence summary when clipboard tooling is available.
 Studio uses a compact keyboard-first layout. Wide terminals show timeline and evidence details side by side; narrow terminals stack the panes.
 
 ```bash

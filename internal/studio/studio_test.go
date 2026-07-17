@@ -102,6 +102,56 @@ func TestViewUsesCompactTopAlignedShell(t *testing.T) {
 	}
 }
 
+func TestFilterAndJumpKeys(t *testing.T) {
+	t.Parallel()
+
+	m := model{
+		bundle: bundle.Bundle{
+			Timeline: timeline.Document{
+				Entries: []timeline.Entry{
+					{TimeSeconds: 0, OCR: timeline.OCR{Text: "Login page"}},
+					{TimeSeconds: 1, OCR: timeline.OCR{Text: "Checkout failed"}},
+					{TimeSeconds: 2, OCR: timeline.OCR{Text: "Settings"}},
+				},
+			},
+		},
+		cursor: 0,
+	}
+
+	press := func(text string) {
+		t.Helper()
+		code := rune(0)
+		if len(text) == 1 {
+			code = rune(text[0])
+		}
+		var next tea.Model
+		next, _ = m.Update(tea.KeyPressMsg(tea.Key{Text: text, Code: code}))
+		m = next.(model)
+	}
+
+	press("/")
+	if !m.filterMode {
+		t.Fatal("expected filter mode after /")
+	}
+	for _, ch := range "checkout" {
+		press(string(ch))
+	}
+	press("enter")
+	if m.filter != "checkout" {
+		t.Fatalf("filter = %q", m.filter)
+	}
+	if m.cursor != 1 {
+		t.Fatalf("cursor = %d, want 1 after filter", m.cursor)
+	}
+
+	press(":")
+	press("3")
+	press("enter")
+	if m.cursor != 2 {
+		t.Fatalf("cursor = %d after jump to 3, want 2", m.cursor)
+	}
+}
+
 func TestMetadataKeyTogglesDetailMode(t *testing.T) {
 	m := model{}
 

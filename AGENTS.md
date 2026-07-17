@@ -75,11 +75,15 @@ task run -- search /tmp/vidtrace-evidence.veclite "ticket click does not work" -
 task run -- investigate /path/to/bundle --query "ticket click does not work" --codebase /path/to/repo --json
 task run -- investigate /path/to/bundle --query "ticket click does not work" --codebase /path/to/repo --connect --json
 task run -- investigate /path/to/bundle --query "ticket click does not work" --codebase /path/to/repo --connect --codemap --json
+task run -- investigate --video /path/to/bug.mp4 --query "ticket click does not work" --codebase /path/to/repo --connect --json
+task run -- clip from-evidence --db /tmp/vidtrace-evidence.veclite --query "ticket click does not work" --pad 2 --json
 task run -- stash save /path/to/bundle --name "bug-evidence" --json
 task run -- investigate --stash <stash-id> --query "ticket click does not work" --json
 task run -- compare /path/to/bundle --ticket ticket.md --json
 task run -- analyze /path/to/bundle --ticket ticket.md
 ```
+
+One-shot alternative: `investigate --video` extracts then investigates in a single command. Use `--format github-issue` for a paste-ready issue body.
 
 Use `vidtrace studio <bundle>` for human inspection. Studio keys include `m` for metadata, `o` to open the selected frame, `r` to reveal it in Finder on macOS, and `c` to copy a concise evidence summary when clipboard tooling is available. Studio requires an interactive terminal and exits with guidance if it is run non-interactively, so agents should rely on the `--json` commands (or the `vidtrace mcp` server), `metadata.json`, `timeline.json`, OCR text, transcripts, and selected frame files instead of the TUI.
 
