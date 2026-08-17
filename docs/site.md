@@ -64,16 +64,18 @@ VitePress also publishes a `next` alpha line. Keep production docs on the latest
 The VitePress sidebar exposes:
 
 - `docs/index.md`
-- `docs/INSTALL.md`
-- `docs/USAGE.md`
-- `docs/ANALYSIS.md`
-- `docs/STUDIO.md`
-- `docs/CLI_CONTRACT.md`
-- `docs/ARTIFACT_SCHEMA.md`
-- `docs/TESTING.md`
-- `docs/RELEASE.md`
-- `docs/ARCHITECTURE.md`
-- `docs/ROADMAP.md`
+- `docs/install.md`
+- `docs/usage.md`
+- `docs/analysis.md`
+- `docs/studio.md`
+- `docs/clip.md`
+- `docs/cli-contract.md`
+- `docs/artifact-schema.md`
+- `docs/testing.md`
+- `docs/release.md`
+- `docs/architecture.md`
+- `docs/roadmap.md`
+- `docs/site.md`
 
 ## Exclusions
 

@@ -11,6 +11,8 @@
     "site": "bun run docs:build"
   },
   "devDependencies": {
+    "@fontsource/ibm-plex-mono": "5.3.0",
+    "@fontsource/ibm-plex-sans": "5.3.0",
     "@vitejs/plugin-vue": "6.0.7",
     "esbuild": "0.28.1",
     "vite": "7.3.5",

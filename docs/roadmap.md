@@ -1,5 +1,7 @@
 # Roadmap
 
+`v0.19.0` shipped the original iteration plan plus clip, stash, resume, one-shot investigate, evidence search, and MCP. Live work lives in the repository root `BACKLOG.md`, not in this historical list.
+
 ## Iteration 1: Repository Foundation
 
 - Initialize Git.
@@ -37,7 +39,7 @@ See the repository root `BACKLOG.md` for prioritized work beyond the roadmap.
 - View transcript, OCR, metadata, and frame paths side by side. Done.
 - Jump from timeline entries to frames with open/reveal actions. Done for local platform tools.
 - Copy concise timestamped evidence summaries. Done.
-- Monitor long-running extraction jobs. In progress: extraction shows a live `bubbles` progress bar on a TTY and plain step output off a TTY.
+- Monitor long-running extraction jobs. Extraction shows a live `bubbles` progress bar on a TTY and plain step output off a TTY. Studio does not monitor extract.
 
 ## Iteration 6: Distribution
 
@@ -57,7 +59,7 @@ See the repository root `BACKLOG.md` for prioritized work beyond the roadmap.
 
 ## Iteration 8: Documentation Site Readiness
 
-- Keep README, install, usage, analysis, Studio, release, testing, and artifact docs aligned. In progress.
+- Keep README, install, usage, analysis, Studio, release, testing, and artifact docs aligned. Ongoing.
 - Keep `AGENTS.md` and `CLAUDE.md` focused on current agent workflows. In progress.
 - Publish the docs site with VitePress and Vercel. Done.
 

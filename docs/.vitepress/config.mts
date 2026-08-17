@@ -1,7 +1,7 @@
 import { defineConfig } from "vitepress";
 
 const siteUrl = "https://vidtrace.dev";
-const title = "vidtrace — Bug video evidence, timestamped.";
+const title = "vidtrace. Bug video evidence, timestamped.";
 const description =
   "Turn screen recordings into structured evidence bundles with frames, OCR, transcripts, and a timestamped timeline. Local-first Go CLI for humans and coding agents.";
 const ogImage = `${siteUrl}/og-image.png`;
@@ -21,7 +21,7 @@ export default defineConfig({
     // Primary meta
     ['meta', { name: 'keywords', content: 'bug video, screen recording, evidence, OCR, transcription, whisper, ffmpeg, tesseract, developer tools, CLI, Go, timestamped evidence, coding agents, MCP, VecLite, semantic search, QA, bug reproduction' }],
     ['meta', { name: 'author', content: 'abdul-hamid-achik' }],
-    ['meta', { name: 'theme-color', content: '#0F172A' }],
+    ['meta', { name: 'theme-color', content: '#12161C' }],
     ['meta', { name: 'robots', content: 'index, follow' }],
 
     // Canonical
@@ -35,7 +35,7 @@ export default defineConfig({
     ['meta', { property: 'og:image', content: ogImage }],
     ['meta', { property: 'og:image:width', content: '1200' }],
     ['meta', { property: 'og:image:height', content: '630' }],
-    ['meta', { property: 'og:image:alt', content: 'vidtrace — Bug video evidence, timestamped.' }],
+    ['meta', { property: 'og:image:alt', content: 'vidtrace. Bug video evidence, timestamped.' }],
     ['meta', { property: 'og:url', content: siteUrl }],
     ['meta', { property: 'og:locale', content: 'en_US' }],
 
@@ -44,7 +44,7 @@ export default defineConfig({
     ['meta', { name: 'twitter:title', content: title }],
     ['meta', { name: 'twitter:description', content: description }],
     ['meta', { name: 'twitter:image', content: ogImage }],
-    ['meta', { name: 'twitter:image:alt', content: 'vidtrace — Bug video evidence, timestamped.' }],
+    ['meta', { name: 'twitter:image:alt', content: 'vidtrace. Bug video evidence, timestamped.' }],
     ['meta', { name: 'twitter:creator', content: '@abdulachik' }],
 
     // JSON-LD structured data: SoftwareApplication
@@ -60,7 +60,7 @@ export default defineConfig({
       "codeRepository": "https://github.com/abdul-hamid-achik/vidtrace",
       "license": "https://github.com/abdul-hamid-achik/vidtrace/blob/main/LICENSE",
       "programmingLanguage": "Go",
-      "softwareVersion": "0.15.0",
+      "softwareVersion": "0.19.0",
       "offers": {
         "@type": "Offer",
         "price": "0",
@@ -104,7 +104,7 @@ export default defineConfig({
           "name": "Can coding agents use vidtrace?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "Yes. Every command emits stable JSON with --json. Agents read output_dir from stdout, then inspect timeline.json, metadata.json, OCR text, and selected frames. The MCP server (vidtrace mcp) exposes read-only tools over stdio for validate, search, compare, analyze, and investigate."
+            "text": "Yes. Query and extract commands emit stable JSON with --json. Agents read output_dir from stdout, then inspect timeline.json, metadata.json, OCR text, and selected frames. The MCP server (vidtrace mcp) exposes read-only tools over stdio including validate, search, compare, analyze, investigate, timeline, and frame."
           }
         },
         {
@@ -146,7 +146,7 @@ export default defineConfig({
   sitemap: { hostname: siteUrl },
 
   themeConfig: {
-    logo: { src: "/logo.svg", dark: "/logo-dark.svg" },
+    logo: { src: "/favicon.svg", dark: "/favicon.svg" },
     nav: [
       { text: "Guide", link: "/usage" },
       { text: "Studio", link: "/studio" },
@@ -189,6 +189,9 @@ export default defineConfig({
     socialLinks: [
       { icon: "github", link: "https://github.com/abdul-hamid-achik/vidtrace" }
     ],
+    footer: {
+      message: "Local-first. MIT licensed."
+    },
     editLink: {
       pattern: "https://github.com/abdul-hamid-achik/vidtrace/edit/main/docs/:path",
       text: "Edit this page on GitHub"

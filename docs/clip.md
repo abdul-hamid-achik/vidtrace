@@ -4,7 +4,7 @@ description: Cut video clips, make animated GIFs, and stitch videos from timesta
 ---
 # Clip
 
-`vidtrace clip` cuts video clips, makes animated GIFs, and stitches clips from timestamp ranges. It runs entirely on `ffmpeg` and works on a source video or existing clip files, not on an extracted artifact bundle.
+`vidtrace clip` cuts video clips, makes animated GIFs, and stitches clips from timestamp ranges. It runs entirely on `ffmpeg`. `cut`, `gif`, and `stitch` take a source video or existing clip files. `from-evidence` searches an evidence database and cuts around the hit timestamps.
 
 Use Clip when you need a shareable slice of a bug recording: a per-issue MP4 for a ticket, a lightweight GIF for a README or chat, or a single summary video stitched from several clips.
 
@@ -15,6 +15,7 @@ Use Clip when you need a shareable slice of a bug recording: a per-issue MP4 for
 | `clip cut` | Cut one or more sub-clips from a video at timestamp ranges |
 | `clip gif` | Create animated GIF(s) from timestamp ranges |
 | `clip stitch` | Join multiple clip files into one concatenated video |
+| `clip from-evidence` | Cut clips or GIFs around evidence-search hits |
 | `clip help` | Show clip help |
 
 ## Timestamps, Ranges, and Labels
@@ -147,6 +148,31 @@ Example `clip stitch` JSON:
 }
 ```
 
+## From Evidence Hits
+
+```bash
+vidtrace clip from-evidence --db /tmp/evidence.veclite --query "login failed" --pad 2 --json
+vidtrace clip from-evidence --db /tmp/evidence.veclite --query "login failed" --gif --json
+```
+
+`from-evidence` runs keyword search on the VecLite database, then cuts a window around each hit (`--pad` seconds on each side, default 2). Pass a video path if the source is no longer at the path stored in the index.
+
+| Flag | Default | Meaning |
+|---|---|---|
+| `--db` | required | Evidence database path |
+| `--query` | required | Search text |
+| `--limit` | `3` | Maximum hits to cut |
+| `--pad` | `2` | Seconds of context before and after each hit |
+| `--gif` | `false` | Emit GIFs instead of MP4 clips |
+| `--out` | `~/Downloads` | Parent output directory |
+| `--name` | derived | Prefix for output filenames |
+| `--reencode` | `false` | Force re-encoding for `cut` |
+| `--fps` / `--width` | `10` / `480` | GIF settings when `--gif` is set |
+| `--stash` | `false` | Stash the output directory to fcheap |
+| `--json` | `false` | Emit machine-readable JSON |
+
+Search is keyword-only. Use `vidtrace search` with `--mode` when you need semantic or hybrid ranking first.
+
 ## Output Layout and Manifest
 
 Each `cut` and `gif` run writes into a timestamped, collision-free output directory under `--out`, named `<name>_clips_<YYYYMMDD_HHMMSS>` (or `<name>_gifs_<YYYYMMDD_HHMMSS>` for GIFs). A `clips.json` manifest is written alongside the clips or GIFs describing every produced file. Stitch writes `<name>.mp4` into its own timestamped directory.
@@ -157,7 +183,7 @@ Each `cut` and `gif` run writes into a timestamped, collision-free output direct
 
 ## Current Limits
 
-- Clip requires `ffmpeg`; it does not read or mutate extracted artifact bundles.
+- Clip requires `ffmpeg`. `from-evidence` reads an evidence database and the source video; it does not mutate the artifact bundle.
 - Stream-copy cuts (`cut` without `--reencode`) snap to the nearest keyframe, so the clip may start slightly before the requested timestamp. Use `--reencode` for frame-accurate starts.
 - Stitch uses the concat demuxer and expects consistent codec parameters across inputs.
 - Stash features require the optional `fcheap` CLI. `vidtrace doctor` reports whether `ffmpeg` is installed.

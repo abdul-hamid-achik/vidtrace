@@ -172,7 +172,7 @@ Open a bundle in the studio:
 vidtrace studio "$output_dir"
 ```
 
-Use `up`/`down` or `k`/`j` to move through timeline entries. Press `m` for metadata, `o` to open the selected frame, `r` to reveal it in Finder on macOS, and `c` to copy a concise evidence summary when clipboard tooling is available. Press `q` to exit. See [Studio](studio.md) for the review workflow.
+Use `up`/`down` or `k`/`j` to move through timeline entries, `g`/`G` for first or last visible row, `/` to filter OCR and transcript, and `:` to jump to a 1-based entry. Press `m` for metadata, `o` to open the selected frame, `r` to reveal it in Finder on macOS, and `c` to copy a concise evidence summary when clipboard tooling is available. Press `q` to exit. See [Studio](studio.md) for the review workflow.
 
 Studio is compact by default. It shows timeline and selected evidence side by side when the terminal is wide enough, and stacks them on narrow terminals.
 
@@ -206,6 +206,11 @@ vidtrace extract /path/to/bug.mp4 \
 | `--model` | `small` | Whisper model |
 | `--out` | `~/Downloads` | Parent output directory |
 | `--name` | input basename | Artifact bundle name prefix |
+| `--concurrency` | `0` (auto, cap 8) | Parallel OCR workers |
+| `--resume` | `false` | Skip completed extract stages |
+| `--resume-from` | none | Resume a specific existing bundle |
+| `--index` | none | Index the new bundle into this evidence database |
+| `--stash` | `false` | Stash the bundle to fcheap after extract |
 | `--json` | `false` | Machine-readable run summary |
 
 ## Local Real Video

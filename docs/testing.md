@@ -48,6 +48,8 @@ Current flows cover:
 - `cli_compare.yml`: ticket comparison and bundle validation JSON.
 - `cli_evidence_search.yml`: evidence indexing and search JSON.
 - `cli_investigate.yml`: investigation handoff JSON and Markdown output.
+- `cli_investigate_connect.yml` and `cli_investigate_codemap.yml`: optional tool flags.
+- `cli_clip.yml` and `cli_stash.yml`: clip and stash command surfaces.
 - `docs_site.yml`: VitePress documentation build.
 - `cli_studio.yml`: interactive Studio navigation, metadata toggle, and action status text in a real PTY.
 - `extract_json.yml`: JSON extraction output and generated artifacts.
@@ -58,9 +60,9 @@ Evidence search is covered by Go tests in `internal/evidence` and CLI JSON tests
 
 ## CI
 
-GitHub Actions runs formatting, module drift, unit tests, build, lint, and `goreleaser check`.
+GitHub Actions runs formatting, module drift, unit tests, build, lint, and `goreleaser check` on every pull request. A `mediasmoke` job on `main` and `workflow_dispatch` installs ffmpeg, tesseract, and whisper and runs a synthetic extract plus validate. Pull requests skip that job to stay fast.
 
-CI does not run the media smoke path because Whisper and OCR runtime dependencies are expensive and platform-sensitive. Run this locally before release work:
+Glyphrun E2E does not run in GitHub Actions. Run this locally before release work:
 
 ```bash
 task all

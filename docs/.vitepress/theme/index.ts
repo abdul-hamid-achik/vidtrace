@@ -1,46 +1,26 @@
 import type { Theme } from "vitepress";
 import DefaultTheme from "vitepress/theme";
+import { h } from "vue";
+
+import "@fontsource/ibm-plex-sans/400.css";
+import "@fontsource/ibm-plex-sans/500.css";
+import "@fontsource/ibm-plex-sans/600.css";
+import "@fontsource/ibm-plex-sans/700.css";
+import "@fontsource/ibm-plex-mono/400.css";
+import "@fontsource/ibm-plex-mono/500.css";
+import "@fontsource/ibm-plex-mono/600.css";
+
 import "./style.css";
+import HomePage from "./components/HomePage.vue";
+import NotFound from "./components/NotFound.vue";
 
 export default {
   extends: DefaultTheme,
-  enhanceApp() {
-    // Scroll-reveal: fade sections in as they enter the viewport.
-    if (typeof window !== "undefined") {
-      const observer = new IntersectionObserver(
-        (entries) => {
-          for (const entry of entries) {
-            if (entry.isIntersecting) {
-              entry.target.classList.add("vt-revealed");
-              observer.unobserve(entry.target);
-            }
-          }
-        },
-        { threshold: 0.08, rootMargin: "0px 0px -40px 0px" },
-      );
-
-      const observe = () => {
-        document.querySelectorAll(".vt-section").forEach((el) => {
-          if (!el.classList.contains("vt-revealed")) {
-            observer.observe(el);
-          }
-        });
-      };
-
-      window.addEventListener("load", observe);
-      if (document.readyState !== "loading") {
-        observe();
-      } else {
-        document.addEventListener("DOMContentLoaded", observe);
-      }
-
-      // Re-observe on VitePress route changes.
-      const origPushState = history.pushState;
-      history.pushState = function (...args) {
-        const ret = origPushState.apply(this, args);
-        setTimeout(observe, 100);
-        return ret;
-      };
-    }
+  Layout: () =>
+    h(DefaultTheme.Layout, null, {
+      "not-found": () => h(NotFound),
+    }),
+  enhanceApp({ app }) {
+    app.component("HomePage", HomePage);
   },
 } satisfies Theme;

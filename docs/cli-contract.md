@@ -77,7 +77,7 @@ Studio keys:
 | `up`/`down`, `k`/`j` | Move through timeline entries |
 | `g` / `G` | Jump to first / last visible entry |
 | `/` | Filter entries by OCR/transcript substring |
-| `:` | Jump to a 1-based entry number |
+| `:` | Jump to a 1-based timeline entry (absolute index, not the filtered list) |
 | `m` | Toggle bundle metadata/details |
 | `o` | Open the selected frame with the OS default opener when possible |
 | `r` | Reveal the selected frame in Finder on macOS |

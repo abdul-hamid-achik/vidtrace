@@ -39,7 +39,7 @@ vidtrace studio
 | `up`/`down`, `k`/`j` | Move through timeline entries |
 | `g` / `G` | Jump to first / last visible entry |
 | `/` | Filter entries by OCR/transcript substring |
-| `:` | Jump to a 1-based entry number |
+| `:` | Jump to a 1-based timeline entry (absolute index, not the filtered list) |
 | `m` | Toggle bundle metadata/details |
 | `o` | Open the selected frame with the OS default opener when possible |
 | `r` | Reveal the selected frame in Finder on macOS |
@@ -56,6 +56,7 @@ vidtrace studio
 - Selected frame path.
 - OCR text for the selected frame.
 - Transcript segments that overlap the selected frame time.
+- `visual_delta` when present. Entries at or above 0.08 show `~` in the timeline.
 - Status messages for open, reveal, and copy actions.
 
 ## Current Limits

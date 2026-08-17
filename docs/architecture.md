@@ -45,6 +45,7 @@ cmd/vidtrace
     ├── internal/codemap
     ├── internal/investigate
     ├── internal/studio
+    ├── internal/mcpserver
     ├── internal/pipeline
     ├── internal/artifacts
     ├── internal/ffmpeg
@@ -86,7 +87,9 @@ Evidence search is optional and separate from extraction. `internal/evidence` re
 
 `internal/fcheap` wraps the fcheap CLI for bundle stashing (`Save`, `Restore`), vault search (`List`, `Info`, `Search`), and codebase connect (`Connect`). It mirrors the `internal/ffmpeg`/`internal/tesseract`/`internal/whisper` pattern of shelling out to external CLI tools.
 
-`internal/clip` wraps `internal/ffmpeg` for cutting sub-clips, making GIFs, and stitching clips from timestamp ranges. It parses and validates timestamps (`SS`, `MM:SS`, `HH:MM:SS`) and writes a `clips.json` manifest to each output directory. Clip works on source videos and clip files, not on extracted artifact bundles.
+`internal/clip` wraps `internal/ffmpeg` for cutting sub-clips, making GIFs, and stitching clips from timestamp ranges. It parses and validates timestamps (`SS`, `MM:SS`, `HH:MM:SS`) and writes a `clips.json` manifest to each output directory. `cut`, `gif`, and `stitch` work on source videos and clip files. `from-evidence` searches a VecLite evidence database and cuts around hit timestamps.
+
+`internal/mcpserver` is the read-only MCP adapter. Tools wrap the same packages as the CLI JSON contracts.
 
 ## Documentation Site
 
@@ -94,17 +97,7 @@ The documentation site is a VitePress app rooted at `docs/` and built with Bun s
 
 ## Studio Direction
 
-The studio is not the primary execution path. It should help users inspect existing artifacts in a compact terminal layout and monitor future pipeline runs.
-
-Current and planned panels:
-
-- timeline viewer
-- selected transcript text
-- selected OCR text
-- selected frame path
-- artifact metadata details
-- frame open/reveal and evidence copy actions
-- future pipeline run monitor
+The studio is not the primary execution path. It helps humans inspect an existing bundle: timeline, OCR, transcript, metadata, and frame paths, plus open, reveal, and copy actions. Extraction stays on `vidtrace extract`.
 
 Use Bubble Tea commands for async work. Do not block `Update`.
 

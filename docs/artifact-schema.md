@@ -15,8 +15,11 @@ The artifact bundle is the product surface that agents and humans consume.
 ├── transcript/
 ├── metadata.json
 ├── timeline.json
+├── stage_manifest.json
 └── README.txt
 ```
+
+`stage_manifest.json` records which extract stages finished (metadata, frames, OCR, transcript, timeline) so `--resume` and `--resume-from` can skip completed work. It is a pipeline control file, not an agent-facing contract.
 
 ## `metadata.json`
 
@@ -55,6 +58,7 @@ Target shape:
         "path": "ocr/frame_0075.txt",
         "text": "NetworkError"
       },
+      "visual_delta": 0.31,
       "transcript": [
         {
           "start_seconds": 73.2,
@@ -76,6 +80,8 @@ time_seconds = (frame_index - 1) / extract_fps
 For example, `frame_0001.png` is `0` seconds and `frame_0002.png` is `0.5` seconds when `extract_fps` is `2`.
 
 Empty OCR text is represented as an empty string. This means OCR ran for the frame but no text was detected or retained.
+
+`visual_delta` is optional. When present, it is the mean absolute pixel difference versus the previous frame on a 16x16 grayscale sample, from 0 to 1. Higher values mark UI change. The first frame omits the field. Studio marks entries at or above 0.08 with `~`. Search and compare do not rank on this field yet.
 
 ### Transcript matching
 
