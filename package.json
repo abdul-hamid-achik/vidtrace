@@ -10,6 +10,9 @@
     "docs:preview": "vitepress preview docs --host 0.0.0.0",
     "site": "bun run docs:build"
   },
+  "dependencies": {
+    "@vercel/analytics": "^2.0.1"
+  },
   "devDependencies": {
     "@fontsource/ibm-plex-mono": "5.3.0",
     "@fontsource/ibm-plex-sans": "5.3.0",

@@ -11,6 +11,7 @@ import "@fontsource/ibm-plex-mono/500.css";
 import "@fontsource/ibm-plex-mono/600.css";
 
 import "./style.css";
+import { inject } from "@vercel/analytics";
 import HomePage from "./components/HomePage.vue";
 import NotFound from "./components/NotFound.vue";
 
@@ -21,6 +22,9 @@ export default {
       "not-found": () => h(NotFound),
     }),
   enhanceApp({ app }) {
+    if (typeof window !== 'undefined') {
+      inject()
+    }
     app.component("HomePage", HomePage);
   },
 } satisfies Theme;
