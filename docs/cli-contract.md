@@ -462,7 +462,7 @@ vidtrace compare /path/to/bug_artifacts_YYYYMMDD_HHMMSS --ticket ticket.md
 vidtrace compare /path/to/bug_artifacts_YYYYMMDD_HHMMSS --ticket ticket.md --json
 ```
 
-`status` is `match`, `mismatch`, or `inconclusive`.
+`status` is a coverage-aware verdict: `supported`, `no_observation`, `inconclusive`, `contradicted`, or `unknown` (the `coverage` field repeats it). See [Analysis](/analysis#compare).
 
 `confidence` is `high`, `medium`, or `low`. `term_hits` identifies which matched terms appeared in OCR or transcript evidence.
 

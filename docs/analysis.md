@@ -92,4 +92,4 @@ Known limitations:
 2. Read `output_dir` from stdout.
 3. Run `vidtrace validate "$output_dir" --json`.
 4. Run `vidtrace compare "$output_dir" --ticket ticket.md --json`.
-5. If the result is `mismatch` or `inconclusive`, inspect `timeline.json`, `ocr/ocr_all_frames.txt`, transcript JSON, and selected frames before deciding.
+5. If the result is `no_observation`, `inconclusive`, or `contradicted`, inspect `timeline.json`, `ocr/ocr_all_frames.txt`, transcript JSON, and selected frames before deciding.

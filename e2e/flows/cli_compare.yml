@@ -89,11 +89,11 @@ outcomes:
     verify:
       process:
         exitCode: 0
-  - id: match_status
-    description: compare JSON reports a match
+  - id: supported_status
+    description: compare JSON reports a supported (coverage-aware) status
     verify:
       command:
-        run: "./bin/vidtrace compare .glyphrun/tmp/compare/sample_artifacts --ticket .glyphrun/tmp/compare/ticket.md --json | grep -q '\"status\": \"match\"'"
+        run: "./bin/vidtrace compare .glyphrun/tmp/compare/sample_artifacts --ticket .glyphrun/tmp/compare/ticket.md --json | grep -q '\"status\": \"supported\"'"
   - id: confidence
     description: compare JSON includes confidence
     verify:
