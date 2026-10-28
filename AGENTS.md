@@ -145,7 +145,7 @@ task run -- studio /tmp/vidtrace-real/bug_artifacts_*
 
 ## Notes and Documentation Boundary
 
-The `docs/` folder is the VitePress documentation website source. It is published to Vercel and consumed by the public. Keep it strictly to public product docs: CLI contracts, schemas, architecture, testing, install, release, and usage. Never drop strategy notes, implementation checkpoints, bug analysis, ADRs, or one-off planning files into `docs/`.
+The `docs/` folder is the VitePress documentation website source. It is published to Vercel and consumed by the public. Git auto-builds **`main` only** (`vercel.json`). Feature branches do not create Preview deployments. `ignoreCommand` skips non-docs commits. Do not `vercel promote`; `main` is the site release. CLI binaries ship from tags. Keep `docs/` strictly to public product docs: CLI contracts, schemas, architecture, testing, install, release, and usage. Never drop strategy notes, implementation checkpoints, bug analysis, ADRs, or one-off planning files into `docs/`.
 
 Project notes, strategy, checkpoints, implementation notes, bug analysis, and ADRs belong in the Obsidian vault at `~/notes/projects/<project>/`. Use the `obsidian` CLI (`/usr/local/bin/obsidian`) to create, read, and update notes there. Each project has its own folder:
 
